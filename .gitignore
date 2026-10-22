@@ -1,0 +1,36 @@
+# Build output
+/build/
+/build-*/
+/out/
+*.o
+*.a
+*.dylib
+*.dSYM/
+compile_commands.json
+.cache/
+
+# Chez Scheme
+*.so
+*.boot
+*.wpo
+
+# macOS / Xcode
+.DS_Store
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.app/
+*.dmg
+
+# Signing / secrets
+*.p12
+*.mobileprovision
+.env
+.env.*
+
+# Test artifacts
+tests/golden/**/actual/
+tests/golden/**/diff/
+
+# Local agent settings
+.claude/settings.local.json
