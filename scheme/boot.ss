@@ -5,7 +5,13 @@
 (library-directories (list (cons pf-scheme-dir pf-scheme-dir)))
 (library-extensions '((".sls" . ".so")))
 
-(import (profane repl) (profane buffer) (profane window) (profane command))
+(import (profane repl) (profane buffer) (profane window) (profane var) (profane hook)
+        (profane keymap) (profane face) (profane command) (profane mode) (profane command-loop)
+        (profane simple))
+
+;;; Chez invokes a library only when one of its variables is first used; libraries whose body
+;;; registers commands, modes and bindings must be invoked explicitly.
+(for-each invoke-library '((profane simple) (profane window)))
 
 ;;; FFI trampoline. An exception escaping into C would terminate the process, so every call
 ;;; from C lands here. Returns a UTF-8 bytevector for a string result, #t for any other
@@ -78,9 +84,8 @@
     (let ([w (selected-window)])
       (when w (set-window-buffer! w scratch)))
     ;; The owner's Emacs setup (plan §2): all on in the default preset.
-    (display-line-numbers-mode)
-    (global-hl-line-mode)
-    (show-paren-mode)))
+    (for-each (lambda (m) (set-minor-mode! m #t))
+              '(display-line-numbers-mode global-hl-line-mode show-paren-mode))))
 
 ;;; Socket REPL sessions, keyed by connection id (an integer chosen by the shell).
 

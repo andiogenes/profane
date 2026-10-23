@@ -1,0 +1,133 @@
+;;; (profane command-loop) — turning keys into commands. Unstable API (plan §10).
+;;;
+;;; Keys arrive one at a time from the shell. The loop collects a key sequence until the active
+;;; keymaps (profane mode) bind it to a command or to nothing; prefix keys (C-x) wait for more.
+;;; C-u / C-u C-u / C-u 12 / M-5 / C-- set the prefix argument of the next command. Each command
+;;; runs in the selected window's buffer with an undo boundary before it, except inside a run
+;;; of up to self-insert-amalgamation typed characters. Errors beep and go to *Messages*.
+
+(library (profane command-loop)
+  (export handle-key handle-text last-input-text pending-keys self-insert-amalgamation)
+  (import (chezscheme) (profane buffer) (profane window) (profane keymap) (profane mode)
+          (profane command))
+
+  (define self-insert-amalgamation 20)
+
+  (define pending '())          ; keys of an unfinished sequence
+  (define (pending-keys) pending)
+  (define input-text "")
+  (define (last-input-text) input-text)
+  (define insert-run 0)
+  (define run-buffer #f) ; the buffer the current typing run is in
+
+  ;; Prefix argument being typed: #f, or the raw value so far; digits? while C-u digits count.
+  (define arg-pending #f)
+  (define arg-digits? #f)
+
+  (define (beep)
+    (when (foreign-entry? "pf_app_beep")
+      ((foreign-procedure "pf_app_beep" () void))))
+
+  (define (report name c)
+    (beep)
+    (message "~a"
+             (if (condition? c)
+                 (call-with-string-output-port (lambda (p) (display-condition c p)))
+                 (format "~a: ~s" name c))))
+
+  (define (select-window-buffer)
+    (let ([w (selected-window)])
+      (when (and w (window-buffer w) (buffer-live? (window-buffer w)))
+        (set-buffer (window-buffer w)))))
+
+  ;; The binding of KEYS in the active keymaps: the first map binding it to anything wins.
+  (define (key-binding keys)
+    (let loop ([maps (current-active-maps)])
+      (and (pair? maps) (or (lookup-key (car maps) keys) (loop (cdr maps))))))
+
+  (define (run-command name)
+    (let ([proc (command-procedure name)])
+      ;; A run ends at another command, after self-insert-amalgamation characters, or when the
+      ;; buffer changes (it used to carry on into the next buffer).
+      (if (and (eq? name 'self-insert-command) (eq? (last-command) 'self-insert-command)
+               (eq? run-buffer (current-buffer))
+               (< insert-run self-insert-amalgamation) (not arg-pending))
+          (set! insert-run (+ insert-run 1))
+          (begin (undo-boundary) (set! insert-run 1)))
+      (set! run-buffer (current-buffer))
+      (%set-prefix-arg! arg-pending)
+      (set! arg-pending #f)
+      (set! arg-digits? #f)
+      (%set-this-command! name)
+      (guard (c [else (report name c)])
+        (if proc (proc) (error name "no such command")))
+      (%set-prefix-arg! #f)
+      (%set-last-command! name)))
+
+  ;; ---- prefix argument keys, handled by the loop itself ----
+
+  (define (digit-of key)
+    (let ([name (substring key (- (string-length key) 1) (string-length key))])
+      (and (= (string-length name) 1) (char-numeric? (string-ref name 0))
+           (string->number name))))
+
+  (define (meta-or-control-digit? key)
+    (and (> (string-length key) 2) (member (substring key 0 2) '("M-" "C-"))
+         (= (string-length key) 3) (digit-of key)))
+
+  (define (prefix-arg-key key)
+    (cond
+      [(equal? key "C-u")
+       (set! arg-pending (if (pair? arg-pending) (list (* 4 (car arg-pending))) '(4)))
+       (set! arg-digits? #t)
+       #t]
+      [(and arg-digits? (= (string-length key) 1) (digit-of key))
+       => (lambda (d)
+            (set! arg-pending (cond [(integer? arg-pending) (+ (* 10 arg-pending) d)]
+                                    [(eq? arg-pending '-) (- d)]
+                                    [else d]))
+            #t)]
+      [(meta-or-control-digit? key)
+       => (lambda (d)
+            (set! arg-pending (cond [(integer? arg-pending) (+ (* 10 arg-pending) d)]
+                                    [(eq? arg-pending '-) (- d)]
+                                    [else d]))
+            (set! arg-digits? #t)
+            #t)]
+      [(and (or (member key '("C--" "M--")) (and arg-digits? (equal? key "-")))
+            (not (integer? arg-pending)))
+       (set! arg-pending '-)
+       (set! arg-digits? #t)
+       #t]
+      [else #f]))
+
+  (define (handle-key key)
+    (select-window-buffer)
+    (cond
+      [(and (null? pending) (prefix-arg-key key)) (void)]
+      [(and (pair? pending) (equal? key "C-g"))
+       (set! pending '())
+       (set! arg-pending #f)
+       (message "Quit")]
+      [else
+       (let* ([keys (append pending (list key))]
+              [b (key-binding keys)])
+         (cond
+           [(keymap? b) (set! pending keys) (message "~a-" (key-description keys))]
+           [(symbol? b) (set! pending '()) (run-command b)]
+           [else
+            (set! pending '())
+            (set! arg-pending #f)
+            (set! arg-digits? #f)
+            (%set-last-command! #f)
+            (beep)
+            (message "~a is undefined" (key-description keys))]))]))
+
+  ;; Typed text; digits and "-" right after C-u go to the prefix argument (plain keys reach
+  ;; Scheme as text through the input method, not as keys).
+  (define (handle-text text)
+    (select-window-buffer)
+    (unless (and arg-digits? (null? pending) (prefix-arg-key text))
+      (set! pending '())
+      (set! input-text text)
+      (run-command 'self-insert-command))))

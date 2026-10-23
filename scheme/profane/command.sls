@@ -1,135 +1,88 @@
-;;; (profane command) — commands, the global keymap and the command loop. Unstable API (plan §10).
+;;; (profane command) — the command registry, prefix arguments and messages. Unstable API
+;;; (plan §10).
 ;;;
 ;;; Commands live in a registry keyed by symbol and keys bind symbols, so redefining a command
-;;; (define-command again, from the REPL) takes effect for every key bound to it. Keys are
-;;; Emacs-style descriptions produced by the shell: "a", "C-f", "M-<", "C-M-_", "<left>", "RET",
-;;; "DEL", "TAB", "SPC", "s-x". M1 has one global keymap and no prefix keys; M2 brings keymap
-;;; registries, prefix maps and modes.
+;;; (define-command again, from the REPL) takes effect for every key bound to it. A command is
+;;; a procedure of no arguments; it reads the prefix argument with (current-prefix-arg) or
+;;; (prefix-numeric-value), as Emacs commands do with an interactive "p" spec. The command loop
+;;; itself is (profane command-loop).
 
 (library (profane command)
-  (export define-command command-procedure command-names
-          global-set-key global-unset-key key-binding
-          handle-key handle-text
-          this-command last-command last-input-text
-          self-insert-amalgamation)
-  (import (chezscheme) (profane buffer) (profane window))
+  (export define-command register-command! command-procedure command-documentation
+          command-names command?
+          current-prefix-arg prefix-numeric-value %set-prefix-arg!
+          this-command last-command %set-this-command! %set-last-command!
+          message current-message %set-message-sink!)
+  (import (chezscheme) (profane buffer))
 
-  ;; ---- registry ----
+  (define-record-type cmd
+    (fields proc doc)
+    (nongenerative profane-command))
 
-  (define commands (make-eq-hashtable)) ; symbol -> procedure
+  (define registry (make-eq-hashtable))
 
-  ;; Expands to a definition (of a fresh, hygienic name) so it can appear among definitions.
+  (define (register-command! name proc doc)
+    (hashtable-set! registry name (make-cmd proc doc))
+    name)
+
+  ;; (define-command (name) [doc] body ...). Expands to a definition (of a fresh, hygienic
+  ;; name) so it can appear among other definitions in a library body.
   (define-syntax define-command
-    (syntax-rules ()
-      [(_ (name) body ...)
-       (define registered
-         (begin (hashtable-set! commands 'name (lambda () body ...)) 'name))]))
+    (lambda (x)
+      (syntax-case x ()
+        [(_ (name) doc body0 body ...)
+         (string? (syntax->datum #'doc))
+         #'(define registered (register-command! 'name (lambda () body0 body ...) doc))]
+        [(_ (name) body ...)
+         #'(define registered (register-command! 'name (lambda () body ...) ""))])))
 
-  (define (command-procedure name) (hashtable-ref commands name #f))
-  (define (command-names) (vector->list (hashtable-keys commands)))
+  (define (command? name) (hashtable-contains? registry name))
+  (define (command-procedure name) (let ([c (hashtable-ref registry name #f)]) (and c (cmd-proc c))))
+  (define (command-documentation name)
+    (let ([c (hashtable-ref registry name #f)]) (and c (cmd-doc c))))
+  (define (command-names) (vector->list (hashtable-keys registry)))
 
-  (define global-map (make-hashtable string-hash string=?)) ; key -> command symbol
+  ;; ---- prefix argument (C-u, M-digits), set by the command loop for the running command ----
+  ;; Raw values as in Emacs: #f, a list (4) / (16) for C-u's, an integer, or the symbol -.
 
-  (define (global-set-key key command)
-    (unless (symbol? command) (error 'global-set-key "keys bind command names (symbols)" command))
-    (hashtable-set! global-map key command))
+  (define prefix-arg #f)
+  (define (current-prefix-arg) prefix-arg)
+  (define (%set-prefix-arg! v) (set! prefix-arg v))
 
-  (define (global-unset-key key) (hashtable-delete! global-map key))
-  (define (key-binding key) (hashtable-ref global-map key #f))
-
-  ;; ---- command loop ----
+  (define prefix-numeric-value
+    (case-lambda
+      [() (prefix-numeric-value prefix-arg)]
+      [(raw) (cond [(not raw) 1]
+                   [(pair? raw) (car raw)]
+                   [(eq? raw '-) -1]
+                   [else raw])]))
 
   (define this-command-value #f)
   (define last-command-value #f)
   (define (this-command) this-command-value)
   (define (last-command) last-command-value)
+  (define (%set-this-command! v) (set! this-command-value v))
+  (define (%set-last-command! v) (set! last-command-value v))
 
-  (define input-text "")
-  (define (last-input-text) input-text)
+  ;; ---- messages ----
+  ;; (message fmt arg ...) shows a line in the echo area (once windows have one) and appends it
+  ;; to *Messages*. (message #f) clears the echo area.
 
-  ;; Typed characters are undone in groups of this many, as in Emacs.
-  (define self-insert-amalgamation 20)
-  (define insert-run 0)
+  (define echo #f)
+  (define (current-message) echo)
+  (define sink (lambda (text) (void))) ; the echo area, installed by the display side
+  (define (%set-message-sink! proc) (set! sink proc))
 
-  (define (beep)
-    (when (foreign-entry? "pf_app_beep")
-      ((foreign-procedure "pf_app_beep" () void))))
-
-  (define (report who c)
-    (let ([err (current-error-port)])
-      (format err "profane: ~a: " who)
-      (if (condition? c) (display-condition c err) (write c err))
-      (newline err)
-      (flush-output-port err)))
-
-  ;; Runs command NAME in the selected window's buffer, with undo boundaries between commands
-  ;; (but not inside a run of up to self-insert-amalgamation typed characters).
-  (define (run-command name)
-    (let ([proc (command-procedure name)]
-          [w (selected-window)])
-      (when (and w (window-buffer w) (buffer-live? (window-buffer w)))
-        (set-buffer (window-buffer w)))
-      (if (and (eq? name 'self-insert-command) (eq? last-command-value 'self-insert-command)
-               (< insert-run self-insert-amalgamation))
-          (set! insert-run (+ insert-run 1))
-          (begin (undo-boundary) (set! insert-run 1)))
-      (set! this-command-value name)
-      (guard (c [else (beep) (report name c)])
-        (if proc (proc) (error name "no such command")))
-      (set! last-command-value name)))
-
-  (define (handle-key key)
-    (let ([name (key-binding key)])
-      (if name
-          (run-command name)
-          (begin (beep) (set! last-command-value #f)))))
-
-  (define (handle-text text)
-    (set! input-text text)
-    (run-command 'self-insert-command))
-
-  ;; ---- basic commands ----
-
-  (define-command (self-insert-command) (insert (last-input-text)))
-  (define-command (newline) (insert "\n"))
-  (define-command (insert-tab) (insert "\t"))
-  (define-command (forward-char) (forward-char 1))
-  (define-command (backward-char) (backward-char 1))
-  (define-command (delete-char) (delete-char 1))
-  (define-command (delete-backward-char) (delete-char -1))
-  (define-command (move-beginning-of-line) (goto-char (line-beginning-position)))
-  (define-command (move-end-of-line) (goto-char (line-end-position)))
-  (define-command (beginning-of-buffer) (goto-char (point-min)))
-  (define-command (end-of-buffer) (goto-char (point-max)))
-  (define-command (undo) (undo))
-  (define-command (undo-redo) (redo))
-  (define-command (keyboard-quit) (beep))
-
-  ;; Line motion keeps the column the run of line moves started from.
-  (define goal-column 0)
-
-  (define (move-lines n)
-    (unless (memq last-command-value '(next-line previous-line))
-      (set! goal-column (- (point) (line-beginning-position))))
-    (let ([short (forward-line n)])
-      (goto-char (min (+ (line-beginning-position) goal-column) (line-end-position)))
-      (unless (zero? short)
-        (error (if (> n 0) 'next-line 'previous-line)
-               (if (> n 0) "end of buffer" "beginning of buffer")))))
-
-  (define-command (next-line) (move-lines 1))
-  (define-command (previous-line) (move-lines -1))
-
-  (define default-bindings
-   (for-each (lambda (b) (global-set-key (car b) (cdr b)))
-            '(("C-f" . forward-char) ("<right>" . forward-char)
-              ("C-b" . backward-char) ("<left>" . backward-char)
-              ("C-n" . next-line) ("<down>" . next-line)
-              ("C-p" . previous-line) ("<up>" . previous-line)
-              ("C-a" . move-beginning-of-line) ("<home>" . move-beginning-of-line)
-              ("C-e" . move-end-of-line) ("<end>" . move-end-of-line)
-              ("M-<" . beginning-of-buffer) ("M->" . end-of-buffer)
-              ("DEL" . delete-backward-char) ("C-d" . delete-char) ("<deletechar>" . delete-char)
-              ("RET" . newline) ("TAB" . insert-tab)
-              ("C-/" . undo) ("C-_" . undo) ("C-?" . undo-redo) ("C-M-_" . undo-redo)
-              ("C-g" . keyboard-quit)))))
+  (define (message fmt . args)
+    (if (not fmt)
+        (begin (set! echo #f) (sink #f) #f)
+        (let ([text (apply format fmt args)])
+          (set! echo text)
+          (with-current-buffer (get-buffer-create "*Messages*")
+            (let ([p (point)] [at-end? (= (point) (point-max))])
+              (goto-char (point-max))
+              (insert text "\n")
+              (undo-boundary)
+              (unless at-end? (goto-char p))))
+          (sink text)
+          text))))

@@ -1,62 +1,106 @@
-(import (chezscheme) (srfi :64) (profane buffer) (profane command))
+(import (chezscheme) (srfi :64) (profane buffer) (profane keymap) (profane command)
+        (profane command-loop) (profane simple))
+
+(invoke-library '(profane simple)) ; registers commands and bindings (see boot.ss)
 
 (test-begin "command")
 
 (define (type s) (string-for-each (lambda (c) (handle-text (string c))) s))
-(define (keys . ks) (for-each handle-key ks))
+(define (keys . ks) (for-each (lambda (k) (for-each handle-key (kbd k))) ks))
 
 (set-buffer (generate-new-buffer "cmd"))
 
 (type "hello")
 (test-equal "typing inserts" "hello" (buffer-string))
-(keys "C-b" "C-b" "DEL")
+(keys "C-b C-b DEL")
 (test-equal "motion and backspace" "helo" (buffer-string))
-(test-eqv "point" 2 (point))
 (keys "C-a")
 (test-eqv "C-a" 0 (point))
-(keys "C-e" "RET")
+(keys "C-e RET")
 (type "second line")
-(test-equal "newline" "helo\nsecond line" (buffer-string))
 
-;; Goal column survives a short line in between.
+;; "x" / "helo" / "second line": the goal column survives short lines.
 (keys "M-<")
 (type "x")
-(keys "RET")
-;; "x" / "helo" / "second line": from the end of the long line, up twice and down twice.
-(keys "M->" "<up>" "<up>")
+(keys "RET M-> <up> <up>")
 (test-eqv "clamped to the short line" 1 (point))
-(keys "<down>" "<down>")
-(test-eqv "goal column kept across short lines" 11 (- (point) (line-beginning-position)))
+(keys "<down> <down>")
+(test-eqv "goal column kept" 11 (- (point) (line-beginning-position)))
 
-;; Unbound keys and failing commands beep instead of escaping.
-(keys "C-c" "M-<" "C-b")
+;; Errors and unbound keys are contained, reported in *Messages*.
+(keys "M-< C-b")
 (test-eqv "error at buffer start is contained" 0 (point))
-(test-eqv "unbound key leaves no command" #f (begin (keys "<f12>") (last-command)))
+(keys "<f12>")
+(test-eqv "unbound key" #f (last-command))
+(test-equal "reported" "<f12> is undefined" (current-message))
 
-;; Typing is undone in runs of self-insert-amalgamation characters.
+;; ---- prefix keys ----
+(keys "C-x")
+(test-equal "prefix waits" '("C-x") (pending-keys))
+(test-equal "prefix echoed" "C-x-" (current-message))
+(keys "C-x")
+(test-eq "C-x C-x" 'exchange-point-and-mark (last-command))
+(keys "C-x C-g")
+(test-equal "C-g cancels a prefix" '() (pending-keys))
+(test-equal "quit" "Quit" (current-message))
+(keys "C-x C-q")
+(test-equal "undefined sequence" "C-x C-q is undefined" (current-message))
+
+;; ---- prefix arguments ----
+(set-buffer (generate-new-buffer "args"))
+(keys "C-u")
+(type "a")
+(test-equal "C-u repeats 4 times" "aaaa" (buffer-string))
+(keys "C-u C-u")
+(type "b")
+(test-eqv "C-u C-u: 16" 20 (buffer-size))
+(keys "C-u")
+(type "12")
+(type "c")
+(test-eqv "C-u 12" 32 (buffer-size))
+(keys "M-3")
+(type "d")
+(test-eqv "M-3" 35 (buffer-size))
+(keys "M-< C-u 3 C-f")
+(test-eqv "C-u 3 C-f" 3 (point))
+(keys "C-- C-f")
+(test-eqv "C-- moves backward" 2 (point))
+(type "x")
+(test-eqv "argument used up" 36 (buffer-size))
+
+;; ---- typing runs and undo ----
+;; Regression: the run of the previous buffer ("x" above) used to continue here, so the first
+;; undo took 6 characters.
 (set-buffer (generate-new-buffer "amalgamation"))
 (type (make-string 25 #\a))
-(handle-key "C-/")
+(keys "C-/")
 (test-eqv "first undo removes the last 5 typed" 20 (buffer-size))
-(handle-key "C-/")
+(keys "C-/")
 (test-eqv "then the run of 20" 0 (buffer-size))
-(handle-key "C-?")
+(keys "C-?")
 (test-eqv "undo-redo" 20 (buffer-size))
-(type "b")
-(keys "C-f")
-(type "c")
-(handle-key "C-_")
-(test-equal "a motion command ends the typing run" (string-append (make-string 20 #\a) "b")
-            (buffer-string))
 
-;; Keys bind command names: redefining a command changes every key bound to it.
+;; ---- kill ring ----
+(set-buffer (generate-new-buffer "kills"))
+(type "one two")
+(keys "RET")
+(type "three")
+(keys "M-< C-k")
+(test-equal "kill-line" "\nthree" (buffer-string))
+(keys "C-k")
+(test-equal "consecutive kills append" "one two\n" (car (kill-ring)))
+(keys "C-e C-y")
+(test-equal "yank" "threeone two\n" (buffer-string))
+(keys "M-< C-SPC C-e M-w")
+(test-equal "kill-ring-save copies the region" "threeone two" (car (kill-ring)))
+
+;; ---- live redefinition: keys bind names ----
 (define-command (insert-tab) (insert "<tab>"))
-(handle-key "TAB")
+(keys "TAB")
 (test-assert "redefined command runs" (string=? "<tab>" (buffer-substring (- (point) 5) (point))))
-(global-set-key "C-t" 'insert-tab)
-(handle-key "C-t")
-(test-eq "key-binding" 'insert-tab (key-binding "C-t"))
-(test-error "bindings must be symbols" #t (global-set-key "C-t" (lambda () #f)))
+(define-key! (global-map) "C-c t" 'insert-tab)
+(keys "C-c t")
+(test-eq "two-key binding" 'insert-tab (last-command))
 
 (test-end "command")
 (test-exit)

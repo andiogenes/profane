@@ -3,9 +3,8 @@
 
 (library (profane window)
   (export window? selected-window window-buffer set-window-buffer!
-          window-start-line window-body-lines
-          display-line-numbers-mode global-hl-line-mode show-paren-mode)
-  (import (chezscheme) (profane native) (profane buffer))
+          window-start-line window-body-lines)
+  (import (chezscheme) (profane native) (profane buffer) (profane mode))
 
   (define-record-type (window %make-window window?)
     (fields handle (mutable buffer))
@@ -31,22 +30,25 @@
       (window-buffer-set! w b)
       b))
 
-  ;; ---- display features ----
-  ;; Emacs-style mode switches: no argument turns the mode on, #f turns it off; returns the new
-  ;; state. M1 applies them to the selected window; M2 makes them real global modes/variables.
-  ;; Option numbers are pf_window_option (core/display/pf_window.h).
+  ;; ---- display features: global minor modes (Emacs display-line-numbers-mode, ...) ----
+  ;; Option numbers are pf_window_option (core/display/pf_window.h). M2's window tree applies
+  ;; them to every window; for now the selected one.
 
-  (define (window-feature option)
-    (case-lambda
-      [() ((window-feature option) #t)]
-      [(on?)
-       (let ([w (selected-window)])
-         (when w (%win-set-option (window-handle w) option (and on? #t)))
-         (and on? #t))]))
+  (define (apply-option option on?)
+    (let ([w (selected-window)])
+      (when w (%win-set-option (window-handle w) option on?))))
 
-  (define display-line-numbers-mode (window-feature 1))
-  (define global-hl-line-mode (window-feature 2))
-  (define show-paren-mode (window-feature 3))
+  (define-minor-mode display-line-numbers-mode (global)
+    "Show line numbers in a gutter."
+    (apply-option 1 (minor-mode-enabled? 'display-line-numbers-mode)))
+
+  (define-minor-mode global-hl-line-mode (global)
+    "Highlight the line point is on."
+    (apply-option 2 (minor-mode-enabled? 'global-hl-line-mode)))
+
+  (define-minor-mode show-paren-mode (global)
+    "Highlight the bracket matching the one at point, without delay."
+    (apply-option 3 (minor-mode-enabled? 'show-paren-mode)))
 
   (define (window-start-line w) (%win-top-line (window-handle w)))
   (define (window-body-lines w) (%win-body-lines (window-handle w))))

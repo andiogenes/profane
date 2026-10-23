@@ -20,14 +20,15 @@
           undo-boundary undo redo buffer-modified? set-buffer-unmodified!
           find-file-noselect save-buffer
           ;; internal, for other (profane ...) libraries
-          %buffer-handle %buffer-point-marker)
+          %buffer-handle %buffer-point-marker %buffer-locals)
   (import (chezscheme) (profane native))
 
   ;; ---- buffers ----
 
   (define-record-type (buffer %make-buffer buffer?)
     (fields (mutable name) (mutable handle) (mutable file-name)
-            (mutable point-marker) (mutable mark-marker))
+            (mutable point-marker) (mutable mark-marker)
+            locals) ; buffer-local variable values: symbol -> value, see (profane var)
     (nongenerative profane-buffer))
 
   (define-record-type (marker %make-marker marker?)
@@ -40,6 +41,7 @@
   (define (buffer-live? b) (and (buffer-handle b) #t))
   (define (%buffer-handle b) (live-handle b '%buffer-handle))
   (define (%buffer-point-marker b) (buffer-point-marker b))
+  (define (%buffer-locals b) (buffer-locals b))
 
   (define (live-handle b who)
     (or (buffer-handle b) (error who "buffer has been killed" (buffer-name b))))
@@ -59,7 +61,7 @@
   (define (new-buffer name bytes)
     (let ([h (%buf-new bytes (bytevector-length bytes))])
       (when (zero? h) (error 'generate-new-buffer "out of memory" name))
-      (let ([b (%make-buffer name h #f #f #f)])
+      (let ([b (%make-buffer name h #f #f #f (make-eq-hashtable))])
         (buffer-point-marker-set! b (%buf-marker-new h 0 #f))
         (hashtable-set! buffers name b)
         (set! buffer-order (cons b buffer-order))

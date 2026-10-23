@@ -350,6 +350,21 @@ the renderer tags the frame answering each event and records when it was submitt
   therefore defined on *commit* — the part profane controls — and present is tracked alongside it.
 - §10 calls for a latency benchmark in CI: this script is it, to be wired up once macOS CI exists (none yet).
 
+## 8f. Registries (M2)
+
+- Libraries: `(profane var)` variables with defaults, buffer-local values (`local` = auto-local), `permanent`
+  locals and change watchers; `(profane hook)` named hooks whose functions may be symbols, resolved each run;
+  `(profane keymap)` keymaps of canonical key strings (`kbd`), prefix sub-keymaps and parents; `(profane face)` faces
+  with inheritance down to `default` and change watchers; `(profane command)` the command registry, prefix argument
+  and `message` (→ `*Messages*`); `(profane mode)` major modes (inheritance chain, mode maps, hooks) and minor modes;
+  `(profane command-loop)` key sequences, `C-u`/digit arguments, `C-g` in a prefix; `(profane simple)` basic commands
+  (motion, mark, kill ring, undo) and the default global bindings.
+- Lookup follows Emacs: a key sequence is looked up whole in each active map (minor modes, most recent first; major
+  mode; global) and a map falls back to its parent, so a mode can extend `C-x` without hiding global `C-x` keys.
+- Everything is keyed by symbol; keys bind command names. Registering libraries must be invoked explicitly
+  (`invoke-library`), since Chez only runs a library body when one of its variables is first used.
+- The kill ring is profane-internal for now; the macOS pasteboard joins with `(profane macos)` (M3).
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |
