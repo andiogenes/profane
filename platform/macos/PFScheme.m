@@ -2,6 +2,8 @@
 
 #import <AppKit/AppKit.h>
 
+#import "ProfaneView.h"
+
 #include "pf_scheme.h"
 
 void pf_app_quit(void) {
@@ -22,6 +24,8 @@ int PFSchemeBoot(void) {
     static const pf_scheme_symbol symbols[] = {
         {"pf_app_quit", (void *)pf_app_quit},
         {"pf_app_beep", (void *)pf_app_beep},
+        {"pf_app_latency_report", (void *)pf_app_latency_report},
+        {"pf_app_latency_reset", (void *)pf_app_latency_reset},
     };
     pf_scheme_options opts = {
         .boot_dir = bootDir.fileSystemRepresentation,

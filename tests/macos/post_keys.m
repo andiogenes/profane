@@ -2,7 +2,7 @@
  * tests never type into whatever app happens to be frontmost. Needs Accessibility permission.
  *
  * Tokens: "text:STRING" types STRING one composed character per event; "raw16:HEX" sends a
- * single UTF-16 code unit (e.g. an unpaired surrogate); otherwise an Emacs-style key such as
+ * single UTF-16 code unit (e.g. an unpaired surrogate); "sleep:MS" pauses; otherwise an Emacs-style key such as
  * "a", "C-a", "M-<", "C-/", "RET", "DEL", "TAB", "<left>", "<up>". */
 
 #import <ApplicationServices/ApplicationServices.h>
@@ -62,6 +62,10 @@ int main(int argc, char **argv) {
                     post(pid, 0, 0, buf, n);
                     j = r.location + r.length;
                 }
+                continue;
+            }
+            if (strncmp(tok, "sleep:", 6) == 0) {
+                usleep((useconds_t)(atoi(tok + 6) * 1000));
                 continue;
             }
             if (strncmp(tok, "raw16:", 6) == 0) {

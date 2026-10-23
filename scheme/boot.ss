@@ -55,6 +55,16 @@
 (define (pf-key key) (handle-key key))
 (define (pf-insert-text text) (handle-text text))
 
+;;; Key-to-pixel latency of the main view (see pf_renderer_latency): a printable report.
+(define (latency-report)
+  (let* ([report (foreign-procedure "pf_app_latency_report" (u8* size_t) size_t)]
+         [bv (make-bytevector 1024)]
+         [n (report bv 1024)])
+    (display (utf8->string (bytevector-truncate! bv (min n 1024))))
+    (newline)))
+
+(define (latency-reset) ((foreign-procedure "pf_app_latency_reset" () void)))
+
 ;;; Called by the shell once its window exists: show *scratch*.
 (define (pf-startup)
   (let ([scratch (get-buffer-create "*scratch*")])

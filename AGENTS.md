@@ -19,9 +19,9 @@ Layers (top to bottom):
 
 ## Current status
 
-M0 (skeleton) on branch `m0-skeleton`: CMake build, vendored Chez, signed `.app` with hardened runtime +
-`allow-jit` (verified), Metal clear + Core Text hello line, socket REPL + `profane-client`. Work proceeds
-milestone by milestone (plan §9). Do not start work from a later milestone unless asked; when a task touches
+M0 (skeleton) and M1 (text + render) are implemented, one branch per item (`m0-skeleton`, `m1-*`), not yet
+merged to `main`. M1 decisions and measurements are in plan §8a–§8e. Next: M2. Work proceeds milestone by
+milestone (plan §9). Do not start work from a later milestone unless asked; when a task touches
 a later milestone's area, leave a seam, not an implementation.
 
 ## Commands

@@ -108,7 +108,31 @@ static void send_string(const char *proc, NSString *s) {
 @interface ProfaneView () <NSTextInputClient>
 @end
 
+static pf_renderer *main_renderer; /* the latest view's renderer, for the latency report */
+
+size_t pf_app_latency_report(char *out, size_t cap) {
+    if (!main_renderer) {
+        return (size_t)snprintf(out, cap, "no renderer");
+    }
+    pf_latency_stats s = pf_renderer_latency(main_renderer);
+    int n = snprintf(out, cap,
+                     "samples %zu (ms from key event; p50 / p95 / max)\n"
+                     "  submit   %6.2f %6.2f %6.2f   input, command, redisplay\n"
+                     "  commit   %6.2f %6.2f %6.2f   frame encoded and committed\n"
+                     "  present  %6.2f %6.2f %6.2f   presented handler (refresh, compositing)",
+                     s.samples, s.submit[0], s.submit[1], s.submit[2], s.commit[0], s.commit[1],
+                     s.commit[2], s.present[0], s.present[1], s.present[2]);
+    return n > 0 ? (size_t)n : 0;
+}
+
+void pf_app_latency_reset(void) {
+    if (main_renderer) {
+        pf_renderer_latency_reset(main_renderer);
+    }
+}
+
 @implementation ProfaneView {
+    double _inputTime; /* timestamp of the event being handled, 0 if none */
     NSString *_marked; /* input-method composition, nil when none */
     NSRange _markedSelection;
     NSEvent *_interpreting; /* the key event inside -interpretKeyEvents: */
@@ -144,6 +168,7 @@ static void send_string(const char *proc, NSString *s) {
     if (!_metal) {
         return nil;
     }
+    main_renderer = _metal.renderer;
     _font = pf_font_open("JetBrains Mono", kFontSize);
     _cache = pf_layout_cache_new(PFCoreTextShaper(), kLayoutCacheLines, 8);
     pf_window_style style = [self windowStyle];
@@ -291,6 +316,10 @@ static CGColorRef create_cgcolor(uint32_t c) {
         return;
     }
     const pf_display *d = pf_window_redisplay(_window);
+    if (d && _inputTime > 0) {
+        pf_renderer_mark_input(_metal.renderer, _inputTime);
+    }
+    _inputTime = 0;
     if (d) {
         pf_renderer_submit(_metal.renderer, PF_LAYER_BASE, d);
         pf_display_release(d);
@@ -304,6 +333,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
 }
 
 - (void)keyDown:(NSEvent *)event {
+    _inputTime = event.timestamp;
     BOOL direct = NO;
     NSString *key = PFKeyDescription(event, &direct);
     if (direct && !_marked) {

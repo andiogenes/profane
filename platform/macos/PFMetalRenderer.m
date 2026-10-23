@@ -12,6 +12,12 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 
+enum { LATENCY_SAMPLES = 2048 };
+
+typedef struct latency_sample {
+    double event, submit, commit, present; /* host seconds; 0 = not reached yet */
+} latency_sample;
+
 /* Ticks with nothing to draw before the display link is paused. A committed frame counts as
  * shown only once its presented handler fires: frames presented while the window is not yet
  * on screen are dropped without notice. An unconfirmed frame is presented again every
@@ -25,6 +31,9 @@ struct pf_renderer {
 @interface PFMetalRenderer ()
 - (void)submit:(const pf_display *)display layer:(pf_layer)layer;
 - (void)tick;
+- (void)markInput:(double)eventTime;
+- (pf_latency_stats)latency;
+- (void)resetLatency;
 @end
 
 void pf_renderer_submit(pf_renderer *r, pf_layer layer, const pf_display *display) {
@@ -33,6 +42,35 @@ void pf_renderer_submit(pf_renderer *r, pf_layer layer, const pf_display *displa
 
 uint64_t pf_renderer_presented_frames(const pf_renderer *r) {
     return ((__bridge PFMetalRenderer *)r->owner).presentedFrames;
+}
+
+void pf_renderer_mark_input(pf_renderer *r, double event_time) {
+    [(__bridge PFMetalRenderer *)r->owner markInput:event_time];
+}
+
+pf_latency_stats pf_renderer_latency(const pf_renderer *r) {
+    return [(__bridge PFMetalRenderer *)r->owner latency];
+}
+
+void pf_renderer_latency_reset(pf_renderer *r) {
+    [(__bridge PFMetalRenderer *)r->owner resetLatency];
+}
+
+static int compare_double(const void *a, const void *b) {
+    double x = *(const double *)a, y = *(const double *)b;
+    return x < y ? -1 : x > y;
+}
+
+/* p50, p95, max of N values (sorted in place), in milliseconds. */
+static void percentiles(double *v, size_t n, double out[3]) {
+    out[0] = out[1] = out[2] = 0;
+    if (n == 0) {
+        return;
+    }
+    qsort(v, n, sizeof *v, compare_double);
+    out[0] = v[n / 2] * 1000;
+    out[1] = v[(n * 95) / 100 < n ? (n * 95) / 100 : n - 1] * 1000;
+    out[2] = v[n - 1] * 1000;
 }
 
 /* Display link target; keeps the link from retaining the renderer. */
@@ -63,6 +101,15 @@ uint64_t pf_renderer_presented_frames(const pf_renderer *r) {
     id<MTLCommandBuffer> _lastCommands;
     atomic_uint_fast64_t _presented;
 
+    /* Input latency: a mark waits for the next base-layer submit, the tagged frame carries its
+     * sample index through tick and present. Guarded by _latencyLock. */
+    os_unfair_lock _latencyLock;
+    latency_sample _samples[LATENCY_SAMPLES];
+    size_t _sampleCount, _sampleNext;
+    double _markEvent;                  /* pending mark, 0 if none */
+    long _pendingSample[PF_LAYER_COUNT]; /* sample index of the pending list, -1 if none */
+    long _shownSample[PF_LAYER_COUNT];   /* render thread */
+
     NSThread *_thread;
     CFRunLoopRef _runLoop;
     CADisplayLink *_link;
@@ -81,6 +128,10 @@ uint64_t pf_renderer_presented_frames(const pf_renderer *r) {
     _layers = [layers copy];
     _atlas = [[PFGlyphAtlas alloc] initWithDevice:device];
     _pendingLock = OS_UNFAIR_LOCK_INIT;
+    _latencyLock = OS_UNFAIR_LOCK_INIT;
+    for (int i = 0; i < PF_LAYER_COUNT; i++) {
+        _pendingSample[i] = _shownSample[i] = -1;
+    }
     _encodeLock = [NSLock new];
     atomic_init(&_presented, 0);
     for (int i = 0; i < PF_LAYER_COUNT; i++) {
@@ -129,11 +180,90 @@ uint64_t pf_renderer_presented_frames(const pf_renderer *r) {
 
 /* ---- submission (any thread) ---- */
 
+- (void)markInput:(double)eventTime {
+    os_unfair_lock_lock(&_latencyLock);
+    if (_markEvent == 0 || eventTime < _markEvent) {
+        _markEvent = eventTime; /* several events before one frame: measure from the first */
+    }
+    os_unfair_lock_unlock(&_latencyLock);
+}
+
+/* Starts a sample for a submit on LAYER if an input mark is pending; returns its index or -1. */
+- (long)takeMarkForLayer:(pf_layer)layer {
+    if (layer != PF_LAYER_BASE) {
+        return -1;
+    }
+    os_unfair_lock_lock(&_latencyLock);
+    long index = -1;
+    if (_markEvent > 0) {
+        index = (long)_sampleNext;
+        _samples[index] = (latency_sample){_markEvent, CACurrentMediaTime(), 0, 0};
+        _sampleNext = (_sampleNext + 1) % LATENCY_SAMPLES;
+        if (_sampleCount < LATENCY_SAMPLES) {
+            _sampleCount++;
+        }
+        _markEvent = 0;
+    }
+    os_unfair_lock_unlock(&_latencyLock);
+    return index;
+}
+
+- (void)recordSample:(long)index commit:(double)commit present:(double)present {
+    if (index < 0) {
+        return;
+    }
+    os_unfair_lock_lock(&_latencyLock);
+    if (commit > 0) {
+        _samples[index].commit = commit;
+    }
+    if (present > 0) {
+        _samples[index].present = present;
+    }
+    os_unfair_lock_unlock(&_latencyLock);
+}
+
+- (pf_latency_stats)latency {
+    pf_latency_stats st = {0};
+    double *v[3] = {malloc(LATENCY_SAMPLES * sizeof(double)), malloc(LATENCY_SAMPLES * sizeof(double)),
+                    malloc(LATENCY_SAMPLES * sizeof(double))};
+    size_t n[3] = {0};
+    os_unfair_lock_lock(&_latencyLock);
+    for (size_t i = 0; i < _sampleCount; i++) {
+        latency_sample s = _samples[i];
+        if (s.present == 0) {
+            continue; /* still in flight: count only complete samples */
+        }
+        v[0][n[0]++] = s.submit - s.event;
+        v[1][n[1]++] = s.commit - s.event;
+        v[2][n[2]++] = s.present - s.event;
+    }
+    os_unfair_lock_unlock(&_latencyLock);
+    st.samples = n[2];
+    percentiles(v[0], n[0], st.submit);
+    percentiles(v[1], n[1], st.commit);
+    percentiles(v[2], n[2], st.present);
+    for (int i = 0; i < 3; i++) {
+        free(v[i]);
+    }
+    return st;
+}
+
+- (void)resetLatency {
+    os_unfair_lock_lock(&_latencyLock);
+    _sampleCount = _sampleNext = 0;
+    _markEvent = 0;
+    os_unfair_lock_unlock(&_latencyLock);
+}
+
 - (void)submit:(const pf_display *)display layer:(pf_layer)layer {
     pf_display_retain(display);
+    long sample = [self takeMarkForLayer:layer];
     os_unfair_lock_lock(&_pendingLock);
     const pf_display *old = _pending[layer];
     _pending[layer] = display;
+    if (sample >= 0 || old == NULL) {
+        _pendingSample[layer] = sample; /* a replaced list keeps the earlier input's sample */
+    }
     os_unfair_lock_unlock(&_pendingLock);
     pf_display_release(old);
     [self wake];
@@ -160,9 +290,13 @@ uint64_t pf_renderer_presented_frames(const pf_renderer *r) {
     if (!rl) {
         return;
     }
+    /* Render now rather than at the next display-link tick: waiting for the tick added up to a
+     * whole refresh interval to every keystroke (commit p95 10.5 ms before, see plan §8e). The
+     * link still drives re-presents and keeps running while frames await confirmation. */
     CFRunLoopPerformBlock(rl, kCFRunLoopDefaultMode, ^{
         self->_idleTicks = 0;
         self->_link.paused = NO;
+        [self tick];
     });
     CFRunLoopWakeUp(rl);
 }
@@ -234,6 +368,8 @@ uint64_t pf_renderer_presented_frames(const pf_renderer *r) {
             pf_display_release(_shown[i]);
             _shown[i] = _pending[i];
             _pending[i] = NULL;
+            _shownSample[i] = _pendingSample[i];
+            _pendingSample[i] = -1;
             _retry[i] = YES;
             _represents[i] = 0;
         }
@@ -290,10 +426,13 @@ uint64_t pf_renderer_presented_frames(const pf_renderer *r) {
      * window (it is only meaningful for direct-to-display presentation), so it can't filter. */
     uint64_t generation = ++_committed[index];
     _committedAt[index] = _ticks;
+    long sample = _shownSample[index];
+    _shownSample[index] = -1; /* a re-present is not a new answer to the input */
     [drawable addPresentedHandler:^(id<MTLDrawable> d) {
         (void)d;
         atomic_store(&self->_confirmed[index], generation);
         atomic_fetch_add(&self->_presented, 1);
+        [self recordSample:sample commit:0 present:CACurrentMediaTime()];
     }];
     /* Present straight from the command buffer: lowest latency. (Presenting inside an explicit
      * CA transaction with presentsWithTransaction was tried and reverted: the "lost frames" it
@@ -302,6 +441,7 @@ uint64_t pf_renderer_presented_frames(const pf_renderer *r) {
      * waitUntilScheduled. Uncovered windows show current content either way.) */
     [commands presentDrawable:drawable];
     [commands commit];
+    [self recordSample:sample commit:CACurrentMediaTime() present:0];
     _lastCommands = commands;
     [_encodeLock unlock];
     return YES;

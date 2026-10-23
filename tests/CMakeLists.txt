@@ -85,5 +85,8 @@ target_link_libraries(post_keys PRIVATE "-framework ApplicationServices" "-frame
 add_test(NAME screen.input
   COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/macos/input.sh" "$<TARGET_BUNDLE_DIR:profane>"
     "$<TARGET_FILE:profane-client>" "$<TARGET_FILE:post_keys>")
-set_tests_properties(screen.first-frames screen.input PROPERTIES LABELS screen TIMEOUT 120
-  SKIP_RETURN_CODE 77)
+add_test(NAME screen.latency
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/macos/latency.sh" "$<TARGET_BUNDLE_DIR:profane>"
+    "$<TARGET_FILE:profane-client>" "$<TARGET_FILE:post_keys>")
+set_tests_properties(screen.first-frames screen.input screen.latency PROPERTIES LABELS screen
+  TIMEOUT 120 SKIP_RETURN_CODE 77)

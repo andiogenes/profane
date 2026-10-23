@@ -332,6 +332,24 @@ Layers: libgit2 reader (workers, ftype structs) → git CLI runner (`GIT_EDITOR`
   the portable window renderer, switched from Scheme; show-paren matches immediately (no delay), bounded to 100k
   characters, plain bracket counting until tree-sitter syntax (M5).
 
+## 8e. Latency (M1)
+
+Measured with `tests/macos/latency.sh` (opt-in `screen.latency`): 200 real key events posted to the app 30 ms apart;
+the renderer tags the frame answering each event and records when it was submitted, committed and presented
+(`pf_renderer_latency`, `(latency-report)` at the REPL). Milliseconds from the key event, p50 / p95, 60 Hz display:
+
+| Stage | Before | After | 100k-line buffer |
+|---|---|---|---|
+| submit (input, command, redisplay) | 1.0 / 1.2 | 1.1 / 1.3 | 1.4 / 1.7 |
+| **commit** (frame encoded and committed: the <8 ms target) | 5.5 / **10.5** | **1.4 / 1.7** | 2.0 / 2.5 |
+| present (presented handler) | 25 / 30 | 15–16 / 21 | 17 / 22 |
+
+- The fix: the render thread renders as soon as a frame is submitted instead of at the next display-link tick.
+- **Present** is bounded below by the display: one 16.7 ms refresh plus WindowServer compositing. `displaySyncEnabled
+  = NO` (~1 ms, within noise) and `maximumDrawableCount = 2` (worse p95) were measured and not adopted. The target is
+  therefore defined on *commit* — the part profane controls — and present is tracked alongside it.
+- §10 calls for a latency benchmark in CI: this script is it, to be wired up once macOS CI exists (none yet).
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |

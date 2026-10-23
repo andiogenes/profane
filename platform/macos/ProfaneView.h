@@ -34,4 +34,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
+/* Foreign entries for Scheme: the main view's input latency (pf_renderer_latency) as text, and
+ * a reset. The report is truncated to CAP bytes; returns its full length. */
+size_t pf_app_latency_report(char *out, size_t cap);
+void pf_app_latency_reset(void);
+
 NS_ASSUME_NONNULL_END
