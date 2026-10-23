@@ -54,7 +54,9 @@ clang-format -i <files>                                 # format C / ObjC (brew 
 - **FFI**: Scheme sees integer handles only, never raw C pointers. Callbacks into Scheme are `lock-object`ed.
   Chez's GC moves objects — never hold a Scheme object's address in C across a call that can allocate.
   C calls Scheme only via `pf_scheme_call`, which goes through the guarded `pf-ffi-call` trampoline in
-  `scheme/boot.ss` (an exception escaping into C terminates the process).
+  `scheme/boot.ss` (an exception escaping into C terminates the process). Scheme calls C through
+  `(profane native)`; new entry points go in `PF_NATIVE_SOURCES` (`core/CMakeLists.txt`), which must not use Chez
+  so the `pf_native` dylib can serve Scheme tests. Link executables that embed Chez with `pf_core_whole`.
 - **GC**: collections are deferred to post-frame/idle via `collect-request-handler`.
 - **Live redefinition**: commands, keymaps, vars, hooks, faces, modes live in symbol-keyed registries; keys bind
   symbols, not procedures. Don't capture procedures where a symbol lookup is expected.
@@ -82,8 +84,9 @@ clang-format -i <files>                                 # format C / ObjC (brew 
 ## Testing
 
 - `tests/c/` — C unit tests for `core/` (portable, run anywhere).
-- `tests/scheme/*-test.ss` — SRFI-64 suites for `scheme/profane/`, run by the built `scheme` binary. SRFI 64 is
-  a minimal in-repo subset (`tests/scheme/lib/srfi/:64.sls`); extend it as suites need more.
+- `tests/scheme/*-test.ss` — SRFI-64 suites for `scheme/profane/`, run by the built `scheme` binary with
+  `PROFANE_NATIVE_LIB` pointing at `pf_native`. SRFI 64 is a minimal in-repo subset
+  (`tests/scheme/lib/srfi/:64.sls`); extend it as suites need more.
 - `tests/macos/` — app integration scripts (signing/JIT self-test, socket REPL, on-screen frame + snapshot),
   label `macos`; `macos.snapshot` opens a window, so it needs a GUI login session.
 - `tests/golden/` — Metal golden images (macOS only).

@@ -48,7 +48,7 @@ set_target_properties(profane PROPERTIES
   MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}")
 target_compile_options(profane PRIVATE -fobjc-arc ${PROFANE_WARNINGS})
 target_link_libraries(profane PRIVATE
-  pf_core
+  pf_core_whole
   "-framework AppKit"
   "-framework CoreText"
   "-framework ImageIO"

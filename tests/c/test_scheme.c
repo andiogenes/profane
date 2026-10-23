@@ -59,8 +59,14 @@ int main(void) {
     PF_CHECK_EQ_STR(r.text ? r.text : "", "42\n");
     pf_scheme_result_free(&r);
 
-    /* Live redefinition: C looks entry points up by symbol on every call. */
     PF_CHECK(pf_scheme_call("pf-repl-open", &id, 1, NULL) == 0);
+    /* (profane buffer) resolves the native text core from this executable (whole-archive). */
+    check_repl(1,
+               "(with-current-buffer (get-buffer-create \"t\") (insert \"h\xC3\xA9llo\") "
+               "(list (point) (buffer-string)))\n",
+               "(5 \"h\xC3\xA9llo\")\n");
+
+    /* Live redefinition: C looks entry points up by symbol on every call. */
     check_repl(1, "(define (pf-hello-text) \"redefined\")\n", "");
     hello = call_text("pf-hello-text", NULL, 0, &status);
     PF_CHECK_EQ_STR(hello, "redefined");

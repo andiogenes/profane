@@ -12,7 +12,7 @@ target_link_libraries(test_text_undo PRIVATE pf_core)
 add_test(NAME c.text_undo COMMAND test_text_undo)
 
 add_executable(test_scheme c/test_scheme.c)
-target_link_libraries(test_scheme PRIVATE pf_core)
+target_link_libraries(test_scheme PRIVATE pf_core_whole)
 target_compile_definitions(test_scheme PRIVATE
   PF_TEST_BOOT_DIR="${CHEZ_BOOT_DIR}"
   PF_TEST_SCHEME_DIR="${PROJECT_SOURCE_DIR}/scheme")
@@ -31,7 +31,8 @@ foreach(_suite IN LISTS _scheme_suites)
     COMMAND "${CHEZ_EXECUTABLE}" -b "${CHEZ_BOOT_DIR}/petite.boot" -b "${CHEZ_BOOT_DIR}/scheme.boot"
       --libdirs "${PROJECT_SOURCE_DIR}/scheme:${CMAKE_CURRENT_SOURCE_DIR}/scheme/lib"
       --script "${_suite}")
-  set_tests_properties(scheme.${_name} PROPERTIES LABELS scheme)
+  set_tests_properties(scheme.${_name} PROPERTIES LABELS scheme
+    ENVIRONMENT "PROFANE_NATIVE_LIB=$<TARGET_FILE:pf_native>")
 endforeach()
 
 # App integration (label: macos): signed bundle, hardened runtime + JIT, socket REPL.

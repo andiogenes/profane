@@ -271,6 +271,15 @@ Layers: libgit2 reader (workers, ftype structs) → git CLI runner (`GIT_EDITOR`
   subtrees back in O(log n), so history costs about what it deleted (100k random edits: +16 MB of undo). Keeping a
   whole root per undo state was tried first and rejected: it pinned ~24 KB per state (141 MB for the same run).
   Editing after undo branches instead of discarding; "modified" is a per-state version compare.
+- **Scheme buffer API** (`(profane buffer)`, unstable): Emacs-familiar names, but **positions are 0-based** like
+  Scheme string indices (Emacs `point-min` is 1); predicates end in `?` (`bob?`, `eol?`), `!` marks object setters
+  (`set-marker!`); editing primitives keep Emacs names (`insert`, `goto-char`). Point and mark are C markers, so
+  undo and other edits move them. Raw invalid bytes read as U+FFFD in Scheme strings but stay intact in the buffer
+  and on save.
+- **FFI linking**: Scheme calls `pf_buf_*` (handle-based, `core/embed/pf_buffer_ffi.h`) via `foreign-procedure`.
+  Executables embedding Chez link the core whole-archive and Scheme does `(load-shared-object #f)`; Scheme tests in
+  the standalone `scheme` load the `pf_native` dylib (`$PROFANE_NATIVE_LIB`). No dylib ships in the bundle, so
+  library validation under the hardened runtime is not involved.
 
 ## 9. Milestones
 

@@ -26,6 +26,7 @@ expect '(+ 1 2)' '3'
 expect '(define greeting "hi") (string-append greeting " there")' '"hi there"'
 expect '(car 1)' 'Exception in car: 1 is not a pair'
 expect '(threaded?)' '#t'
+expect '(with-current-buffer (get-buffer-create "r") (insert "abc") (goto-char 1) (insert "X") (buffer-string))' '"aXbc"'
 printf '(* 6 7)\n' | "$client" --socket "$sock" | grep -qx 42
 
 "$client" --socket "$sock" --eval '(exit)' >/dev/null

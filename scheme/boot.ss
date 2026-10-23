@@ -5,7 +5,7 @@
 (library-directories (list (cons pf-scheme-dir pf-scheme-dir)))
 (library-extensions '((".sls" . ".so")))
 
-(import (profane repl))
+(import (profane repl) (profane buffer))
 
 ;;; FFI trampoline. An exception escaping into C would terminate the process, so every call
 ;;; from C lands here. Returns a UTF-8 bytevector for a string result, #t for any other
