@@ -34,12 +34,13 @@ git submodule update --init --recursive                 # first checkout
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug   # configure
 cmake --build build                                     # build + sign build/platform/macos/profane.app
 ctest --test-dir build --output-on-failure              # all tests
-ctest --test-dir build -L c                             # by label: c | scheme | macos
+ctest --test-dir build -L '^c$'                         # by label (a regex): c | scheme | macos
 clang-format -i <files>                                 # format C / ObjC (brew install clang-format)
 ```
 
 - Targets: `pf_core` (C core), `profane` (app bundle), `profane_signed` (codesign step), `profane-client`.
 - `-DPROFANE_CODESIGN_IDENTITY=...` selects the signing identity (default `-`, ad-hoc).
+- `-DPROFANE_SANITIZE=ON` (in a separate tree, e.g. `build-asan`) builds with ASan + UBSan.
 - `profane --self-test` boots Scheme and checks JIT codegen under the hardened runtime; `--headless` runs
   Scheme + REPL without a window; `--snapshot out.png` waits for the first on-screen frame, renders it
   offscreen to PNG and quits (fails if AppKit never displayed the view).

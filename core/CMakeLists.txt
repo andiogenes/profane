@@ -1,6 +1,7 @@
 add_library(pf_core STATIC
   embed/pf_scheme.c
   embed/pf_repl.c
+  text/pf_text.c
   text/pf_utf8.c)
 
 target_include_directories(pf_core PUBLIC

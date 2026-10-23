@@ -18,6 +18,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(PROFANE_CODESIGN_IDENTITY "-" CACHE STRING "codesign identity (\"-\" = ad-hoc)")
 set(PROFANE_BUNDLE_ID "org.profane.editor" CACHE STRING "CFBundleIdentifier")
 
+option(PROFANE_SANITIZE "Build with AddressSanitizer + UBSan" OFF)
+if(PROFANE_SANITIZE)
+  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address,undefined)
+endif()
+
 set(PROFANE_WARNINGS -Wall -Wextra -Wpedantic -Wno-gnu-zero-variadic-macro-arguments)
 
 include(cmake/Chez.cmake)

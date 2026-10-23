@@ -1,0 +1,69 @@
+#ifndef PF_TEXT_H
+#define PF_TEXT_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+/* Buffer text: a persistent piece tree over append-only UTF-8 storage.
+ *
+ * A pf_text is the mutable document, owned by the main thread. Every edit produces a new
+ * immutable pf_text_snapshot in O(log n) by path copying, sharing all unchanged nodes and bytes.
+ * Snapshots are reference counted with atomic counts: retain one and hand it to another thread
+ * (render, workers, agents) to read without locks while the main thread keeps editing.
+ *
+ * Positions are character positions, a character being a UTF-8 "unit" (see pf_utf8.h); lines
+ * are counted by '\n'. Characters are counted per piece: a raw invalid byte stays its own
+ * character after edits (as Emacs eight-bit chars do) and bytes are never altered, so saving
+ * is lossless. */
+
+typedef struct pf_text pf_text;
+typedef struct pf_text_snapshot pf_text_snapshot;
+
+/* Returns NULL on allocation failure. BYTES may contain invalid UTF-8. */
+pf_text *pf_text_new(const char *bytes, size_t len);
+void pf_text_free(pf_text *text);
+
+/* Inserts BYTES at character position POS (clamped to the end). Returns 0, or -1 if the bytes
+ * cannot be stored (the text is unchanged). Running out of memory for tree nodes aborts. */
+int pf_text_insert(pf_text *text, size_t pos, const char *bytes, size_t len);
+
+/* Deletes characters [START, END) (clamped). */
+void pf_text_delete(pf_text *text, size_t start, size_t end);
+
+/* Current snapshot, borrowed: valid until the next edit or pf_text_free. Retain to keep it. */
+const pf_text_snapshot *pf_text_current(const pf_text *text);
+
+const pf_text_snapshot *pf_text_snapshot_retain(const pf_text_snapshot *snap);
+void pf_text_snapshot_release(const pf_text_snapshot *snap);
+
+size_t pf_text_bytes(const pf_text_snapshot *snap);
+size_t pf_text_chars(const pf_text_snapshot *snap);
+/* Number of lines: newlines + 1 (an empty text has one empty line). */
+size_t pf_text_lines(const pf_text_snapshot *snap);
+
+/* Position conversions, clamped to the text. A byte offset inside a character maps to that
+ * character. */
+size_t pf_text_char_to_byte(const pf_text_snapshot *snap, size_t pos);
+size_t pf_text_byte_to_char(const pf_text_snapshot *snap, size_t byte);
+
+/* Character position where 0-based LINE starts (pf_text_chars for LINE past the end), and the
+ * 0-based line containing POS. */
+size_t pf_text_line_start(const pf_text_snapshot *snap, size_t line);
+size_t pf_text_line_of(const pf_text_snapshot *snap, size_t pos);
+
+/* Copies the bytes of characters [START, END) into OUT (at most CAP bytes, no terminator) and
+ * returns the full byte length of the range, so a call with CAP 0 sizes the buffer. */
+size_t pf_text_copy(const pf_text_snapshot *snap, size_t start, size_t end, char *out, size_t cap);
+
+/* Calls FN with each contiguous byte chunk of characters [START, END), in order, until FN
+ * returns nonzero (which is returned). Chunks point into shared storage and stay valid while
+ * the snapshot is retained. */
+typedef int (*pf_text_chunk_fn)(const char *bytes, size_t len, void *ctx);
+int pf_text_for_each_chunk(const pf_text_snapshot *snap, size_t start, size_t end,
+                           pf_text_chunk_fn fn, void *ctx);
+
+/* Diagnostics for tests and benchmarks. */
+size_t pf_text_piece_count(const pf_text_snapshot *snap);
+size_t pf_text_depth(const pf_text_snapshot *snap);
+
+#endif

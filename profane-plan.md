@@ -255,6 +255,16 @@ Layers: libgit2 reader (workers, ftype structs) → git CLI runner (`GIT_EDITOR`
 - v2: GPU log graph (virtualized), interactive rebase, blame, stash, cherry-pick/revert/reset/tag/worktree, 3-way conflict resolution
 - Refresh: FSEvents → worker status → section-tree diff in a low-priority engine (preserves folds and point)
 
+## 8a. Text core decisions (M1)
+
+- **Piece tree** (`core/text/pf_text`): a *persistent* treap of pieces over append-only UTF-8 blocks. Edits path-copy
+  O(log n) nodes; a snapshot is a refcounted root, readable from any thread without locks. This is what the render
+  thread, workers and agent copy-on-write edits (§7.3) read. Pieces are ≤ 4 KiB so in-piece work stays cheap;
+  consecutive typing extends the last piece instead of adding nodes.
+- **Positions** are characters (UTF-8 units), as in Emacs; byte offsets are available for search/regex. Invalid
+  bytes count as one character each, per piece, and are never rewritten (lossless saves). Measured at -O2 on a 64 MB
+  file: load 37 ms, typing 0.55 µs/insert, random edit ~6 µs, line lookup ~0.5 µs.
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |
