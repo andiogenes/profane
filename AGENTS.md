@@ -19,9 +19,9 @@ Layers (top to bottom):
 
 ## Current status
 
-M0 (skeleton) and M1 (text + render) are implemented, one branch per item (`m0-skeleton`, `m1-*`), not yet
-merged to `main`. M1 decisions and measurements are in plan §8a–§8e. Next: M2. Work proceeds milestone by
-milestone (plan §9). Do not start work from a later milestone unless asked; when a task touches
+M0 and M1 are on `main`. M2 items 1–3 (registries, faces, themes) are on local branches `m2-*`, not yet merged;
+**read `HANDOFF.md`** for the exact state, working agreements, known traps and the plan for items 4–8. Decisions
+and measurements are in plan §8a–§8h. Work proceeds milestone by milestone (plan §9). Do not start work from a later milestone unless asked; when a task touches
 a later milestone's area, leave a seam, not an implementation.
 
 ## Commands
