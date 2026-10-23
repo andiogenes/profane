@@ -3,9 +3,9 @@
 # session and Screen Recording permission for the terminal, so it is skipped (77) unless
 # PROFANE_SCREEN_TESTS=1.
 #
-# Regression: frames presented from the render thread early in a window's life were not
-# delivered, so the window kept its first (empty) frame: a blank *scratch* at startup, and
-# edits made right after launch never appeared.
+# Checks that startup text and an edit made right after launch reach the screen. The window is
+# brought to the front first: macOS does not refresh a fully covered window, so capturing one
+# behind the terminal shows stale pixels (that artifact once passed for a rendering bug).
 set -eu
 [ "${PROFANE_SCREEN_TESTS:-}" = 1 ] || { echo "skipped: set PROFANE_SCREEN_TESTS=1"; exit 77; }
 app="$1"
@@ -33,6 +33,7 @@ launch() {
         i=$((i + 1)); [ $i -le 200 ] || { echo "REPL did not start" >&2; exit 1; }
         sleep 0.02
     done
+    osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $pid) to true"
 }
 
 stop() {

@@ -176,11 +176,46 @@ static void test_window(void) {
     PF_CHECK(max_x <= 200);
     pf_display_release(d);
 
+    /* Input-method composition: drawn at point, underlined, cursor inside it; not in the buffer. */
+    pf_buf_delete(buf, 0, (size_t)pf_buf_chars(buf));
+    pf_buf_insert(buf, 0, "ab", 2);
+    pf_buf_marker_set(buf, point, 1);
+    uint32_t composing[] = {'X', 'Y', 'Z'};
+    pf_window_set_preedit(w, composing, 3, 2);
+    d = pf_window_redisplay(w);
+    PF_CHECK(d != NULL);
+    char shown[8] = {0};
+    size_t ns = 0;
+    const pf_display_item *underline = NULL, *box = NULL;
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        const pf_display_item *x = &pf_display_items(d)[i];
+        if (x->kind == PF_DISPLAY_GLYPH && x->color == 0x000000FF && ns < 7) {
+            shown[ns++] = (char)x->u.glyph.glyph;
+        } else if (x->kind == PF_DISPLAY_RECT && x->color == 0x000000FF) {
+            underline = x;
+        } else if (x->kind == PF_DISPLAY_RECT) {
+            box = x;
+        }
+    }
+    PF_CHECK_EQ_STR(shown, "aXYZb");
+    PF_CHECK(underline && NEAR(underline->x, 15) && NEAR(underline->u.rect.w, 30));
+    PF_CHECK(NEAR(underline->u.rect.h, 0.5f)); /* one device pixel at scale 2 */
+    PF_CHECK(box && NEAR(box->x, 35)); /* caret 2 into the composition: on "Z" */
+    float rect[4];
+    PF_CHECK(pf_window_cursor_rect(w, rect) == 0 && NEAR(rect[0], 35) && NEAR(rect[1], 0));
+    PF_CHECK_EQ_SIZE((size_t)pf_buf_chars(buf), 2);
+    pf_display_release(d);
+    pf_window_set_preedit(w, NULL, 0, 0);
+    d = pf_window_redisplay(w);
+    PF_CHECK(d != NULL && count_kind(d, PF_DISPLAY_GLYPH) == 2 + 1);
+    pf_display_release(d);
+
     /* A killed buffer shows an empty window instead of crashing. */
     pf_buf_free(buf);
     pf_window_invalidate(w);
     d = pf_window_redisplay(w);
     PF_CHECK(d != NULL && pf_display_count(d) == 0);
+    PF_CHECK(pf_window_cursor_rect(w, rect) == -1);
     pf_display_release(d);
 
     pf_window_free(w);

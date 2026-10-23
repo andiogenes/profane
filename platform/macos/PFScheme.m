@@ -11,12 +11,17 @@ void pf_app_quit(void) {
     });
 }
 
+void pf_app_beep(void) {
+    NSBeep();
+}
+
 int PFSchemeBoot(void) {
     NSString *resources = NSBundle.mainBundle.resourcePath;
     NSString *bootDir = [resources stringByAppendingPathComponent:@"boot"];
     NSString *schemeDir = [resources stringByAppendingPathComponent:@"scheme"];
     static const pf_scheme_symbol symbols[] = {
         {"pf_app_quit", (void *)pf_app_quit},
+        {"pf_app_beep", (void *)pf_app_beep},
     };
     pf_scheme_options opts = {
         .boot_dir = bootDir.fileSystemRepresentation,

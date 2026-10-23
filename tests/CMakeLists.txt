@@ -72,5 +72,11 @@ target_link_libraries(png_ink PRIVATE "-framework CoreGraphics" "-framework Foun
 add_test(NAME screen.first-frames
   COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/macos/screen.sh" "$<TARGET_BUNDLE_DIR:profane>"
     "$<TARGET_FILE:profane-client>" "$<TARGET_FILE:png_ink>")
-set_tests_properties(screen.first-frames PROPERTIES LABELS screen TIMEOUT 120
+add_executable(post_keys macos/post_keys.m)
+target_compile_options(post_keys PRIVATE -fobjc-arc ${PROFANE_WARNINGS})
+target_link_libraries(post_keys PRIVATE "-framework ApplicationServices" "-framework Foundation")
+add_test(NAME screen.input
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/macos/input.sh" "$<TARGET_BUNDLE_DIR:profane>"
+    "$<TARGET_FILE:profane-client>" "$<TARGET_FILE:post_keys>")
+set_tests_properties(screen.first-frames screen.input PROPERTIES LABELS screen TIMEOUT 120
   SKIP_RETURN_CODE 77)

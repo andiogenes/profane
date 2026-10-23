@@ -35,6 +35,14 @@ void pf_window_set_style(pf_window *w, const pf_window_style *style);
  * returns the frozen display list (caller releases), else NULL. */
 const pf_display *pf_window_redisplay(pf_window *w);
 
+/* Input-method composition (marked text) CPS[0..N), drawn underlined at point without being in
+ * the buffer, with the cursor CARET characters into it. N == 0 clears it. */
+void pf_window_set_preedit(pf_window *w, const uint32_t *cps, size_t n, size_t caret);
+
+/* The cursor rect drawn by the last redisplay (points, window coordinates, top-left origin);
+ * -1 if point was not visible. Used to place input-method candidate windows. */
+int pf_window_cursor_rect(const pf_window *w, float rect[4]);
+
 /* Forces the next redisplay to render. */
 void pf_window_invalidate(pf_window *w);
 

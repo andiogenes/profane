@@ -69,6 +69,7 @@
     pf_scheme_call("pf-startup", NULL, 0, NULL); /* shows *scratch* in the selected window */
     [_window center];
     [_window makeKeyAndOrderFront:nil];
+    [_window makeFirstResponder:view];
     [NSApp activate];
 
     if (_snapshotPath) {

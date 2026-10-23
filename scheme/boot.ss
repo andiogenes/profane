@@ -5,7 +5,7 @@
 (library-directories (list (cons pf-scheme-dir pf-scheme-dir)))
 (library-extensions '((".sls" . ".so")))
 
-(import (profane repl) (profane buffer) (profane window))
+(import (profane repl) (profane buffer) (profane window) (profane command))
 
 ;;; FFI trampoline. An exception escaping into C would terminate the process, so every call
 ;;; from C lands here. Returns a UTF-8 bytevector for a string result, #t for any other
@@ -49,6 +49,11 @@
 
 (define (pf-hello-text)
   (format "Hello, profane — ~a" (scheme-version)))
+
+;;; Input from the shell: a key description ("C-f", "<left>", "RET") or committed text (typed
+;;; characters, input-method results).
+(define (pf-key key) (handle-key key))
+(define (pf-insert-text text) (handle-text text))
 
 ;;; Called by the shell once its window exists: show *scratch*.
 (define (pf-startup)

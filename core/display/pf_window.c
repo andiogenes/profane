@@ -27,6 +27,11 @@ struct pf_window {
     size_t bytes_cap;
     uint32_t *cps;
     size_t cps_cap;
+    /* Input-method composition shown at point but not in the buffer. */
+    uint32_t *preedit;
+    size_t preedit_len, preedit_caret;
+    float cursor[4]; /* last frame's cursor rect: x, y, w, h */
+    int cursor_valid;
 };
 
 static void *xrealloc(void *p, size_t size) {
@@ -53,6 +58,7 @@ void pf_window_free(pf_window *w) {
         pf_text_snapshot_release(w->shown);
         free(w->bytes);
         free(w->cps);
+        free(w->preedit);
         free(w);
     }
 }
@@ -78,6 +84,24 @@ void pf_window_set_size(pf_window *w, float width, float height, float scale) {
 void pf_window_set_style(pf_window *w, const pf_window_style *style) {
     w->style = *style;
     w->dirty = 1;
+}
+
+void pf_window_set_preedit(pf_window *w, const uint32_t *cps, size_t n, size_t caret) {
+    w->preedit = xrealloc(w->preedit, (n ? n : 1) * sizeof *w->preedit);
+    if (n) {
+        memcpy(w->preedit, cps, n * sizeof *cps);
+    }
+    w->preedit_len = n;
+    w->preedit_caret = caret < n ? caret : n;
+    w->dirty = 1;
+}
+
+int pf_window_cursor_rect(const pf_window *w, float rect[4]) {
+    if (!w->cursor_valid) {
+        return -1;
+    }
+    memcpy(rect, w->cursor, sizeof w->cursor);
+    return 0;
 }
 
 void pf_window_invalidate(pf_window *w) {
@@ -182,6 +206,7 @@ const pf_display *pf_window_redisplay(pf_window *w) {
 
     const pf_window_style *st = &w->style;
     pf_display *d = pf_display_new(w->width, w->height, w->scale, st->background);
+    w->cursor_valid = 0;
     if (!s) {
         return pf_display_finish(d);
     }
@@ -195,21 +220,43 @@ const pf_display *pf_window_redisplay(pf_window *w) {
         size_t next = pf_text_line_start(s, line + 1);
         size_t end = next > start && next <= chars && line + 1 < lines ? next - 1 : next;
         size_t n = load_line(w, s, start, end);
+        int here = point >= start && point <= end;
+        size_t k = here ? point - start : 0, pre = here ? w->preedit_len : 0;
+        if (pre && k <= n) {
+            /* Splice the composition in at point, as the input method shows it. */
+            if (n + pre > w->cps_cap) {
+                w->cps_cap = (n + pre) * 2;
+                w->cps = xrealloc(w->cps, w->cps_cap * sizeof *w->cps);
+            }
+            memmove(w->cps + k + pre, w->cps + k, (n - k) * sizeof *w->cps);
+            memcpy(w->cps + k, w->preedit, pre * sizeof *w->cps);
+            n += pre;
+        }
         const pf_line_layout *lay = pf_layout_line(w->cache, st->font, w->cps, n);
         float top = st->pad_top + (float)row * st->line_height;
         float baseline = top + st->ascent;
         float x0 = st->pad_left;
         emit_glyphs(d, lay, x0, baseline, right, st->foreground, 0, (size_t)-1);
 
-        if (point >= start && point <= end) {
+        if (here) {
+            if (pre) {
+                float ux = lay->caret_x[k], uw = lay->caret_x[k + pre] - ux;
+                pf_display_rect(d, x0 + ux, baseline + st->descent * 0.5f, uw, 1.0f / w->scale,
+                                st->foreground); /* one device pixel */
+                k += w->preedit_caret;
+            }
             /* Filled box cursor; the character under it is redrawn in the background color. */
-            size_t k = point - start;
             float cx = k <= lay->nchars ? lay->caret_x[k] : lay->width;
             float cw = k < lay->nchars ? lay->caret_x[k + 1] - cx : st->cell_width;
             if (cw <= 0) {
                 cw = st->cell_width;
             }
             pf_display_rect(d, x0 + cx, top, cw, st->line_height, st->cursor);
+            w->cursor[0] = x0 + cx;
+            w->cursor[1] = top;
+            w->cursor[2] = cw;
+            w->cursor[3] = st->line_height;
+            w->cursor_valid = 1;
             if (k < lay->nchars) {
                 emit_glyphs(d, lay, x0, baseline, right, st->background, k, k + 1);
             }

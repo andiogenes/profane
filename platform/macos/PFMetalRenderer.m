@@ -295,17 +295,13 @@ uint64_t pf_renderer_presented_frames(const pf_renderer *r) {
         atomic_store(&self->_confirmed[index], generation);
         atomic_fetch_add(&self->_presented, 1);
     }];
-    /* Present inside an explicit, committed transaction (the layers use presentsWithTransaction).
-     * Presenting straight from the command buffer on this thread was not reliably delivered
-     * to the window server early in a window's life: the window kept showing its first frame
-     * and dropped later ones (blank *scratch* at startup ~9 in 10 launches; edits made right
-     * after launch never appeared). */
+    /* Present straight from the command buffer: lowest latency. (Presenting inside an explicit
+     * CA transaction with presentsWithTransaction was tried and reverted: the "lost frames" it
+     * seemed to fix were a measurement artifact — macOS does not refresh a fully covered
+     * window, and captures of it are stale — while it blocked this thread on
+     * waitUntilScheduled. Uncovered windows show current content either way.) */
+    [commands presentDrawable:drawable];
     [commands commit];
-    [commands waitUntilScheduled];
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    [drawable present];
-    [CATransaction commit];
     _lastCommands = commands;
     [_encodeLock unlock];
     return YES;

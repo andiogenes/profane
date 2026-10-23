@@ -294,11 +294,11 @@ Layers: libgit2 reader (workers, ftype structs) → git CLI runner (`GIT_EDITOR`
 - **Fonts** are integer ids (`pf_font`); fallback fonts chosen by Core Text during shaping are registered on the fly.
 - **View stack**: `ProfaneView` = base Metal layer / native-view host / transparent overlay Metal layer (ignores the
   mouse). Shaping is still done ad hoc in the view until the layout cache (next M1 item) replaces it.
-- **Present inside an explicit CA transaction**: Metal layers use `presentsWithTransaction`, and the render thread
-  presents each drawable between `[CATransaction begin]`/`commit` after `waitUntilScheduled`. Presenting straight
-  from the command buffer on the render thread was not reliably delivered early in a window's life — the window kept
-  its first frame (blank `*scratch*` ~9/10 launches; edits right after launch never shown). Covered by the opt-in
-  `screen.first-frames` test, which checks the window server's actual pixels.
+- **Present directly** from the command buffer on the render thread (lowest latency). An explicit-CA-transaction
+  present (`presentsWithTransaction`) was adopted in item 5 for "frames lost early in a window's life" and then
+  reverted in item 6: that symptom was a measurement artifact — macOS does not refresh a fully covered window, so
+  captures of a window behind the terminal were stale. With the window in front, and after uncovering a window
+  edited while covered, the direct path shows current content every time. On-screen tests bring the window front.
 - **Frames are confirmed, not assumed**: a frame presented before the window is on screen is dropped with no error
   (and `presentedTime` reads 0 even for visible windowed frames, so it can't tell). A committed frame counts as shown
   only when its presented handler fires; otherwise it is re-presented every ~250 ms, up to 10 times. Found as an

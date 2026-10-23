@@ -10,7 +10,10 @@
 
 #include <math.h>
 
+#include <string.h>
+
 #include "pf_display.h"
+#include "pf_scheme.h"
 #include "pf_layout.h"
 #include "pf_window.h"
 #include "pf_window_ffi.h"
@@ -53,7 +56,6 @@ static const size_t kLayoutCacheLines = 4096;
     layer.device = _device;
     layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
     layer.framebufferOnly = YES;
-    layer.presentsWithTransaction = YES; /* see -[PFMetalRenderer present:onLayer:index:] */
     layer.opaque = _opaque;
     CGColorSpaceRef srgb = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     layer.colorspace = srgb;
@@ -74,7 +76,90 @@ static const size_t kLayoutCacheLines = 4096;
 
 @end
 
+/* Emacs-style description of a key event: modifiers C- M- S- s- (Option is Meta; S- only for
+ * named keys, as Shift is already in the character) plus a key name or character. Sets *DIRECT
+ * when the event must bypass the input method (modifier chords and named keys). */
+static NSString *key_description(NSEvent *event, BOOL *direct) {
+    NSEventModifierFlags flags = event.modifierFlags;
+    NSString *chars = event.charactersIgnoringModifiers;
+    unichar c = chars.length ? [chars characterAtIndex:0] : 0;
+    NSString *name = nil;
+    switch (c) {
+    case NSUpArrowFunctionKey: name = @"<up>"; break;
+    case NSDownArrowFunctionKey: name = @"<down>"; break;
+    case NSLeftArrowFunctionKey: name = @"<left>"; break;
+    case NSRightArrowFunctionKey: name = @"<right>"; break;
+    case NSHomeFunctionKey: name = @"<home>"; break;
+    case NSEndFunctionKey: name = @"<end>"; break;
+    case NSPageUpFunctionKey: name = @"<prior>"; break;
+    case NSPageDownFunctionKey: name = @"<next>"; break;
+    case NSDeleteFunctionKey: name = @"<deletechar>"; break;
+    case 0x7F: name = @"DEL"; break;
+    case '\r': case 0x03: name = @"RET"; break;
+    case '\t': name = @"TAB"; break;
+    case 0x19: name = @"<backtab>"; break;
+    case 0x1B: name = @"ESC"; break;
+    default:
+        if (c >= NSF1FunctionKey && c <= NSF35FunctionKey) {
+            name = [NSString stringWithFormat:@"<f%d>", c - NSF1FunctionKey + 1];
+        }
+    }
+    BOOL chord = (flags & (NSEventModifierFlagControl | NSEventModifierFlagOption |
+                           NSEventModifierFlagCommand)) != 0;
+    *direct = chord || name != nil;
+    if (!name) {
+        name = c == ' ' ? @"SPC" : chars;
+    }
+    NSMutableString *key = [NSMutableString string];
+    if (flags & NSEventModifierFlagControl) {
+        [key appendString:@"C-"];
+    }
+    if (flags & NSEventModifierFlagOption) {
+        [key appendString:@"M-"];
+    }
+    /* Named keys only ("<left>"): the character "<" itself already carries its Shift. */
+    if ((flags & NSEventModifierFlagShift) && name.length > 1 && [name hasPrefix:@"<"]) {
+        [key appendString:@"S-"];
+    }
+    if (flags & NSEventModifierFlagCommand) {
+        [key appendString:@"s-"];
+    }
+    [key appendString:name ? name : @""];
+    return key;
+}
+
+/* Sends S to Scheme as UTF-8. Text from events can contain unpaired surrogates, for which
+ * -UTF8String returns NULL (that crashed the app); they become U+FFFD instead. */
+static void send_string(const char *proc, NSString *s) {
+    NSMutableString *clean = [NSMutableString stringWithCapacity:s.length];
+    for (NSUInteger i = 0; i < s.length; i++) {
+        unichar c = [s characterAtIndex:i];
+        BOOL high = c >= 0xD800 && c <= 0xDBFF, low = c >= 0xDC00 && c <= 0xDFFF;
+        if (high && i + 1 < s.length) {
+            unichar next = [s characterAtIndex:i + 1];
+            if (next >= 0xDC00 && next <= 0xDFFF) {
+                [clean appendFormat:@"%C%C", c, next];
+                i++;
+                continue;
+            }
+        }
+        [clean appendFormat:@"%C", (unichar)(high || low ? 0xFFFD : c)];
+    }
+    const char *utf8 = clean.UTF8String;
+    if (!utf8) {
+        return;
+    }
+    pf_scheme_arg arg = PF_SCHEME_STRING(utf8, strlen(utf8));
+    pf_scheme_call(proc, &arg, 1, NULL);
+}
+
+@interface ProfaneView () <NSTextInputClient>
+@end
+
 @implementation ProfaneView {
+    NSString *_marked; /* input-method composition, nil when none */
+    NSRange _markedSelection;
+    NSEvent *_interpreting; /* the key event inside -interpretKeyEvents: */
     PFMetalLayerView *_base;
     PFMetalLayerView *_overlay;
     PFMetalRenderer *_metal;
@@ -253,6 +338,136 @@ static CGColorRef create_cgcolor(uint32_t c) {
         pf_renderer_submit(_metal.renderer, PF_LAYER_BASE, d);
         pf_display_release(d);
     }
+}
+
+/* ---- input ---- */
+
+- (BOOL)acceptsFirstResponder {
+    return YES;
+}
+
+- (void)keyDown:(NSEvent *)event {
+    BOOL direct = NO;
+    NSString *key = key_description(event, &direct);
+    if (direct && !_marked) {
+        send_string("pf-key", key);
+        [self redisplay];
+        return;
+    }
+    /* Plain keys go through the input method: it may insert text, compose, or ask for a
+     * command (-doCommandBySelector:). */
+    _interpreting = event;
+    [self interpretKeyEvents:@[ event ]];
+    _interpreting = nil;
+    [self redisplay];
+}
+
+- (void)doCommandBySelector:(SEL)selector {
+    (void)selector;
+    if (_interpreting) {
+        BOOL direct;
+        send_string("pf-key", key_description(_interpreting, &direct));
+    }
+}
+
+- (void)insertText:(id)string replacementRange:(NSRange)range {
+    (void)range;
+    NSString *text = [string isKindOfClass:NSAttributedString.class] ? [string string] : string;
+    [self clearMarked];
+    if (text.length) {
+        send_string("pf-insert-text", text);
+    }
+    [self redisplay];
+}
+
+- (void)setMarkedText:(id)string selectedRange:(NSRange)selected replacementRange:(NSRange)range {
+    (void)range;
+    NSString *text = [string isKindOfClass:NSAttributedString.class] ? [string string] : string;
+    _marked = text.length ? [text copy] : nil;
+    _markedSelection = selected;
+    [self updatePreedit];
+    [self redisplay];
+}
+
+- (void)unmarkText {
+    NSString *text = _marked;
+    [self clearMarked];
+    if (text.length) {
+        send_string("pf-insert-text", text);
+    }
+    [self redisplay];
+}
+
+- (void)clearMarked {
+    _marked = nil;
+    [self updatePreedit];
+}
+
+/* Hands the composition to the window as code points; the caret (a UTF-16 offset from the
+ * input method) becomes a character index. */
+- (void)updatePreedit {
+    NSString *m = _marked ? _marked : @"";
+    NSUInteger len = m.length;
+    uint32_t *cps = malloc((len ? len : 1) * sizeof *cps);
+    size_t n = 0, caret = 0;
+    for (NSUInteger i = 0; i < len; i++) {
+        if (i == _markedSelection.location) {
+            caret = n;
+        }
+        uint32_t c = [m characterAtIndex:i];
+        if (c >= 0xD800 && c <= 0xDBFF && i + 1 < len) {
+            uint32_t lo = [m characterAtIndex:i + 1];
+            if (lo >= 0xDC00 && lo <= 0xDFFF) {
+                c = 0x10000 + ((c - 0xD800) << 10) + (lo - 0xDC00);
+                i++;
+            }
+        }
+        cps[n++] = c;
+    }
+    if (_markedSelection.location >= len) {
+        caret = n;
+    }
+    pf_window_set_preedit(_window, cps, n, caret);
+    free(cps);
+}
+
+- (BOOL)hasMarkedText {
+    return _marked != nil;
+}
+
+- (NSRange)markedRange {
+    return _marked ? NSMakeRange(0, _marked.length) : NSMakeRange(NSNotFound, 0);
+}
+
+- (NSRange)selectedRange {
+    return _marked ? _markedSelection : NSMakeRange(0, 0);
+}
+
+- (NSArray<NSAttributedStringKey> *)validAttributesForMarkedText {
+    return @[];
+}
+
+- (nullable NSAttributedString *)attributedSubstringForProposedRange:(NSRange)range
+                                                         actualRange:(nullable NSRangePointer)actual {
+    (void)range, (void)actual;
+    return nil; /* no reconversion of buffer text yet */
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point {
+    (void)point;
+    return NSNotFound;
+}
+
+/* Where the input method puts its candidate window: under the cursor. */
+- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(nullable NSRangePointer)actual {
+    (void)range;
+    if (actual) {
+        *actual = range;
+    }
+    float r[4];
+    NSRect rect = pf_window_cursor_rect(_window, r) == 0 ? NSMakeRect(r[0], r[1], r[2], r[3])
+                                                         : NSMakeRect(0, 0, 0, 0);
+    return [self.window convertRectToScreen:[self convertRect:rect toView:nil]];
 }
 
 - (BOOL)writeSnapshotToURL:(NSURL *)url {

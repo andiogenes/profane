@@ -12,4 +12,7 @@ NSString *_Nullable PFSchemeCallString(const char *proc);
 /* Foreign entry: asks the app to terminate once the current Scheme call has returned. */
 void pf_app_quit(void);
 
+/* Foreign entry: the system alert sound (unbound keys, failed commands). */
+void pf_app_beep(void);
+
 NS_ASSUME_NONNULL_END
