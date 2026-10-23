@@ -318,6 +318,20 @@ Layers: libgit2 reader (workers, ftype structs) → git CLI runner (`GIT_EDITOR`
 - Redisplay runs after Scheme work from the main run loop's idle observer, so REPL edits show up immediately.
   Scheme picks what a window shows via `(profane window)`; the shell owns the window (one per frame in M1).
 
+## 8d. Input and editing features (M1)
+
+- **Keys** are Emacs-style descriptions built in `PFKeys` (`C-f`, `M-<`, `<left>`). Chords use the key's character in
+  the current **ASCII-capable layout** (`UCKeyTranslate`), so bindings work while typing Russian or any non-Latin
+  layout; plain typing keeps the active layout and input method. Option is Meta (GNU Emacs NS default), Command keeps
+  the menus. Found when every chord was dead under the owner's Russian layout (`C-ф`).
+- **IME** via `NSTextInputClient`: composition is drawn inline at point (underlined) without entering the buffer; the
+  candidate window is placed at the last cursor rect.
+- **Command loop** (`(profane command)`): symbol-keyed command registry, one global keymap (M2: registries, prefix
+  maps, modes), undo boundary per command, typed characters amalgamated 20 at a time.
+- **display-line-numbers / hl-line / show-paren** (on by default, per the owner's config) are per-window options of
+  the portable window renderer, switched from Scheme; show-paren matches immediately (no delay), bounded to 100k
+  characters, plain bracket counting until tree-sitter syntax (M5).
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |

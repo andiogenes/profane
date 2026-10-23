@@ -66,7 +66,11 @@
         (set-buffer-unmodified!)))
     (set-buffer scratch)
     (let ([w (selected-window)])
-      (when w (set-window-buffer! w scratch)))))
+      (when w (set-window-buffer! w scratch)))
+    ;; The owner's Emacs setup (plan §2): all on in the default preset.
+    (display-line-numbers-mode)
+    (global-hl-line-mode)
+    (show-paren-mode)))
 
 ;;; Socket REPL sessions, keyed by connection id (an integer chosen by the shell).
 

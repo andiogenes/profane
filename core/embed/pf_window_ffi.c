@@ -37,6 +37,16 @@ int64_t pf_win_top_line(pf_handle win) {
     return w ? (int64_t)pf_window_top_line(w) : INVALID;
 }
 
+int pf_win_set_option(pf_handle win, int option, int on) {
+    pf_window *w = pf_handle_get(win, PF_HANDLE_WINDOW);
+    return w ? pf_window_set_option(w, (pf_window_option)option, on) : INVALID;
+}
+
+int pf_win_option(pf_handle win, int option) {
+    pf_window *w = pf_handle_get(win, PF_HANDLE_WINDOW);
+    return w ? pf_window_option_value(w, (pf_window_option)option) : INVALID;
+}
+
 int64_t pf_win_body_lines(pf_handle win) {
     pf_window *w = pf_handle_get(win, PF_HANDLE_WINDOW);
     return w ? (int64_t)pf_window_body_lines(w) : INVALID;

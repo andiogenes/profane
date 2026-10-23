@@ -96,7 +96,9 @@ static pf_window_style style(void) {
     return (pf_window_style){
         .font = 1, .ascent = 12, .descent = 4, .line_height = 20, .cell_width = 10,
         .pad_left = 5, .pad_top = 0,
-        .background = 0xFFFFFFFF, .foreground = 0x000000FF, .cursor = 0xFF0000FF};
+        .background = 0xFFFFFFFF, .foreground = 0x000000FF, .cursor = 0xFF0000FF,
+        .line_number = 0x888888FF, .line_number_current = 0x111111FF, .hl_line = 0xEEEEEEFF,
+        .paren_match = 0x00FF00FF, .paren_mismatch = 0xFF00FFFF};
 }
 
 static size_t count_kind(const pf_display *d, uint32_t kind) {
@@ -222,8 +224,111 @@ static void test_window(void) {
     pf_layout_cache_free(cache);
 }
 
+static const pf_display_item *find_rect(const pf_display *d, uint32_t color, size_t nth) {
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        const pf_display_item *x = &pf_display_items(d)[i];
+        if (x->kind == PF_DISPLAY_RECT && x->color == color && nth-- == 0) {
+            return x;
+        }
+    }
+    return NULL;
+}
+
+static size_t count_color(const pf_display *d, uint32_t kind, uint32_t color) {
+    size_t n = 0;
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        const pf_display_item *x = &pf_display_items(d)[i];
+        n += x->kind == kind && x->color == color;
+    }
+    return n;
+}
+
+/* Redisplay with point at POS (forcing a frame). */
+static const pf_display *frame_at(pf_window *w, pf_handle buf, uint32_t point, size_t pos) {
+    pf_buf_marker_set(buf, point, pos);
+    pf_window_invalidate(w);
+    return pf_window_redisplay(w);
+}
+
+static void test_editing_modes(void) {
+    pf_layout_cache *cache = pf_layout_cache_new(fake, 256, 8);
+    pf_window_style s = style();
+    pf_window *w = pf_window_new(cache, &s);
+    pf_window_set_size(w, 400, 200, 1);
+    PF_CHECK(pf_window_set_option(w, (pf_window_option)99, 1) == -1);
+    PF_CHECK(pf_window_option_value(w, PF_WINDOW_LINE_NUMBERS) == 0);
+
+    /* 12 lines: two-digit line numbers. */
+    const char *text = "(a [b] c)\n{\n}\n(x]\n4\n5\n6\n7\n8\n9\n10\n11";
+    pf_handle buf = pf_buf_new(text, strlen(text));
+    uint32_t point = pf_buf_marker_new(buf, 0, 0);
+    pf_window_set_buffer(w, buf, point);
+
+    /* Line numbers: gutter of (2 digits + 2) cells; text shifts right; current line emphasized. */
+    pf_window_set_option(w, PF_WINDOW_LINE_NUMBERS, 1);
+    const pf_display *d = frame_at(w, buf, point, 0);
+    const pf_display_item *it = pf_display_items(d);
+    size_t i = 0;
+    while (it[i].kind != PF_DISPLAY_GLYPH || it[i].u.glyph.glyph != '1') {
+        i++;
+    }
+    PF_CHECK(NEAR(it[i].x, 5 + 40 - 10 - 10)); /* "1" right-aligned before the last cell */
+    PF_CHECK(it[i].color == 0x111111FF);
+    /* 11 rows fit: dimmed numbers are lines 2-9 (8 digits) and 10-11 (4 digits). */
+    PF_CHECK(count_color(d, PF_DISPLAY_GLYPH, 0x888888FF) == 8 + 4);
+    for (i = 0; i < pf_display_count(d); i++) {
+        if (it[i].kind == PF_DISPLAY_GLYPH && it[i].u.glyph.glyph == '(' && it[i].color == 0x000000FF) {
+            PF_CHECK(NEAR(it[i].x, 45)); /* text starts after the gutter */
+            break;
+        }
+    }
+    pf_display_release(d);
+
+    /* hl-line: one band on point's line, from the text start to the right edge. */
+    pf_window_set_option(w, PF_WINDOW_LINE_NUMBERS, 0);
+    pf_window_set_option(w, PF_WINDOW_HL_LINE, 1);
+    d = frame_at(w, buf, point, 11); /* line 2: "{" */
+    const pf_display_item *band = find_rect(d, 0xEEEEEEFF, 0);
+    PF_CHECK(band && NEAR(band->x, 5) && NEAR(band->y, 20) && NEAR(band->u.rect.w, 395));
+    PF_CHECK(find_rect(d, 0xEEEEEEFF, 1) == NULL);
+    pf_display_release(d);
+    pf_window_set_option(w, PF_WINDOW_HL_LINE, 0);
+
+    /* show-paren: opener after point, closer before it, across lines, nesting, mismatches. */
+    pf_window_set_option(w, PF_WINDOW_SHOW_PAREN, 1);
+    d = frame_at(w, buf, point, 0); /* before "(" of "(a [b] c)" */
+    const pf_display_item *p0 = find_rect(d, 0x00FF00FF, 0), *p1 = find_rect(d, 0x00FF00FF, 1);
+    PF_CHECK(p0 && p1 && NEAR(p0->x, 5) && NEAR(p1->x, 5 + 80)); /* skips the nested [b] */
+    pf_display_release(d);
+    d = frame_at(w, buf, point, 6); /* after "]" */
+    p0 = find_rect(d, 0x00FF00FF, 0);
+    p1 = find_rect(d, 0x00FF00FF, 1);
+    PF_CHECK(p0 && p1 && NEAR(p0->x, 5 + 50) && NEAR(p1->x, 5 + 30));
+    pf_display_release(d);
+    d = frame_at(w, buf, point, 10); /* "{" on line 2, "}" on line 3 */
+    p1 = find_rect(d, 0x00FF00FF, 1);
+    PF_CHECK(p1 && NEAR(p1->y, 40));
+    pf_display_release(d);
+    d = frame_at(w, buf, point, 14); /* "(x]": wrong closer */
+    PF_CHECK(find_rect(d, 0x00FF00FF, 0) == NULL);
+    PF_CHECK(find_rect(d, 0xFF00FFFF, 0) && find_rect(d, 0xFF00FFFF, 1));
+    pf_display_release(d);
+    d = frame_at(w, buf, point, 2); /* between "a" and " ": no bracket next to point */
+    PF_CHECK(find_rect(d, 0x00FF00FF, 0) == NULL && find_rect(d, 0xFF00FFFF, 0) == NULL);
+    pf_display_release(d);
+    pf_buf_insert(buf, (size_t)pf_buf_chars(buf), "(", 1); /* unclosed at the end */
+    d = frame_at(w, buf, point, (size_t)pf_buf_chars(buf) - 1);
+    PF_CHECK(find_rect(d, 0xFF00FFFF, 0) && find_rect(d, 0xFF00FFFF, 1) == NULL);
+    pf_display_release(d);
+
+    pf_buf_free(buf);
+    pf_window_free(w);
+    pf_layout_cache_free(cache);
+}
+
 int main(void) {
     test_layout();
     test_window();
+    test_editing_modes();
     return PF_TEST_RESULT();
 }

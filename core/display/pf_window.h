@@ -18,7 +18,17 @@ typedef struct pf_window_style {
     float cell_width;              /* cursor width at end of line */
     float pad_left, pad_top;
     uint32_t background, foreground, cursor; /* 0xRRGGBBAA */
+    uint32_t line_number, line_number_current; /* gutter text */
+    uint32_t hl_line;                          /* current-line band */
+    uint32_t paren_match, paren_mismatch;      /* bracket highlight backgrounds */
 } pf_window_style;
+
+/* Per-window display features (Emacs's display-line-numbers, hl-line, show-paren). */
+typedef enum pf_window_option {
+    PF_WINDOW_LINE_NUMBERS = 1,
+    PF_WINDOW_HL_LINE = 2,
+    PF_WINDOW_SHOW_PAREN = 3,
+} pf_window_option;
 
 typedef struct pf_window pf_window;
 
@@ -42,6 +52,10 @@ void pf_window_set_preedit(pf_window *w, const uint32_t *cps, size_t n, size_t c
 /* The cursor rect drawn by the last redisplay (points, window coordinates, top-left origin);
  * -1 if point was not visible. Used to place input-method candidate windows. */
 int pf_window_cursor_rect(const pf_window *w, float rect[4]);
+
+/* Turns OPTION on or off; returns -1 for an unknown option. All start off. */
+int pf_window_set_option(pf_window *w, pf_window_option option, int on);
+int pf_window_option_value(const pf_window *w, pf_window_option option);
 
 /* Forces the next redisplay to render. */
 void pf_window_invalidate(pf_window *w);

@@ -5,6 +5,7 @@
 #import <QuartzCore/CAMetalLayer.h>
 
 #import "PFFont.h"
+#import "PFKeys.h"
 #import "PFMetalRenderer.h"
 #import "PFShaper.h"
 
@@ -21,10 +22,13 @@
 /* Interim colors (modus-operandi / modus-vivendi) until theme design tokens land in M2. */
 typedef struct PFPalette {
     uint32_t background, foreground;
+    uint32_t line_number, line_number_current, hl_line, paren_match, paren_mismatch;
 } PFPalette;
 
-static const PFPalette kLightPalette = {0xFFFFFFFF, 0x000000FF};
-static const PFPalette kDarkPalette = {0x000000FF, 0xFFFFFFFF};
+static const PFPalette kLightPalette = {0xFFFFFFFF, 0x000000FF, 0x9A9A9AFF, 0x000000FF,
+                                        0xE4E9EFFF, 0xB8D9F0FF, 0xF2B8B8FF};
+static const PFPalette kDarkPalette = {0x000000FF, 0xFFFFFFFF, 0x6B6B6BFF, 0xFFFFFFFF,
+                                       0x1E1E2AFF, 0x2F4F6AFF, 0x7A2F2FFF};
 
 static const float kFontSize = 14.0f;
 static const size_t kLayoutCacheLines = 4096;
@@ -75,58 +79,6 @@ static const size_t kLayoutCacheLines = 4096;
 }
 
 @end
-
-/* Emacs-style description of a key event: modifiers C- M- S- s- (Option is Meta; S- only for
- * named keys, as Shift is already in the character) plus a key name or character. Sets *DIRECT
- * when the event must bypass the input method (modifier chords and named keys). */
-static NSString *key_description(NSEvent *event, BOOL *direct) {
-    NSEventModifierFlags flags = event.modifierFlags;
-    NSString *chars = event.charactersIgnoringModifiers;
-    unichar c = chars.length ? [chars characterAtIndex:0] : 0;
-    NSString *name = nil;
-    switch (c) {
-    case NSUpArrowFunctionKey: name = @"<up>"; break;
-    case NSDownArrowFunctionKey: name = @"<down>"; break;
-    case NSLeftArrowFunctionKey: name = @"<left>"; break;
-    case NSRightArrowFunctionKey: name = @"<right>"; break;
-    case NSHomeFunctionKey: name = @"<home>"; break;
-    case NSEndFunctionKey: name = @"<end>"; break;
-    case NSPageUpFunctionKey: name = @"<prior>"; break;
-    case NSPageDownFunctionKey: name = @"<next>"; break;
-    case NSDeleteFunctionKey: name = @"<deletechar>"; break;
-    case 0x7F: name = @"DEL"; break;
-    case '\r': case 0x03: name = @"RET"; break;
-    case '\t': name = @"TAB"; break;
-    case 0x19: name = @"<backtab>"; break;
-    case 0x1B: name = @"ESC"; break;
-    default:
-        if (c >= NSF1FunctionKey && c <= NSF35FunctionKey) {
-            name = [NSString stringWithFormat:@"<f%d>", c - NSF1FunctionKey + 1];
-        }
-    }
-    BOOL chord = (flags & (NSEventModifierFlagControl | NSEventModifierFlagOption |
-                           NSEventModifierFlagCommand)) != 0;
-    *direct = chord || name != nil;
-    if (!name) {
-        name = c == ' ' ? @"SPC" : chars;
-    }
-    NSMutableString *key = [NSMutableString string];
-    if (flags & NSEventModifierFlagControl) {
-        [key appendString:@"C-"];
-    }
-    if (flags & NSEventModifierFlagOption) {
-        [key appendString:@"M-"];
-    }
-    /* Named keys only ("<left>"): the character "<" itself already carries its Shift. */
-    if ((flags & NSEventModifierFlagShift) && name.length > 1 && [name hasPrefix:@"<"]) {
-        [key appendString:@"S-"];
-    }
-    if (flags & NSEventModifierFlagCommand) {
-        [key appendString:@"s-"];
-    }
-    [key appendString:name ? name : @""];
-    return key;
-}
 
 /* Sends S to Scheme as UTF-8. Text from events can contain unpaired surrogates, for which
  * -UTF8String returns NULL (that crashed the app); they become U+FFFD instead. */
@@ -292,6 +244,11 @@ static void send_string(const char *proc, NSString *s) {
         .background = palette.background,
         .foreground = palette.foreground,
         .cursor = palette.foreground,
+        .line_number = palette.line_number,
+        .line_number_current = palette.line_number_current,
+        .hl_line = palette.hl_line,
+        .paren_match = palette.paren_match,
+        .paren_mismatch = palette.paren_mismatch,
     };
 }
 
@@ -348,7 +305,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
 
 - (void)keyDown:(NSEvent *)event {
     BOOL direct = NO;
-    NSString *key = key_description(event, &direct);
+    NSString *key = PFKeyDescription(event, &direct);
     if (direct && !_marked) {
         send_string("pf-key", key);
         [self redisplay];
@@ -366,7 +323,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
     (void)selector;
     if (_interpreting) {
         BOOL direct;
-        send_string("pf-key", key_description(_interpreting, &direct));
+        send_string("pf-key", PFKeyDescription(_interpreting, &direct));
     }
 }
 

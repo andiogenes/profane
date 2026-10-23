@@ -19,5 +19,8 @@ pf_handle pf_win_selected(void); /* 0 if no window (e.g. headless) */
 int pf_win_set_buffer(pf_handle win, pf_handle buf, uint32_t point_marker);
 int64_t pf_win_top_line(pf_handle win);
 int64_t pf_win_body_lines(pf_handle win);
+/* pf_window_option values; returns -1 for an unknown option. */
+int pf_win_set_option(pf_handle win, int option, int on);
+int pf_win_option(pf_handle win, int option);
 
 #endif

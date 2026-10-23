@@ -38,6 +38,7 @@ add_executable(profane MACOSX_BUNDLE
   PFAppDelegate.m
   PFFont.m
   PFGlyphAtlas.m
+  PFKeys.m
   PFMetalRenderer.m
   PFReplServer.m
   PFScheme.m
@@ -55,6 +56,7 @@ target_compile_options(profane PRIVATE -fobjc-arc ${PROFANE_WARNINGS})
 target_link_libraries(profane PRIVATE
   pf_core_whole
   "-framework AppKit"
+  "-framework Carbon"
   "-framework CoreText"
   "-framework ImageIO"
   "-framework Metal"

@@ -54,6 +54,13 @@ target_link_libraries(test_atlas PRIVATE pf_core "-framework CoreGraphics" "-fra
 add_test(NAME macos.atlas COMMAND test_atlas)
 set_tests_properties(macos.atlas PROPERTIES LABELS macos)
 
+add_executable(test_keys macos/test_keys.m "${PROJECT_SOURCE_DIR}/platform/macos/PFKeys.m")
+target_include_directories(test_keys PRIVATE "${PROJECT_SOURCE_DIR}/platform/macos" c)
+target_compile_options(test_keys PRIVATE -fobjc-arc ${PROFANE_WARNINGS})
+target_link_libraries(test_keys PRIVATE "-framework AppKit" "-framework Carbon")
+add_test(NAME macos.keys COMMAND test_keys)
+set_tests_properties(macos.keys PROPERTIES LABELS macos)
+
 # App integration (label: macos): signed bundle, hardened runtime + JIT, socket REPL.
 add_test(NAME macos.signing
   COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/macos/signing.sh" "$<TARGET_BUNDLE_DIR:profane>")
