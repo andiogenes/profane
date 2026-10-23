@@ -75,6 +75,23 @@ pf_font_id pf_font_open(const char *family, float size) {
     return id;
 }
 
+pf_font_id pf_font_open_styled(const char *family, float size, int bold, int italic) {
+    pf_font_id base = family ? pf_font_open(family, size)
+                             : PFFontIdForCTFont((CTFontRef)CFAutorelease(
+                                   CTFontCreateUIFontForLanguage(kCTFontUIFontUserFixedPitch, size, NULL)));
+    if (!base || (!bold && !italic)) {
+        return base;
+    }
+    CTFontSymbolicTraits traits = (bold ? kCTFontTraitBold : 0) | (italic ? kCTFontTraitItalic : 0);
+    CTFontRef styled = CTFontCreateCopyWithSymbolicTraits(PFFontGet(base), size, NULL, traits, traits);
+    if (!styled) {
+        return base; /* the family has no such style: keep the regular face */
+    }
+    pf_font_id id = PFFontIdForCTFont(styled);
+    CFRelease(styled);
+    return id;
+}
+
 int pf_font_metrics_get(pf_font_id font, pf_font_metrics *out) {
     CTFontRef f = PFFontGet(font);
     if (!f) {

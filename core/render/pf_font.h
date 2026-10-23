@@ -18,6 +18,10 @@ typedef struct pf_font_metrics {
  * installed. Returns 0 on failure. Opening the same family and size twice returns one id. */
 pf_font_id pf_font_open(const char *family, float size);
 
+/* FAMILY (NULL: the system monospaced font) at SIZE with bold/italic traits where the family
+ * has them. Returns 0 on failure. */
+pf_font_id pf_font_open_styled(const char *family, float size, int bold, int italic);
+
 /* Returns 0, or -1 for an unknown id. */
 int pf_font_metrics_get(pf_font_id font, pf_font_metrics *out);
 

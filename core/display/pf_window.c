@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "pf_face.h"
+#include "pf_props.h"
 #include "pf_text.h"
 #include "pf_utf8.h"
 
@@ -35,6 +37,13 @@ struct pf_window {
     int line_numbers, hl_line, show_paren;
     uint32_t *scan; /* decoded characters for bracket matching */
     size_t scan_cap;
+    uint32_t *fids; /* face id of each character of the line being drawn */
+    size_t fids_cap;
+    pf_font_run *runs;
+    size_t runs_cap;
+    pf_prop_run *props_buf;
+    size_t props_cap;
+    uint64_t shown_faces, shown_props; /* generations drawn by the last frame */
 };
 
 static void *xrealloc(void *p, size_t size) {
@@ -63,6 +72,9 @@ void pf_window_free(pf_window *w) {
         free(w->cps);
         free(w->preedit);
         free(w->scan);
+        free(w->fids);
+        free(w->runs);
+        free(w->props_buf);
         free(w);
     }
 }
@@ -270,8 +282,25 @@ static size_t count_digits(size_t n) {
     return d;
 }
 
+/* Color of role ROLE's face, attribute FLAG (PF_FACE_HAS_FG/BG), or FALLBACK. */
+static uint32_t role_color(pf_face_role role, uint32_t flag, uint32_t fallback) {
+    const pf_face *f = pf_face_get(pf_face_role_id(role));
+    if (!(f->flags & flag)) {
+        return fallback;
+    }
+    return flag == PF_FACE_HAS_FG ? f->fg : f->bg;
+}
+
+static uint32_t face_fg(uint32_t id, uint32_t fallback) {
+    const pf_face *f = pf_face_get(id);
+    return f->flags & PF_FACE_HAS_FG ? f->fg : fallback;
+}
+
+/* Glyphs of LAY with clusters in [FROM, TO). Each takes its character's face color (FIDS) or
+ * COLOR when FIDS is NULL / the face sets none. */
 static void emit_glyphs(pf_display *d, const pf_line_layout *lay, float x0, float baseline,
-                        float right, uint32_t color, size_t from_char, size_t to_char) {
+                        float right, uint32_t color, const uint32_t *fids, size_t from_char,
+                        size_t to_char) {
     for (size_t g = 0; g < lay->nglyphs; g++) {
         const pf_shaped_glyph *sg = &lay->glyphs[g];
         if (sg->cluster < from_char || sg->cluster >= to_char) {
@@ -281,8 +310,81 @@ static void emit_glyphs(pf_display *d, const pf_line_layout *lay, float x0, floa
         if (x > right) {
             continue; /* truncated at the window edge */
         }
-        pf_display_glyph(d, sg->font, sg->glyph, x, baseline, color);
+        uint32_t c = fids && sg->cluster < lay->nchars ? face_fg(fids[sg->cluster], color) : color;
+        pf_display_glyph(d, sg->font, sg->glyph, x, baseline, c);
     }
+}
+
+/* Background and underline rects for runs of characters whose face sets them. */
+static void emit_face_decorations(pf_display *d, const pf_line_layout *lay, const uint32_t *fids,
+                                  float x0, float top, float baseline, const pf_window_style *st,
+                                  float scale, uint32_t default_fg) {
+    size_t n = lay->nchars;
+    uint32_t def = pf_face_role_id(PF_ROLE_DEFAULT);
+    for (size_t i = 0; i < n;) {
+        size_t j = i + 1;
+        while (j < n && fids[j] == fids[i]) {
+            j++;
+        }
+        if (fids[i] == def) {
+            i = j; /* the default background is the clear color: nothing to draw */
+            continue;
+        }
+        const pf_face *f = pf_face_get(fids[i]);
+        float x = x0 + lay->caret_x[i], wdt = lay->caret_x[j] - lay->caret_x[i];
+        if (f->flags & PF_FACE_HAS_BG) {
+            pf_display_rect(d, x, top, wdt, st->line_height, f->bg);
+        }
+        if (f->flags & PF_FACE_UNDERLINE) {
+            uint32_t uc = f->underline_color ? f->underline_color
+                                             : (f->flags & PF_FACE_HAS_FG ? f->fg : default_fg);
+            pf_display_rect(d, x, baseline + st->descent * 0.4f, wdt, 1.0f / scale, uc);
+        }
+        i = j;
+    }
+}
+
+static void *grow(void *p, size_t *cap, size_t need, size_t elem) {
+    if (need > *cap) {
+        *cap = need * 2;
+        p = xrealloc(p, *cap * elem);
+    }
+    return p;
+}
+
+/* Face id of every character of the line [START, START+N) (text property PF_PROP_FACE), with
+ * PRE default-face characters spliced in at K for an input-method composition. */
+static void load_faces(pf_window *w, pf_text *text, size_t start, size_t n, size_t k, size_t pre) {
+    w->fids = grow(w->fids, &w->fids_cap, n + pre + 1, sizeof *w->fids);
+    uint32_t def = pf_face_role_id(PF_ROLE_DEFAULT);
+    for (size_t i = 0; i < n + pre; i++) {
+        w->fids[i] = def;
+    }
+    size_t total = pf_props_runs(pf_text_props(text), PF_PROP_FACE, start, start + n, NULL, 0);
+    w->props_buf = grow(w->props_buf, &w->props_cap, total + 1, sizeof *w->props_buf);
+    pf_props_runs(pf_text_props(text), PF_PROP_FACE, start, start + n, w->props_buf, total);
+    for (size_t r = 0; r < total; r++) {
+        for (size_t p = w->props_buf[r].start; p < w->props_buf[r].end; p++) {
+            size_t idx = p - start;
+            w->fids[pre && idx >= k ? idx + pre : idx] = w->props_buf[r].value;
+        }
+    }
+}
+
+/* Font runs for N characters with faces FIDS: a face without a font uses DEFAULT_FONT. */
+static size_t font_runs(pf_window *w, size_t n, uint32_t default_font) {
+    w->runs = grow(w->runs, &w->runs_cap, n + 1, sizeof *w->runs);
+    size_t nruns = 0;
+    for (size_t i = 0; i < n; i++) {
+        uint32_t f = pf_face_get(w->fids[i])->font;
+        f = f ? f : default_font;
+        if (nruns && w->runs[nruns - 1].font == f) {
+            w->runs[nruns - 1].len++;
+        } else {
+            w->runs[nruns++] = (pf_font_run){i, 1, f};
+        }
+    }
+    return nruns;
 }
 
 const pf_display *pf_window_redisplay(pf_window *w) {
@@ -296,7 +398,10 @@ const pf_display *pf_window_redisplay(pf_window *w) {
         }
         keep_visible(w, s, point);
     }
-    if (!w->dirty && s == w->shown && point == w->shown_point && w->top == w->shown_top) {
+    uint64_t faces = pf_face_generation();
+    uint64_t props = text ? pf_props_generation(pf_text_props(text)) : 0;
+    if (!w->dirty && s == w->shown && point == w->shown_point && w->top == w->shown_top &&
+        faces == w->shown_faces && props == w->shown_props) {
         return NULL;
     }
     w->dirty = 0;
@@ -304,13 +409,19 @@ const pf_display *pf_window_redisplay(pf_window *w) {
     w->shown = s ? pf_text_snapshot_retain(s) : NULL;
     w->shown_point = point;
     w->shown_top = w->top;
+    w->shown_faces = faces;
+    w->shown_props = props;
 
     const pf_window_style *st = &w->style;
-    pf_display *d = pf_display_new(w->width, w->height, w->scale, st->background);
+    uint32_t bg = role_color(PF_ROLE_DEFAULT, PF_FACE_HAS_BG, 0xFFFFFFFF);
+    uint32_t fg = role_color(PF_ROLE_DEFAULT, PF_FACE_HAS_FG, 0x000000FF);
+    pf_display *d = pf_display_new(w->width, w->height, w->scale, bg);
     w->cursor_valid = 0;
     if (!s) {
         return pf_display_finish(d);
     }
+    uint32_t default_font = pf_face_get(pf_face_role_id(PF_ROLE_DEFAULT))->font;
+    default_font = default_font ? default_font : st->font;
     pf_layout_begin_frame(w->cache);
     size_t lines = pf_text_lines(s), chars = pf_text_chars(s);
     size_t visible = st->line_height > 0 ? (size_t)ceilf(w->height / st->line_height) + 1 : 1;
@@ -326,29 +437,36 @@ const pf_display *pf_window_redisplay(pf_window *w) {
         size_t next = pf_text_line_start(s, line + 1);
         size_t end = next > start && next <= chars && line + 1 < lines ? next - 1 : next;
         size_t n = load_line(w, s, start, end);
+        size_t nline = n;
         int here = point >= start && point <= end;
         size_t k = here ? point - start : 0, pre = here ? w->preedit_len : 0;
         if (pre && k <= n) {
             /* Splice the composition in at point, as the input method shows it. */
-            if (n + pre > w->cps_cap) {
-                w->cps_cap = (n + pre) * 2;
-                w->cps = xrealloc(w->cps, w->cps_cap * sizeof *w->cps);
-            }
+            w->cps = grow(w->cps, &w->cps_cap, n + pre, sizeof *w->cps);
             memmove(w->cps + k + pre, w->cps + k, (n - k) * sizeof *w->cps);
             memcpy(w->cps + k, w->preedit, pre * sizeof *w->cps);
             n += pre;
+        } else {
+            pre = 0;
         }
-        const pf_line_layout *lay = pf_layout_line(w->cache, st->font, w->cps, n);
+        load_faces(w, text, start, nline, k, pre);
+        size_t nruns = font_runs(w, n, default_font);
+        const pf_line_layout *lay = pf_layout_line_runs(w->cache, w->runs, nruns, w->cps, n);
         float top = st->pad_top + (float)row * st->line_height;
         float baseline = top + st->ascent;
         float x0 = st->pad_left + gutter;
 
-        /* Backgrounds first: hl-line band, then bracket highlights on this line. */
+        /* Backgrounds first: faces, the hl-line band (an overlay in Emacs, so above them), then
+         * bracket highlights. */
+        emit_face_decorations(d, lay, w->fids, x0, top, baseline, st, w->scale, fg);
         if (w->hl_line && line == point_line) {
-            pf_display_rect(d, x0, top, right - x0, st->line_height, st->hl_line);
+            pf_display_rect(d, x0, top, right - x0, st->line_height,
+                            role_color(PF_ROLE_HL_LINE, PF_FACE_HAS_BG, 0));
         }
         if (paren.active) {
             size_t marks[2] = {paren.at, paren.other};
+            uint32_t pc = paren.mismatch ? role_color(PF_ROLE_PAREN_MISMATCH, PF_FACE_HAS_BG, 0)
+                                         : role_color(PF_ROLE_PAREN_MATCH, PF_FACE_HAS_BG, 0);
             for (int m = 0; m < (paren.found ? 2 : 1); m++) {
                 if (marks[m] < start || marks[m] >= end) {
                     continue;
@@ -359,8 +477,7 @@ const pf_display *pf_window_redisplay(pf_window *w) {
                 }
                 if (idx < lay->nchars) {
                     float px = lay->caret_x[idx], pw = lay->caret_x[idx + 1] - px;
-                    pf_display_rect(d, x0 + px, top, pw, st->line_height,
-                                    paren.mismatch ? st->paren_mismatch : st->paren_match);
+                    pf_display_rect(d, x0 + px, top, pw, st->line_height, pc);
                 }
             }
         }
@@ -371,19 +488,20 @@ const pf_display *pf_window_redisplay(pf_window *w) {
             for (int i = 0; i < len; i++) {
                 ncps[i] = (uint32_t)num[i];
             }
-            const pf_line_layout *nl = pf_layout_line(w->cache, st->font, ncps, (size_t)len);
+            const pf_line_layout *nl = pf_layout_line(w->cache, default_font, ncps, (size_t)len);
             float nx = st->pad_left + gutter - st->cell_width - nl->width; /* right-aligned */
-            emit_glyphs(d, nl, nx, baseline, right,
-                        line == point_line ? st->line_number_current : st->line_number, 0,
+            pf_face_role role = line == point_line ? PF_ROLE_LINE_NUMBER_CURRENT
+                                                   : PF_ROLE_LINE_NUMBER;
+            emit_glyphs(d, nl, nx, baseline, right, role_color(role, PF_FACE_HAS_FG, fg), NULL, 0,
                         (size_t)-1);
         }
-        emit_glyphs(d, lay, x0, baseline, right, st->foreground, 0, (size_t)-1);
+        emit_glyphs(d, lay, x0, baseline, right, fg, w->fids, 0, (size_t)-1);
 
         if (here) {
             if (pre) {
                 float ux = lay->caret_x[k], uw = lay->caret_x[k + pre] - ux;
                 pf_display_rect(d, x0 + ux, baseline + st->descent * 0.5f, uw, 1.0f / w->scale,
-                                st->foreground); /* one device pixel */
+                                fg); /* one device pixel */
                 k += w->preedit_caret;
             }
             /* Filled box cursor; the character under it is redrawn in the background color. */
@@ -392,14 +510,15 @@ const pf_display *pf_window_redisplay(pf_window *w) {
             if (cw <= 0) {
                 cw = st->cell_width;
             }
-            pf_display_rect(d, x0 + cx, top, cw, st->line_height, st->cursor);
+            pf_display_rect(d, x0 + cx, top, cw, st->line_height,
+                            role_color(PF_ROLE_CURSOR, PF_FACE_HAS_BG, fg));
             w->cursor[0] = x0 + cx;
             w->cursor[1] = top;
             w->cursor[2] = cw;
             w->cursor[3] = st->line_height;
             w->cursor_valid = 1;
             if (k < lay->nchars) {
-                emit_glyphs(d, lay, x0, baseline, right, st->background, k, k + 1);
+                emit_glyphs(d, lay, x0, baseline, right, bg, NULL, k, k + 1);
             }
         }
     }

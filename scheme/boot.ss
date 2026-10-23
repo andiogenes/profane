@@ -7,11 +7,11 @@
 
 (import (profane repl) (profane buffer) (profane window) (profane var) (profane hook)
         (profane keymap) (profane face) (profane command) (profane mode) (profane command-loop)
-        (profane simple))
+        (profane simple) (profane display))
 
 ;;; Chez invokes a library only when one of its variables is first used; libraries whose body
 ;;; registers commands, modes and bindings must be invoked explicitly.
-(for-each invoke-library '((profane simple) (profane window)))
+(for-each invoke-library '((profane simple) (profane window) (profane display)))
 
 ;;; FFI trampoline. An exception escaping into C would terminate the process, so every call
 ;;; from C lands here. Returns a UTF-8 bytevector for a string result, #t for any other
@@ -70,6 +70,9 @@
     (newline)))
 
 (define (latency-reset) ((foreign-procedure "pf_app_latency_reset" () void)))
+
+;;; The shell reports the macOS appearance ("light" or "dark"); faces follow it.
+(define (pf-appearance-changed which) (set-appearance! (string->symbol which)))
 
 ;;; Called by the shell once its window exists: show *scratch*.
 (define (pf-startup)

@@ -12,16 +12,18 @@
  * into a display list through the layout cache. Lines are truncated at the window edge (no
  * soft wrap yet). Main thread only; portable (fonts arrive as ids and metrics). */
 
+/* Geometry and the default font; colors come from faces (pf_face.h): the default face for text
+ * and background, role faces for the cursor, line numbers, hl-line and show-paren, and the
+ * PF_PROP_FACE text property for individual characters. */
 typedef struct pf_window_style {
-    uint32_t font;                 /* pf_font_id */
+    uint32_t font;                 /* pf_font_id, used when the default face sets no font */
     float ascent, descent, line_height; /* points */
     float cell_width;              /* cursor width at end of line */
     float pad_left, pad_top;
-    uint32_t background, foreground, cursor; /* 0xRRGGBBAA */
-    uint32_t line_number, line_number_current; /* gutter text */
-    uint32_t hl_line;                          /* current-line band */
-    uint32_t paren_match, paren_mismatch;      /* bracket highlight backgrounds */
 } pf_window_style;
+
+/* The text property whose value is a face id (pf_face.h). */
+enum { PF_PROP_FACE = 1 };
 
 /* Per-window display features (Emacs's display-line-numbers, hl-line, show-paren). */
 typedef enum pf_window_option {

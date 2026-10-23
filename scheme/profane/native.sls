@@ -11,7 +11,8 @@
           %buf-marker-new %buf-marker-free %buf-marker-pos %buf-marker-set
           %buf-undo-boundary %buf-undo %buf-redo %buf-modified %buf-mark-saved
           %win-selected %win-set-buffer %win-top-line %win-body-lines
-          %win-set-option %win-option)
+          %win-set-option %win-option
+          %face-define %face-role-set %buf-put-prop %buf-get-prop)
   (import (chezscheme))
 
   (define loaded
@@ -51,4 +52,9 @@
   (define-native %win-top-line "pf_win_top_line" (unsigned-32) integer-64)
   (define-native %win-body-lines "pf_win_body_lines" (unsigned-32) integer-64)
   (define-native %win-set-option "pf_win_set_option" (unsigned-32 int boolean) int)
-  (define-native %win-option "pf_win_option" (unsigned-32 int) int))
+  (define-native %win-option "pf_win_option" (unsigned-32 int) int)
+  (define-native %face-define "pf_face_define"
+    (unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32) void)
+  (define-native %face-role-set "pf_face_role_set" (int unsigned-32) void)
+  (define-native %buf-put-prop "pf_buf_put_prop" (unsigned-32 unsigned-32 size_t size_t unsigned-32) int)
+  (define-native %buf-get-prop "pf_buf_get_prop" (unsigned-32 unsigned-32 size_t) integer-64))

@@ -5,6 +5,8 @@
 #include <string.h>
 
 #include "pf_buffer_ffi.h"
+#include "pf_face.h"
+#include "pf_props.h"
 #include "pf_layout.h"
 #include "pf_test.h"
 #include "pf_text.h"
@@ -92,13 +94,24 @@ static void test_layout(void) {
     pf_layout_cache_free(c);
 }
 
+/* Role faces with the colors the checks below expect. Face ids are arbitrary. */
+static void set_role(pf_face_role role, uint32_t id, uint32_t flags, uint32_t fg, uint32_t bg) {
+    pf_face f = {.flags = flags, .fg = fg, .bg = bg};
+    pf_face_set(id, &f);
+    pf_face_set_role(role, id);
+}
+
 static pf_window_style style(void) {
+    set_role(PF_ROLE_DEFAULT, 1, PF_FACE_HAS_FG | PF_FACE_HAS_BG, 0x000000FF, 0xFFFFFFFF);
+    set_role(PF_ROLE_CURSOR, 2, PF_FACE_HAS_BG, 0, 0xFF0000FF);
+    set_role(PF_ROLE_LINE_NUMBER, 3, PF_FACE_HAS_FG, 0x888888FF, 0);
+    set_role(PF_ROLE_LINE_NUMBER_CURRENT, 4, PF_FACE_HAS_FG, 0x111111FF, 0);
+    set_role(PF_ROLE_HL_LINE, 5, PF_FACE_HAS_BG, 0, 0xEEEEEEFF);
+    set_role(PF_ROLE_PAREN_MATCH, 6, PF_FACE_HAS_BG, 0, 0x00FF00FF);
+    set_role(PF_ROLE_PAREN_MISMATCH, 7, PF_FACE_HAS_BG, 0, 0xFF00FFFF);
     return (pf_window_style){
         .font = 1, .ascent = 12, .descent = 4, .line_height = 20, .cell_width = 10,
-        .pad_left = 5, .pad_top = 0,
-        .background = 0xFFFFFFFF, .foreground = 0x000000FF, .cursor = 0xFF0000FF,
-        .line_number = 0x888888FF, .line_number_current = 0x111111FF, .hl_line = 0xEEEEEEFF,
-        .paren_match = 0x00FF00FF, .paren_mismatch = 0xFF00FFFF};
+        .pad_left = 5, .pad_top = 0};
 }
 
 static size_t count_kind(const pf_display *d, uint32_t kind) {
@@ -326,9 +339,70 @@ static void test_editing_modes(void) {
     pf_layout_cache_free(cache);
 }
 
+static void test_faces(void) {
+    pf_layout_cache *cache = pf_layout_cache_new(fake, 256, 8);
+    pf_window_style s = style();
+    pf_window *w = pf_window_new(cache, &s);
+    pf_window_set_size(w, 400, 100, 1);
+    pf_handle buf = pf_buf_new("plain BOLD under", 16);
+    uint32_t point = pf_buf_marker_new(buf, 16, 0);
+    pf_window_set_buffer(w, buf, point);
+
+    /* Face 20: red on yellow, font 9 (bold). Face 21: underlined, default color. */
+    pf_face bold = {PF_FACE_HAS_FG | PF_FACE_HAS_BG, 0xFF0000FF, 0xFFFF00FF, 0, 9};
+    pf_face under = {PF_FACE_UNDERLINE, 0, 0, 0, 0};
+    pf_face_set(20, &bold);
+    pf_face_set(21, &under);
+    pf_props_put(pf_text_props(pf_handle_get(buf, PF_HANDLE_TEXT)), PF_PROP_FACE, 6, 10, 20);
+    pf_props_put(pf_text_props(pf_handle_get(buf, PF_HANDLE_TEXT)), PF_PROP_FACE, 11, 16, 21);
+
+    const pf_display *d = pf_window_redisplay(w);
+    PF_CHECK(d != NULL);
+    size_t red = 0, bold_font = 0;
+    const pf_display_item *yellow = NULL, *line = NULL;
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        const pf_display_item *x = &pf_display_items(d)[i];
+        if (x->kind == PF_DISPLAY_GLYPH && x->color == 0xFF0000FF) {
+            red++;
+            bold_font += x->u.glyph.font == 9;
+        } else if (x->kind == PF_DISPLAY_RECT && x->color == 0xFFFF00FF) {
+            yellow = x;
+        } else if (x->kind == PF_DISPLAY_RECT && x->color == 0x000000FF && x->u.rect.h < 2) {
+            line = x;
+        }
+    }
+    PF_CHECK_EQ_SIZE(red, 4);          /* "BOLD" in the face's color... */
+    PF_CHECK_EQ_SIZE(bold_font, 4);    /* ...shaped with the face's font */
+    PF_CHECK(yellow && NEAR(yellow->x, 5 + 60) && NEAR(yellow->u.rect.w, 40));
+    PF_CHECK(line && NEAR(line->x, 5 + 110) && NEAR(line->u.rect.w, 50)); /* default fg */
+    pf_display_release(d);
+
+    /* Changing a face, or a property alone, renders again. */
+    PF_CHECK(pf_window_redisplay(w) == NULL);
+    bold.fg = 0x00AA00FF;
+    pf_face_set(20, &bold);
+    d = pf_window_redisplay(w);
+    PF_CHECK(d != NULL);
+    pf_display_release(d);
+    pf_props_put(pf_text_props(pf_handle_get(buf, PF_HANDLE_TEXT)), PF_PROP_FACE, 0, 5, 21);
+    d = pf_window_redisplay(w);
+    PF_CHECK(d != NULL);
+    pf_display_release(d);
+
+    /* Regression: the default face's background drew a full-width rect on every line. */
+    d = frame_at(w, buf, point, 0);
+    PF_CHECK(find_rect(d, 0xFFFFFFFF, 0) == NULL);
+    pf_display_release(d);
+
+    pf_buf_free(buf);
+    pf_window_free(w);
+    pf_layout_cache_free(cache);
+}
+
 int main(void) {
     test_layout();
     test_window();
     test_editing_modes();
+    test_faces();
     return PF_TEST_RESULT();
 }

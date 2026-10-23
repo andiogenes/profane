@@ -14,21 +14,11 @@
 #include <string.h>
 
 #include "pf_display.h"
+#include "pf_display_ffi.h"
 #include "pf_scheme.h"
 #include "pf_layout.h"
 #include "pf_window.h"
 #include "pf_window_ffi.h"
-
-/* Interim colors (modus-operandi / modus-vivendi) until theme design tokens land in M2. */
-typedef struct PFPalette {
-    uint32_t background, foreground;
-    uint32_t line_number, line_number_current, hl_line, paren_match, paren_mismatch;
-} PFPalette;
-
-static const PFPalette kLightPalette = {0xFFFFFFFF, 0x000000FF, 0x9A9A9AFF, 0x000000FF,
-                                        0xE4E9EFFF, 0xB8D9F0FF, 0xF2B8B8FF};
-static const PFPalette kDarkPalette = {0x000000FF, 0xFFFFFFFF, 0x6B6B6BFF, 0xFFFFFFFF,
-                                       0x1E1E2AFF, 0x2F4F6AFF, 0x7A2F2FFF};
 
 static const float kFontSize = 14.0f;
 static const size_t kLayoutCacheLines = 4096;
@@ -216,6 +206,7 @@ void pf_app_latency_reset(void) {
     if (self.window) {
         [self updateScale];
         [_metal startWithView:self];
+        [self reportAppearance];
         [self rebuild];
     } else {
         [_metal stop];
@@ -239,6 +230,7 @@ void pf_app_latency_reset(void) {
 
 - (void)viewDidChangeEffectiveAppearance {
     [super viewDidChangeEffectiveAppearance];
+    [self reportAppearance];
     [self rebuild];
 }
 
@@ -253,10 +245,10 @@ void pf_app_latency_reset(void) {
     _overlay.layer.contentsScale = scale;
 }
 
+/* Geometry and the default font; colors come from Scheme's faces (profane display). */
 - (pf_window_style)windowStyle {
     pf_font_metrics m = {0};
     pf_font_metrics_get(_font, &m);
-    PFPalette palette = [self palette];
     /* Whole-point line boxes keep rows pixel-aligned at every scale. */
     return (pf_window_style){
         .font = _font,
@@ -266,21 +258,16 @@ void pf_app_latency_reset(void) {
         .cell_width = m.advance,
         .pad_left = 4,
         .pad_top = 2,
-        .background = palette.background,
-        .foreground = palette.foreground,
-        .cursor = palette.foreground,
-        .line_number = palette.line_number,
-        .line_number_current = palette.line_number_current,
-        .hl_line = palette.hl_line,
-        .paren_match = palette.paren_match,
-        .paren_mismatch = palette.paren_mismatch,
     };
 }
 
-- (PFPalette)palette {
+/* Tells Scheme whether macOS is in light or dark mode; it restyles the faces. */
+- (void)reportAppearance {
     NSAppearanceName name = [self.effectiveAppearance
         bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
-    return [name isEqualToString:NSAppearanceNameDarkAqua] ? kDarkPalette : kLightPalette;
+    const char *which = [name isEqualToString:NSAppearanceNameDarkAqua] ? "dark" : "light";
+    pf_scheme_arg arg = PF_SCHEME_STRING(which, strlen(which));
+    pf_scheme_call("pf-appearance-changed", &arg, 1, NULL);
 }
 
 static CGColorRef create_cgcolor(uint32_t c) {
@@ -295,8 +282,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
     }
     NSSize size = self.bounds.size;
     float scale = (float)self.window.backingScaleFactor;
-    PFPalette palette = [self palette];
-    CGColorRef background = create_cgcolor(palette.background);
+    CGColorRef background = create_cgcolor(pf_face_default_background());
     _base.layer.backgroundColor = background; /* shows under a resize until the next frame */
     CGColorRelease(background);
 

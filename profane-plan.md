@@ -365,6 +365,21 @@ the renderer tags the frame answering each event and records when it was submitt
   (`invoke-library`), since Chez only runs a library body when one of its variables is first used.
 - The kill ring is profane-internal for now; the macOS pasteboard joins with `(profane macos)` (M3).
 
+## 8g. Faces and text properties (M2)
+
+- **Text properties** (`core/text/pf_props`): per property id, sorted non-overlapping runs of 32-bit values, merged
+  when equal and adjacent, moved by edits and undo/redo like Emacs text properties (plain insert inherits nothing).
+  Arrays for now (O(runs) per edit); a tree can replace them behind the API once highlighting is dense (M5). Undo
+  restores text but not its properties; re-highlighting covers that.
+- **Faces in C** (`core/display/pf_face`): id → fg/bg/underline/font; display roles (default, cursor, line numbers,
+  hl-line, show-paren) map to face ids. `(profane display)` resolves every face (inheritance → `default`) and pushes
+  them all on any change, so a theme change restyles everything; fonts for bold/italic/family/height are opened via
+  `pf_font_open_styled`.
+- **Rendering**: per character face ids → font runs for layout (each run shaped separately; ligatures don't cross a
+  font change); colors per glyph cluster; face backgrounds and underlines as rects, then the hl-line band (overlay
+  priority, as in Emacs), then paren highlights. The default face's background is the clear color.
+- The light/dark palette is interim (in `(profane display)`), driven by the macOS appearance; themes replace it.
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |

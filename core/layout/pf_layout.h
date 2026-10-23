@@ -53,6 +53,16 @@ void pf_layout_begin_frame(pf_layout_cache *cache);
 const pf_line_layout *pf_layout_line(pf_layout_cache *cache, uint32_t font, const uint32_t *cps,
                                      size_t n);
 
+/* A line whose characters use several fonts (bold, italic, ...): RUNS cover [0, N) in order.
+ * Each run is shaped on its own, so ligatures do not cross font changes (as in Emacs). */
+typedef struct pf_font_run {
+    size_t start, len;
+    uint32_t font;
+} pf_font_run;
+
+const pf_line_layout *pf_layout_line_runs(pf_layout_cache *cache, const pf_font_run *runs,
+                                          size_t nruns, const uint32_t *cps, size_t n);
+
 /* Drops every entry, e.g. after a font or tab-width change. */
 void pf_layout_cache_clear(pf_layout_cache *cache);
 

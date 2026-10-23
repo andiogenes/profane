@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "pf_props.h"
 #include "pf_utf8.h"
 
 /* Pieces are kept small so that work inside one piece (splitting it, finding the n-th newline)
@@ -74,6 +75,7 @@ struct pf_text {
     pf_text_snapshot *cur;
     store *st;
     uint32_t rng;
+    pf_props *props;
 
     marker_slot *markers;
     size_t nmarkers, mcap, mfree_hint;
@@ -353,11 +355,14 @@ static void markers_delete(pf_text *t, size_t start, size_t end) {
     }
 }
 
+/* Moves markers and text properties for change C (or its inverse, for undo). */
 static void markers_apply(pf_text *t, const change *c, int inverse) {
     size_t removed = inverse ? c->inserted : c->removed;
     size_t inserted = inverse ? c->removed : c->inserted;
     markers_delete(t, c->pos, c->pos + removed);
     markers_insert(t, c->pos, inserted);
+    pf_props_delete(t->props, c->pos, c->pos + removed);
+    pf_props_insert(t->props, c->pos, inserted);
 }
 
 static marker_slot *marker_get(const pf_text *t, pf_marker m) {
@@ -483,6 +488,7 @@ pf_text *pf_text_new(const char *bytes, size_t len) {
         root = build(t, p, len);
     }
     t->cur = snapshot_new(t->st, root);
+    t->props = pf_props_new();
     t->markers = NULL;
     t->nmarkers = t->mcap = t->mfree_hint = 0;
     t->uroot = t->ucur = ustate_new(NULL);
@@ -496,11 +502,16 @@ pf_text *pf_text_new(const char *bytes, size_t len) {
 void pf_text_free(pf_text *text) {
     if (text) {
         ustate_free(text->uroot);
+        pf_props_free(text->props);
         free(text->markers);
         pf_text_snapshot_release(text->cur);
         store_release(text->st);
         free(text);
     }
+}
+
+pf_props *pf_text_props(pf_text *text) {
+    return text->props;
 }
 
 const pf_text_snapshot *pf_text_current(const pf_text *text) {

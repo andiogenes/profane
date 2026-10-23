@@ -12,7 +12,8 @@ struct pf_shaped {
 
 typedef struct entry {
     uint64_t hash;
-    uint32_t font;
+    pf_font_run *runs;
+    size_t nruns;
     uint32_t *cps;
     size_t n;
     pf_line_layout layout;
@@ -50,13 +51,31 @@ void pf_shaped_push(pf_shaped *out, uint32_t font, uint32_t glyph, float x, uint
     out->g[out->n++] = (pf_shaped_glyph){font, glyph, x, cluster};
 }
 
-static uint64_t hash_line(uint32_t font, const uint32_t *cps, size_t n) {
-    uint64_t h = 1469598103934665603ull ^ font; /* FNV-1a over code points */
+static uint64_t hash_line(const pf_font_run *runs, size_t nruns, const uint32_t *cps, size_t n) {
+    uint64_t h = 1469598103934665603ull; /* FNV-1a over fonts, run lengths and code points */
+    for (size_t r = 0; r < nruns; r++) {
+        h ^= runs[r].font;
+        h *= 1099511628211ull;
+        h ^= runs[r].len;
+        h *= 1099511628211ull;
+    }
     for (size_t i = 0; i < n; i++) {
         h ^= cps[i];
         h *= 1099511628211ull;
     }
     return h ^ (uint64_t)n;
+}
+
+static int same_runs(const entry *e, const pf_font_run *runs, size_t nruns) {
+    if (e->nruns != nruns) {
+        return 0;
+    }
+    for (size_t r = 0; r < nruns; r++) {
+        if (e->runs[r].font != runs[r].font || e->runs[r].len != runs[r].len) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 pf_layout_cache *pf_layout_cache_new(pf_shaper shaper, size_t capacity, int tab_width) {
@@ -76,6 +95,7 @@ pf_layout_cache *pf_layout_cache_new(pf_shaper shaper, size_t capacity, int tab_
 
 static void entry_free(entry *e) {
     free(e->cps);
+    free(e->runs);
     free((void *)e->layout.glyphs);
     free((void *)e->layout.caret_x);
     free(e);
@@ -142,9 +162,9 @@ void pf_layout_begin_frame(pf_layout_cache *c) {
     }
 }
 
-/* Shapes CPS (tabs expanded) into E's layout. */
-static void shape_into(pf_layout_cache *c, entry *e, uint32_t font, const uint32_t *cps,
-                       size_t n) {
+/* Shapes CPS (tabs expanded) into E's layout, one segment per font run and tab. */
+static void shape_into(pf_layout_cache *c, entry *e, const pf_font_run *runs, size_t nruns,
+                       const uint32_t *cps, size_t n) {
     pf_shaped *out = &c->scratch;
     out->n = 0;
     float *caret = xrealloc(NULL, (n + 1) * sizeof *caret);
@@ -152,9 +172,12 @@ static void shape_into(pf_layout_cache *c, entry *e, uint32_t font, const uint32
         caret[i] = NAN;
     }
     float x = 0;
+    size_t run = 0, run_end = nruns ? runs[0].start + runs[0].len : n;
+    uint32_t font = nruns ? runs[0].font : 0;
     size_t start = 0;
     for (size_t i = 0; i <= n; i++) {
-        if (i < n && cps[i] != '\t') {
+        int boundary = i == n || cps[i] == '\t' || i == run_end;
+        if (!boundary) {
             continue;
         }
         if (i > start) {
@@ -166,12 +189,18 @@ static void shape_into(pf_layout_cache *c, entry *e, uint32_t font, const uint32
             }
             x += advance;
         }
-        if (i < n) { /* a tab: caret before it, then jump to the next stop */
+        start = i;
+        if (i == run_end && run + 1 < nruns) { /* next font run */
+            run++;
+            font = runs[run].font;
+            run_end = runs[run].start + runs[run].len;
+        }
+        if (i < n && cps[i] == '\t') { /* a tab: caret before it, then jump to the next stop */
             caret[i] = x;
             float stop = c->shaper.cell_width(c->shaper.ctx, font) * (float)c->tab_width;
             x = stop > 0 ? (floorf(x / stop + 1e-4f) + 1) * stop : x;
+            start = i + 1;
         }
-        start = i + 1;
     }
 
     /* Caret of a character: leftmost glyph of its cluster. Characters inside a multi-character
@@ -207,10 +236,16 @@ static void shape_into(pf_layout_cache *c, entry *e, uint32_t font, const uint32
 
 const pf_line_layout *pf_layout_line(pf_layout_cache *c, uint32_t font, const uint32_t *cps,
                                      size_t n) {
-    uint64_t h = hash_line(font, cps, n);
+    pf_font_run run = {0, n, font};
+    return pf_layout_line_runs(c, &run, 1, cps, n);
+}
+
+const pf_line_layout *pf_layout_line_runs(pf_layout_cache *c, const pf_font_run *runs,
+                                          size_t nruns, const uint32_t *cps, size_t n) {
+    uint64_t h = hash_line(runs, nruns, cps, n);
     entry **bucket = &c->buckets[h & (c->nbuckets - 1)];
     for (entry *e = *bucket; e; e = e->chain) {
-        if (e->hash == h && e->font == font && e->n == n &&
+        if (e->hash == h && e->n == n && same_runs(e, runs, nruns) &&
             (n == 0 || memcmp(e->cps, cps, n * sizeof *cps) == 0)) {
             lru_unlink(c, e);
             lru_push_front(c, e);
@@ -222,12 +257,14 @@ const pf_line_layout *pf_layout_line(pf_layout_cache *c, uint32_t font, const ui
     entry *e = xrealloc(NULL, sizeof *e);
     memset(e, 0, sizeof *e);
     e->hash = h;
-    e->font = font;
+    e->runs = xrealloc(NULL, nruns * sizeof *runs);
+    memcpy(e->runs, runs, nruns * sizeof *runs);
+    e->nruns = nruns;
     e->n = n;
     e->cps = xrealloc(NULL, n * sizeof *cps);
     memcpy(e->cps, cps, n * sizeof *cps);
     e->frame = c->frame;
-    shape_into(c, e, font, cps, n);
+    shape_into(c, e, runs, nruns, cps, n);
     e->chain = *bucket;
     *bucket = e;
     lru_push_front(c, e);

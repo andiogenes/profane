@@ -1,0 +1,38 @@
+(import (chezscheme) (srfi :64) (profane buffer) (profane face) (profane display))
+
+(invoke-library '(profane display))
+
+(test-begin "display")
+
+(test-eqv "face ids are stable" (face-id 'bold) (face-id 'bold))
+(test-assert "distinct faces, distinct ids" (not (= (face-id 'bold) (face-id 'italic))))
+(test-eqv "colors" #xFF8000FF (color->rgba "#ff8000"))
+(test-eqv "colors with alpha" #x11223344 (color->rgba "#11223344"))
+(test-error "bad color" #t (color->rgba "red"))
+
+(set-buffer (generate-new-buffer "props"))
+(insert "hello world")
+(put-text-property 6 11 'face 'bold)
+(test-eq "get face" 'bold (get-text-property 7 'face))
+(test-eqv "outside" #f (get-text-property 5 'face))
+(goto-char 0)
+(insert ">> ")
+(test-eq "moves with insertion" 'bold (get-text-property 9 'face))
+(test-eqv "inserted text has none" #f (get-text-property 0 'face))
+(put-text-property 0 3 'help-echo "a prompt")
+(test-equal "any value for other properties" "a prompt" (get-text-property 1 'help-echo))
+(test-eq "properties are independent" 'bold (get-text-property 9 'face))
+(remove-text-property 0 14 'face)
+(test-eqv "removed" #f (get-text-property 9 'face))
+(test-error "undefined face" #t (put-text-property 0 1 'face 'no-such-face))
+(test-error "out of range" #t (put-text-property 0 99 'face 'bold))
+
+(test-eq "appearance switch" 'dark (set-appearance! 'dark))
+(test-equal "palette applied" "#000000" (face-attribute 'default 'background))
+(set-appearance! 'light)
+(test-equal "and back" "#ffffff" (face-attribute 'default 'background))
+(test-equal "built-in faces inherit" (face-attribute 'shadow 'foreground)
+            (face-attribute 'line-number 'foreground))
+
+(test-end "display")
+(test-exit)
