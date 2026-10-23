@@ -7,7 +7,7 @@
 ;;; Watchers run after every change, e.g. to push a display setting to the C core.
 
 (library (profane var)
-  (export define-variable variable-defined? variable-documentation variable-names
+  (export define-variable defvar variable-defined? variable-documentation variable-names
           var-ref var-set! var-default var-set-default! var-local-set! var-kill-local!
           var-local? kill-all-local-variables add-var-watcher!)
   (import (chezscheme) (profane buffer))
@@ -38,6 +38,15 @@
                              (make-variable default doc (and (memq 'local options) #t)
                                             (and (memq 'permanent options) #t) '())))
          name)]))
+
+  ;; (defvar name default [doc] [options]) — define-variable as a definition form, usable
+  ;; anywhere among a library's definitions (a bare call there is an expression, which a
+  ;; library body only allows after its last definition).
+  (define-syntax defvar
+    (syntax-rules ()
+      [(_ name default) (define registered (define-variable 'name default))]
+      [(_ name default doc) (define registered (define-variable 'name default doc))]
+      [(_ name default doc options) (define registered (define-variable 'name default doc options))]))
 
   (define (variable-defined? name) (hashtable-contains? registry name))
   (define (variable-documentation name) (variable-doc (lookup 'variable-documentation name)))

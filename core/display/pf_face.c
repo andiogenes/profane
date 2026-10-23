@@ -41,6 +41,19 @@ uint32_t pf_face_role_id(pf_face_role role) {
     return role < PF_ROLE_COUNT ? roles[role] : 0;
 }
 
+static float line_spacing;
+
+void pf_display_set_line_spacing(float points) {
+    if (points != line_spacing) {
+        line_spacing = points;
+        generation++;
+    }
+}
+
+float pf_display_line_spacing(void) {
+    return line_spacing;
+}
+
 uint64_t pf_face_generation(void) {
     return generation;
 }

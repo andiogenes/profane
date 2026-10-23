@@ -12,7 +12,7 @@
           %buf-undo-boundary %buf-undo %buf-redo %buf-modified %buf-mark-saved
           %win-selected %win-set-buffer %win-top-line %win-body-lines
           %win-set-option %win-option
-          %face-define %face-role-set %buf-put-prop %buf-get-prop)
+          %face-define %face-role-set %buf-put-prop %buf-get-prop %display-set-line-spacing)
   (import (chezscheme))
 
   (define loaded
@@ -57,4 +57,5 @@
     (unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32) void)
   (define-native %face-role-set "pf_face_role_set" (int unsigned-32) void)
   (define-native %buf-put-prop "pf_buf_put_prop" (unsigned-32 unsigned-32 size_t size_t unsigned-32) int)
-  (define-native %buf-get-prop "pf_buf_get_prop" (unsigned-32 unsigned-32 size_t) integer-64))
+  (define-native %buf-get-prop "pf_buf_get_prop" (unsigned-32 unsigned-32 size_t) integer-64)
+  (define-native %display-set-line-spacing "pf_display_set_line_spacing" (float) void))

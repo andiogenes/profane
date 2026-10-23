@@ -15,6 +15,7 @@
 
 #include "pf_display.h"
 #include "pf_display_ffi.h"
+#include "pf_face.h"
 #include "pf_scheme.h"
 #include "pf_layout.h"
 #include "pf_window.h"
@@ -122,6 +123,7 @@ void pf_app_latency_reset(void) {
 }
 
 @implementation ProfaneView {
+    uint64_t _styleGeneration; /* face generation the window style was derived from */
     double _inputTime; /* timestamp of the event being handled, 0 if none */
     NSString *_marked; /* input-method composition, nil when none */
     NSRange _markedSelection;
@@ -165,6 +167,10 @@ void pf_app_latency_reset(void) {
     _window = pf_window_new(_cache, &style);
     _windowHandle = pf_win_register(_window);
     pf_win_set_selected(_windowHandle);
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(systemColorsChanged:)
+                                               name:NSSystemColorsDidChangeNotification
+                                             object:nil];
     return self;
 }
 
@@ -206,6 +212,7 @@ void pf_app_latency_reset(void) {
     if (self.window) {
         [self updateScale];
         [_metal startWithView:self];
+        [self reportAccent];
         [self reportAppearance];
         [self rebuild];
     } else {
@@ -245,20 +252,50 @@ void pf_app_latency_reset(void) {
     _overlay.layer.contentsScale = scale;
 }
 
-/* Geometry and the default font; colors come from Scheme's faces (profane display). */
+/* Geometry from the default face's font (set by Scheme; the built-in font until then) and
+ * line-spacing; colors come from faces (profane display). */
 - (pf_window_style)windowStyle {
+    uint32_t font = pf_face_get(pf_face_role_id(PF_ROLE_DEFAULT))->font;
+    if (!font) {
+        font = _font;
+    }
     pf_font_metrics m = {0};
-    pf_font_metrics_get(_font, &m);
+    pf_font_metrics_get(font, &m);
     /* Whole-point line boxes keep rows pixel-aligned at every scale. */
     return (pf_window_style){
-        .font = _font,
+        .font = font,
         .ascent = roundf(m.ascent),
         .descent = m.descent,
-        .line_height = ceilf(m.ascent + m.descent + m.leading),
+        .line_height = ceilf(m.ascent + m.descent + m.leading + pf_display_line_spacing()),
         .cell_width = m.advance,
         .pad_left = 4,
         .pad_top = 2,
     };
+}
+
+/* The macOS accent color, for themes that use system-accent. */
+- (void)reportAccent {
+    NSColor *c = [NSColor.controlAccentColor colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+    char hex[8];
+    snprintf(hex, sizeof hex, "#%02x%02x%02x", (int)lround(c.redComponent * 255),
+             (int)lround(c.greenComponent * 255), (int)lround(c.blueComponent * 255));
+    pf_scheme_arg arg = PF_SCHEME_STRING(hex, strlen(hex));
+    pf_scheme_call("pf-accent-changed", &arg, 1, NULL);
+}
+
+- (void)systemColorsChanged:(NSNotification *)note {
+    (void)note;
+    [self reportAccent];
+    [self redisplay];
+}
+
+/* Trackpad pinch scales text (profane display: text scale). */
+- (void)magnifyWithEvent:(NSEvent *)event {
+    char amount[32];
+    snprintf(amount, sizeof amount, "%.4f", event.magnification);
+    pf_scheme_arg arg = PF_SCHEME_STRING(amount, strlen(amount));
+    pf_scheme_call("pf-pinch", &arg, 1, NULL);
+    [self redisplay];
 }
 
 /* Tells Scheme whether macOS is in light or dark mode; it restyles the faces. */
@@ -300,6 +337,15 @@ static CGColorRef create_cgcolor(uint32_t c) {
 - (void)redisplay {
     if (!self.window || !_metal) {
         return;
+    }
+    if (pf_face_generation() != _styleGeneration) {
+        /* Faces changed (theme, font, text scale): the default font and metrics may have too. */
+        _styleGeneration = pf_face_generation();
+        pf_window_style style = [self windowStyle];
+        pf_window_set_style(_window, &style);
+        CGColorRef background = create_cgcolor(pf_face_default_background());
+        _base.layer.backgroundColor = background;
+        CGColorRelease(background);
     }
     const pf_display *d = pf_window_redisplay(_window);
     if (d && _inputTime > 0) {

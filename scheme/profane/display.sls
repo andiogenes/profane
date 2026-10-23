@@ -7,12 +7,14 @@
 ;;; show-paren) are Emacs's built-in faces mapped to roles. Text properties live in the C core
 ;;; and move with edits; the `face` property holds a face (or #f), others hold any value.
 ;;;
-;;; The light/dark palettes here are interim: themes and design tokens replace them (M2 item 3).
+;;; Colors come from themes (profane theme); fonts from the default-font-* variables, the text
+;;; scale and per-face family/height/features.
 
 (library (profane display)
-  (export face-id put-text-property get-text-property remove-text-property
-          appearance set-appearance! color->rgba)
-  (import (chezscheme) (profane native) (profane buffer) (profane face) (profane var))
+  (export face-id put-text-property get-text-property remove-text-property color->rgba
+          text-scale pinch-text-scale)
+  (import (chezscheme) (profane native) (profane buffer) (profane face) (profane var)
+          (profane command) (profane keymap))
 
   ;; ---- face ids ----
 
@@ -36,15 +38,20 @@
 
   ;; ---- fonts ----
 
-  (define font-variables
-    (begin
-      (define-variable 'default-font-family "JetBrains Mono" "Family of the default face's font.")
-      (define-variable 'default-font-size 14 "Size of the default face's font, in points.")))
+  (defvar default-font-family "JetBrains Mono" "Family of the default face's font (code).")
+  (defvar default-font-size 14 "Size of the default face's font, in points.")
+  (defvar line-spacing 0 "Extra space between lines, in points.")
 
-  (define (open-font family size bold? italic?)
-    (if (foreign-entry? "pf_font_open_styled")
-        ((foreign-procedure "pf_font_open_styled" (utf-8 float int int) unsigned-32)
-         family (inexact size) (if bold? 1 0) (if italic? 1 0))
+  ;; Text scale: a factor on every font size (C-x C-= / C-x C-- / C-x C-0, trackpad pinch).
+  ;; Global for now; Emacs scales per buffer, which needs per-window default faces (M2 item 4).
+  (define scale 1.0)
+  (define (text-scale) scale)
+
+  ;; FAMILY may be system-ui (the macOS UI font, SF Pro); FEATURES like "calt=0,liga=0".
+  (define (open-font family size bold? italic? features)
+    (if (foreign-entry? "pf_font_open_ex")
+        ((foreign-procedure "pf_font_open_ex" (utf-8 float int int utf-8) unsigned-32)
+         family (inexact size) (if bold? 1 0) (if italic? 1 0) features)
         0)) ; no font registry (headless tests): the window's default font
 
   (define (bold? w) (and (memq w '(semibold bold extrabold heavy black)) #t))
@@ -55,14 +62,17 @@
     (let ([family (or (face-attribute name 'family) (var-ref 'default-font-family))]
           [height (or (face-attribute name 'height) 1)]
           [weight (face-attribute name 'weight)]
-          [slant (face-attribute name 'slant)])
-      (if (and (not (eq? name 'default)) (equal? family (var-ref 'default-font-family))
-               (= height 1) (not (bold? weight)) (not (italic? slant))
-               (not (bold? (face-attribute 'default 'weight)))
-               (not (italic? (face-attribute 'default 'slant))))
-          0
-          (open-font family (* height (var-ref 'default-font-size)) (bold? weight)
-                     (italic? slant)))))
+          [slant (face-attribute name 'slant)]
+          [features (face-attribute name 'features)])
+      (if (and (not (eq? name 'default)) (equal? family (face-family 'default))
+               (= height 1) (eq? (bold? weight) (bold? (face-attribute 'default 'weight)))
+               (eq? (italic? slant) (italic? (face-attribute 'default 'slant)))
+               (equal? features (face-attribute 'default 'features)))
+          0 ; same font as the default face
+          (open-font family (* height scale (var-ref 'default-font-size)) (bold? weight)
+                     (italic? slant) features))))
+
+  (define (face-family name) (or (face-attribute name 'family) (var-ref 'default-font-family)))
 
   ;; ---- pushing faces to C ----
 
@@ -78,7 +88,9 @@
       (%face-define (face-id name) flags (if fg (color->rgba fg) 0) (if bg (color->rgba bg) 0)
                     (if (string? ul) (color->rgba ul) 0) (face-font name))))
 
-  (define (push-all!) (for-each push-face! (face-names)))
+  (define (push-all!)
+    (for-each push-face! (face-names))
+    (%display-set-line-spacing (inexact (var-ref 'line-spacing))))
 
   ;; pf_face_role order (core/display/pf_face.h).
   (define roles '(default cursor line-number line-number-current-line hl-line
@@ -102,45 +114,51 @@
          (line-number-current-line ((inherit . line-number)) "The current line's number.")
          (hl-line () "The current-line band (its background).")
          (show-paren-match () "A bracket and its partner.")
-         (show-paren-mismatch () "A bracket without a proper partner.")))
+         (show-paren-mismatch () "A bracket without a proper partner.")
+         (link () "Links.")
+         (error () "Errors.")
+         (warning () "Warnings.")
+         (success () "Success.")
+         (minibuffer-prompt () "Minibuffer prompts.")
+         (variable-pitch ((family . "system-ui")) "Proportional text (docs, notes).")
+         (fixed-pitch () "Monospaced text inside proportional text.")
+         (font-lock-comment-face () "Comments.")
+         (font-lock-doc-face ((inherit . font-lock-comment-face)) "Documentation.")
+         (font-lock-string-face () "Strings.")
+         (font-lock-keyword-face () "Keywords.")
+         (font-lock-builtin-face () "Built-in names.")
+         (font-lock-function-name-face () "Function names at definition.")
+         (font-lock-variable-name-face () "Variable names at definition.")
+         (font-lock-type-face () "Type names.")
+         (font-lock-constant-face () "Constants.")))
       (let loop ([i 0] [rs roles])
         (unless (null? rs) (%face-role-set i (face-id (car rs))) (loop (+ i 1) (cdr rs))))
       (add-face-watcher! (lambda (name) (push-all!)))
+      (for-each (lambda (v) (add-var-watcher! v (lambda (n val where) (push-all!))))
+                '(default-font-family default-font-size line-spacing))
       #t))
 
-  ;; ---- interim appearance palettes (modus-operandi / modus-vivendi-like) ----
+  ;; ---- text scale ----
 
-  (define palettes
-    '((light (default (foreground . "#000000") (background . "#ffffff"))
-             (cursor (background . "#000000"))
-             (shadow (foreground . "#9a9a9a"))
-             (line-number-current-line (foreground . "#000000"))
-             (hl-line (background . "#e4e9ef"))
-             (highlight (background . "#d7e4f5"))
-             (region (background . "#bdd8ef"))
-             (show-paren-match (background . "#b8d9f0"))
-             (show-paren-mismatch (background . "#f2b8b8")))
-      (dark (default (foreground . "#ffffff") (background . "#000000"))
-            (cursor (background . "#ffffff"))
-            (shadow (foreground . "#6b6b6b"))
-            (line-number-current-line (foreground . "#ffffff"))
-            (hl-line (background . "#1e1e2a"))
-            (highlight (background . "#2a3a52"))
-            (region (background . "#2f4f6a"))
-            (show-paren-match (background . "#2f4f6a"))
-            (show-paren-mismatch (background . "#7a2f2f")))))
+  (define (set-text-scale! s)
+    (set! scale (max 0.5 (min 3.0 s)))
+    (push-all!)
+    (message "Text scale ~a%" (exact (round (* 100 scale)))))
 
-  (define current-appearance 'light)
-  (define (appearance) current-appearance)
+  (define-command (text-scale-increase) (set-text-scale! (* scale 1.1)))
+  (define-command (text-scale-decrease) (set-text-scale! (/ scale 1.1)))
+  (define-command (text-scale-reset) (set-text-scale! 1.0))
 
-  (define (set-appearance! which)
-    (let ([palette (cdr (or (assq which palettes) (error 'set-appearance! "light or dark" which)))])
-      (set! current-appearance which)
-      (for-each (lambda (entry)
-                  (for-each (lambda (a) (set-face-attribute! (car entry) (car a) (cdr a)))
-                            (cdr entry)))
-                palette)
-      which))
+  ;; Trackpad pinch: MAGNIFICATION is the gesture's relative change.
+  (define (pinch-text-scale magnification) (set-text-scale! (* scale (+ 1 magnification))))
+
+  (define text-scale-bindings
+    (begin
+      (define-key! (global-map) "C-x C-=" 'text-scale-increase)
+      (define-key! (global-map) "C-x C-+" 'text-scale-increase)
+      (define-key! (global-map) "C-x C--" 'text-scale-decrease)
+      (define-key! (global-map) "C-x C-0" 'text-scale-reset)
+      #t))
 
   ;; ---- text properties ----
 

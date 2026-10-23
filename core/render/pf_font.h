@@ -22,6 +22,12 @@ pf_font_id pf_font_open(const char *family, float size);
  * has them. Returns 0 on failure. */
 pf_font_id pf_font_open_styled(const char *family, float size, int bold, int italic);
 
+/* Like pf_font_open_styled; FAMILY "system-ui" is the macOS UI font (SF Pro), and FEATURES
+ * (NULL or e.g. "calt=0,liga=0") sets OpenType features. Fonts differing only in features get
+ * different ids. */
+pf_font_id pf_font_open_ex(const char *family, float size, int bold, int italic,
+                           const char *features);
+
 /* Returns 0, or -1 for an unknown id. */
 int pf_font_metrics_get(pf_font_id font, pf_font_metrics *out);
 

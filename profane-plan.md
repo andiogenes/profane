@@ -380,6 +380,22 @@ the renderer tags the frame answering each event and records when it was submitt
   priority, as in Emacs), then paren highlights. The default face's background is the clear color.
 - The light/dark palette is interim (in `(profane display)`), driven by the macOS appearance; themes replace it.
 
+## 8h. Themes, tokens and typography (M2)
+
+- **Themes** (`(profane theme)`): a palette of semantic roles (`fg`, `fg-dim`, `bg-region`, `red`, `accent` …, may
+  reference each other or `system-accent`, the macOS accent color), design tokens (spacing scale, radii, elevation
+  shadows, type scale, line height) and face specs written against the palette. `load-theme` owns colors, weight,
+  slant and underline of the faces it lists — resetting them, so switches never leak — and leaves typography alone.
+  `after-load-theme-hook`; `theme-for-appearance` + macOS light/dark mode switch themes automatically.
+- **Built-in themes** `profane-light` / `profane-dark`: own palettes in the spirit of modus-operandi / vivendi-tinted
+  (not copied). A test checks WCAG contrast: body text ≥ 7:1, dimmed/comment/accent text ≥ 4.5:1, text on
+  highlight backgrounds ≥ 4.5:1, cursor ≥ 7:1.
+- **Typography**: code in `default-font-family` (JetBrains Mono), UI chrome and `variable-pitch` in `system-ui`
+  (SF Pro); per-face OpenType `features` (e.g. ligatures off); `line-spacing`; text scale (`C-x C-=`/`C--`/`C-0`,
+  trackpad pinch) — global for now, per-buffer with M2's window work.
+- **`ui-style`** presets `minimal` (default) and `rich` set chrome variables (`ui-fringe-width`, `ui-scroll-bars`,
+  `ui-popup-shadow`, `ui-motion`, `ui-mode-line-style`) that the chrome reads as it lands.
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |

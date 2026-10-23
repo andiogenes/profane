@@ -6,7 +6,7 @@
 ;;; one function is reported and does not stop the others.
 
 (library (profane hook)
-  (export define-hook hook-defined? hook-functions add-hook! remove-hook! run-hooks)
+  (export define-hook defhook hook-defined? hook-functions add-hook! remove-hook! run-hooks)
   (import (chezscheme))
 
   (define registry (make-eq-hashtable)) ; symbol -> list of functions
@@ -17,6 +17,11 @@
       [(name doc)
        (unless (hashtable-contains? registry name) (hashtable-set! registry name '()))
        name]))
+
+  ;; (defhook name) — define-hook as a definition form (see defvar).
+  (define-syntax defhook
+    (syntax-rules ()
+      [(_ name) (define registered (define-hook 'name))]))
 
   (define (hook-defined? name) (hashtable-contains? registry name))
 

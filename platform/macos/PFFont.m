@@ -1,5 +1,7 @@
 #import "PFFont.h"
 
+#import <Foundation/Foundation.h>
+
 #include <os/lock.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +11,7 @@ static CTFontRef *fonts;
 static uint32_t font_count, font_cap;
 static os_unfair_lock font_lock = OS_UNFAIR_LOCK_INIT;
 
+/* Same face, size and OpenType feature settings. */
 static BOOL same_font(CTFontRef a, CTFontRef b) {
     if (CTFontGetSize(a) != CTFontGetSize(b)) {
         return NO;
@@ -17,6 +20,17 @@ static BOOL same_font(CTFontRef a, CTFontRef b) {
     BOOL same = CFStringCompare(na, nb, 0) == kCFCompareEqualTo;
     CFRelease(na);
     CFRelease(nb);
+    if (same) {
+        CFTypeRef fa = CTFontCopyAttribute(a, kCTFontFeatureSettingsAttribute);
+        CFTypeRef fb = CTFontCopyAttribute(b, kCTFontFeatureSettingsAttribute);
+        same = (!fa && !fb) || (fa && fb && CFEqual(fa, fb));
+        if (fa) {
+            CFRelease(fa);
+        }
+        if (fb) {
+            CFRelease(fb);
+        }
+    }
     return same;
 }
 
@@ -89,6 +103,66 @@ pf_font_id pf_font_open_styled(const char *family, float size, int bold, int ita
     }
     pf_font_id id = PFFontIdForCTFont(styled);
     CFRelease(styled);
+    return id;
+}
+
+/* "calt=0,liga=0" -> OpenType feature settings for a font descriptor. */
+static CFArrayRef create_features(const char *spec) {
+    CFMutableArrayRef settings = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
+    NSString *all = @(spec);
+    for (NSString *item in [all componentsSeparatedByString:@","]) {
+        NSArray<NSString *> *kv = [item componentsSeparatedByString:@"="];
+        NSString *tag = [kv[0] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        if (tag.length != 4) {
+            continue;
+        }
+        int value = kv.count > 1 ? kv[1].intValue : 1;
+        NSDictionary *setting = @{
+            (__bridge id)kCTFontOpenTypeFeatureTag : tag,
+            (__bridge id)kCTFontOpenTypeFeatureValue : @(value),
+        };
+        CFArrayAppendValue(settings, (__bridge CFDictionaryRef)setting);
+    }
+    return settings;
+}
+
+pf_font_id pf_font_open_ex(const char *family, float size, int bold, int italic,
+                           const char *features) {
+    pf_font_id base;
+    if (family && strcmp(family, "system-ui") == 0) {
+        CTFontRef ui = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, size, NULL);
+        base = ui ? PFFontIdForCTFont(ui) : 0;
+        if (ui) {
+            CFRelease(ui);
+        }
+        if (base && (bold || italic)) {
+            CTFontSymbolicTraits t = (bold ? kCTFontTraitBold : 0) | (italic ? kCTFontTraitItalic : 0);
+            CTFontRef styled = CTFontCreateCopyWithSymbolicTraits(PFFontGet(base), size, NULL, t, t);
+            if (styled) {
+                base = PFFontIdForCTFont(styled);
+                CFRelease(styled);
+            }
+        }
+    } else {
+        base = pf_font_open_styled(family, size, bold, italic);
+    }
+    if (!base || !features || !*features) {
+        return base;
+    }
+    CFArrayRef settings = create_features(features);
+    const void *keys[] = {kCTFontFeatureSettingsAttribute};
+    const void *values[] = {settings};
+    CFDictionaryRef attrs = CFDictionaryCreate(NULL, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
+                                               &kCFTypeDictionaryValueCallBacks);
+    CTFontDescriptorRef desc = CTFontDescriptorCreateWithAttributes(attrs);
+    CTFontRef featured = CTFontCreateCopyWithAttributes(PFFontGet(base), size, NULL, desc);
+    pf_font_id id = featured ? PFFontIdForCTFont(featured) : base;
+    if (featured) {
+        CFRelease(featured);
+    }
+    CFRelease(desc);
+    CFRelease(attrs);
+    CFRelease(settings);
     return id;
 }
 

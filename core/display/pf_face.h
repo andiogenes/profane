@@ -40,6 +40,10 @@ const pf_face *pf_face_get(uint32_t id);
 void pf_face_set_role(pf_face_role role, uint32_t id);
 uint32_t pf_face_role_id(pf_face_role role);
 
+/* Extra space between lines, in points (Emacs line-spacing); part of the face generation. */
+void pf_display_set_line_spacing(float points);
+float pf_display_line_spacing(void);
+
 /* Bumped on every change, so windows know to render again. */
 uint64_t pf_face_generation(void);
 

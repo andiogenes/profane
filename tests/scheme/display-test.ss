@@ -27,10 +27,7 @@
 (test-error "undefined face" #t (put-text-property 0 1 'face 'no-such-face))
 (test-error "out of range" #t (put-text-property 0 99 'face 'bold))
 
-(test-eq "appearance switch" 'dark (set-appearance! 'dark))
-(test-equal "palette applied" "#000000" (face-attribute 'default 'background))
-(set-appearance! 'light)
-(test-equal "and back" "#ffffff" (face-attribute 'default 'background))
+(define-face 'shadow '((foreground . "#777777")))
 (test-equal "built-in faces inherit" (face-attribute 'shadow 'foreground)
             (face-attribute 'line-number 'foreground))
 

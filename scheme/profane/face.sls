@@ -2,7 +2,8 @@
 ;;;
 ;;; A face is a symbol with display attributes: foreground, background ("#rrggbb" strings),
 ;;; weight (normal bold), slant (normal italic), underline (#f, #t or a color), family (a font
-;;; family name), height (a multiple of the default size) and inherit (another face). Missing
+;;; family name, or system-ui for the macOS UI font), height (a multiple of the default size),
+;;; features (OpenType settings like "calt=0") and inherit (another face). Missing
 ;;; attributes come from the inherited face, then from `default`. Themes set attributes; change
 ;;; watchers push them to the display engine.
 
@@ -12,8 +13,9 @@
           face-attribute-names)
   (import (chezscheme))
 
+  ;; features: OpenType feature settings, e.g. "calt=0,liga=0" (ligatures off).
   (define face-attribute-names
-    '(foreground background weight slant underline family height inherit))
+    '(foreground background weight slant underline family height features inherit))
 
   (define-record-type face
     (fields attrs (mutable doc)) ; attrs: eq-hashtable attr -> value
