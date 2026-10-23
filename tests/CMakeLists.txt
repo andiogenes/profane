@@ -11,6 +11,10 @@ add_executable(test_text_undo c/test_text_undo.c)
 target_link_libraries(test_text_undo PRIVATE pf_core)
 add_test(NAME c.text_undo COMMAND test_text_undo)
 
+add_executable(test_display c/test_display.c)
+target_link_libraries(test_display PRIVATE pf_core)
+add_test(NAME c.display COMMAND test_display)
+
 add_executable(test_scheme c/test_scheme.c)
 target_link_libraries(test_scheme PRIVATE pf_core_whole)
 target_compile_definitions(test_scheme PRIVATE
@@ -18,10 +22,10 @@ target_compile_definitions(test_scheme PRIVATE
   PF_TEST_SCHEME_DIR="${PROJECT_SOURCE_DIR}/scheme")
 add_test(NAME c.scheme COMMAND test_scheme)
 
-foreach(_t IN ITEMS test_utf8 test_text test_text_undo test_scheme)
+foreach(_t IN ITEMS test_utf8 test_text test_text_undo test_display test_scheme)
   target_compile_options(${_t} PRIVATE ${PROFANE_WARNINGS})
 endforeach()
-set_tests_properties(c.utf8 c.text c.text_undo c.scheme PROPERTIES LABELS c)
+set_tests_properties(c.utf8 c.text c.text_undo c.display c.scheme PROPERTIES LABELS c)
 
 # Scheme suites (label: scheme), run by the standalone Chez against the source tree.
 file(GLOB _scheme_suites CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/scheme/*-test.ss")
@@ -34,6 +38,17 @@ foreach(_suite IN LISTS _scheme_suites)
   set_tests_properties(scheme.${_name} PROPERTIES LABELS scheme
     ENVIRONMENT "PROFANE_NATIVE_LIB=$<TARGET_FILE:pf_native>")
 endforeach()
+
+# Platform units needing Metal but no window (label: macos).
+add_executable(test_atlas macos/test_atlas.m
+  "${PROJECT_SOURCE_DIR}/platform/macos/PFFont.m"
+  "${PROJECT_SOURCE_DIR}/platform/macos/PFGlyphAtlas.m")
+target_include_directories(test_atlas PRIVATE "${PROJECT_SOURCE_DIR}/platform/macos" c)
+target_compile_options(test_atlas PRIVATE -fobjc-arc ${PROFANE_WARNINGS})
+target_link_libraries(test_atlas PRIVATE pf_core "-framework CoreGraphics" "-framework CoreText" "-framework Metal"
+  "-framework Foundation")
+add_test(NAME macos.atlas COMMAND test_atlas)
+set_tests_properties(macos.atlas PROPERTIES LABELS macos)
 
 # App integration (label: macos): signed bundle, hardened runtime + JIT, socket REPL.
 add_test(NAME macos.signing

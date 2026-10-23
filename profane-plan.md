@@ -281,6 +281,26 @@ Layers: libgit2 reader (workers, ftype structs) → git CLI runner (`GIT_EDITOR`
   the standalone `scheme` load the `pf_native` dylib (`$PROFANE_NATIVE_LIB`). No dylib ships in the bundle, so
   library validation under the hardened runtime is not involved.
 
+## 8b. Rendering decisions (M1)
+
+- **Display lists** (`core/render/pf_display`): immutable, refcounted lists of rects and positioned glyphs in points,
+  built on the main thread and only read by the render thread — the "immutable display snapshot" of §1.
+- **`pf_renderer`** (`core/render/pf_renderer.h`, Metal in `platform/macos/PFMetalRenderer`): `submit(layer, list)`,
+  newest list per layer wins. A render thread driven by the view's `CADisplayLink` redraws only changed layers, is the
+  only thread touching drawables/`drawableSize`, and pauses the link when idle (0% CPU at rest). One instanced draw
+  per layer (rects, gray glyphs, color glyphs share a pipeline).
+- **Glyph atlas**: rasterized on the render thread with Core Text on a miss — grayscale R8 page + BGRA color page
+  (emoji), 4 horizontal subpixel bins, shelf packing; when full, wait for the GPU, reset, rebuild the frame.
+- **Fonts** are integer ids (`pf_font`); fallback fonts chosen by Core Text during shaping are registered on the fly.
+- **View stack**: `ProfaneView` = base Metal layer / native-view host / transparent overlay Metal layer (ignores the
+  mouse). Shaping is still done ad hoc in the view until the layout cache (next M1 item) replaces it.
+- **Frames are confirmed, not assumed**: a frame presented before the window is on screen is dropped with no error
+  (and `presentedTime` reads 0 even for visible windowed frames, so it can't tell). A committed frame counts as shown
+  only when its presented handler fires; otherwise it is re-presented every ~250 ms, up to 10 times. Found as an
+  intermittent blank window (≈1 in 3 launches right after another instance quit).
+- Verified: emoji/CJK fallback render, overlay composites over base on screen and in `--snapshot`, TSan-clean
+  across startup, live resizes and snapshots.
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |

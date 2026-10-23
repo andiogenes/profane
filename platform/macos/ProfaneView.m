@@ -1,80 +1,43 @@
 #import "ProfaneView.h"
 
 #import <CoreText/CoreText.h>
-#import <ImageIO/ImageIO.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
-#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-typedef struct PFColor {
-    float r, g, b, a;
-} PFColor;
+#import "PFFont.h"
+#import "PFMetalRenderer.h"
 
-typedef struct PFPalette {
-    PFColor background;
-    PFColor foreground;
-} PFPalette;
+#include "pf_display.h"
 
 /* Interim colors (modus-operandi / modus-vivendi) until theme design tokens land in M2. */
-static const PFPalette kLightPalette = {{1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f, 1.0f}};
-static const PFPalette kDarkPalette = {{0.0f, 0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
+typedef struct PFPalette {
+    uint32_t background, foreground;
+} PFPalette;
 
-static const CGFloat kFontSize = 14.0;
+static const PFPalette kLightPalette = {0xFFFFFFFF, 0x000000FF};
+static const PFPalette kDarkPalette = {0x000000FF, 0xFFFFFFFF};
 
-static CTFontRef create_code_font(CGFloat size) {
-    CTFontRef font = CTFontCreateWithName(CFSTR("JetBrains Mono"), size, NULL);
-    CFStringRef family = CTFontCopyFamilyName(font);
-    BOOL found = family && CFStringCompare(family, CFSTR("JetBrains Mono"), 0) == kCFCompareEqualTo;
-    if (family) {
-        CFRelease(family);
-    }
-    if (found) {
-        return font;
-    }
-    CFRelease(font);
-    return CTFontCreateUIFontForLanguage(kCTFontUIFontUserFixedPitch, size, NULL);
-}
+static const float kFontSize = 14.0f;
 
-@implementation ProfaneView {
+/* A view backed by a CAMetalLayer that the render thread draws; AppKit never displays it. */
+@interface PFMetalLayerView : NSView
+@property (nonatomic) BOOL passesMouse;
+- (instancetype)initWithFrame:(NSRect)frame device:(id<MTLDevice>)device opaque:(BOOL)opaque;
+@end
+
+@implementation PFMetalLayerView {
     id<MTLDevice> _device;
-    id<MTLCommandQueue> _queue;
-    id<MTLRenderPipelineState> _textPipeline;
-    id<MTLTexture> _textTexture; /* coverage of `text` at _textScale, rebuilt lazily */
-    CGFloat _textScale;
+    BOOL _opaque;
 }
 
-- (instancetype)initWithFrame:(NSRect)frame {
-    if (!(self = [super initWithFrame:frame])) {
-        return nil;
+- (instancetype)initWithFrame:(NSRect)frame device:(id<MTLDevice>)device opaque:(BOOL)opaque {
+    if ((self = [super initWithFrame:frame])) {
+        _device = device;
+        _opaque = opaque;
+        self.wantsLayer = YES; /* after _device: this calls -makeBackingLayer */
+        self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawNever;
+        self.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     }
-    _device = MTLCreateSystemDefaultDevice();
-    if (!_device) {
-        return nil;
-    }
-    _queue = [_device newCommandQueue];
-
-    NSError *error = nil;
-    id<MTLLibrary> library = [_device newDefaultLibrary];
-    MTLRenderPipelineDescriptor *desc = [MTLRenderPipelineDescriptor new];
-    desc.vertexFunction = [library newFunctionWithName:@"pf_text_vertex"];
-    desc.fragmentFunction = [library newFunctionWithName:@"pf_text_fragment"];
-    MTLRenderPipelineColorAttachmentDescriptor *color = desc.colorAttachments[0];
-    color.pixelFormat = MTLPixelFormatBGRA8Unorm;
-    color.blendingEnabled = YES;
-    color.sourceRGBBlendFactor = MTLBlendFactorOne;
-    color.sourceAlphaBlendFactor = MTLBlendFactorOne;
-    color.destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-    color.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-    _textPipeline = [_device newRenderPipelineStateWithDescriptor:desc error:&error];
-    if (!_textPipeline) {
-        NSLog(@"profane: text pipeline: %@", error);
-        return nil;
-    }
-
-    _text = @"";
-    /* Set after _device: turning on wantsLayer calls -makeBackingLayer. */
-    self.wantsLayer = YES;
-    self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
     return self;
 }
 
@@ -83,43 +46,137 @@ static CTFontRef create_code_font(CGFloat size) {
     layer.device = _device;
     layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
     layer.framebufferOnly = YES;
-    layer.opaque = YES;
-    layer.presentsWithTransaction = YES; /* keeps frames in step with live resize */
-    layer.needsDisplayOnBoundsChange = YES;
+    layer.opaque = _opaque;
+    CGColorSpaceRef srgb = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    layer.colorspace = srgb;
+    CGColorSpaceRelease(srgb);
+    /* While a resize waits for the next frame, keep the old pixels pinned top-left rather
+     * than stretched. */
+    layer.contentsGravity = kCAGravityTopLeft;
     return layer;
 }
 
-/* CAMetalLayer display goes through the layer delegate, not -updateLayer. */
-- (void)displayLayer:(CALayer *)layer {
-    (void)layer;
-    [self render];
-}
-
-- (void)viewDidMoveToWindow {
-    [super viewDidMoveToWindow];
-    self.layer.contentsScale = self.window ? self.window.backingScaleFactor : 1.0;
-    [self.layer setNeedsDisplay];
-}
-
 - (BOOL)isOpaque {
+    return _opaque;
+}
+
+- (NSView *)hitTest:(NSPoint)point {
+    return self.passesMouse ? nil : [super hitTest:point];
+}
+
+@end
+
+@implementation ProfaneView {
+    PFMetalLayerView *_base;
+    PFMetalLayerView *_overlay;
+    PFMetalRenderer *_metal;
+    pf_font_id _font;
+}
+
+- (instancetype)initWithFrame:(NSRect)frame {
+    if (!(self = [super initWithFrame:frame])) {
+        return nil;
+    }
+    id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+    if (!device) {
+        return nil;
+    }
+    NSRect bounds = self.bounds;
+    _base = [[PFMetalLayerView alloc] initWithFrame:bounds device:device opaque:YES];
+    _nativeHost = [[NSView alloc] initWithFrame:bounds];
+    _nativeHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    _overlay = [[PFMetalLayerView alloc] initWithFrame:bounds device:device opaque:NO];
+    _overlay.passesMouse = YES;
+    [self addSubview:_base];
+    [self addSubview:_nativeHost];
+    [self addSubview:_overlay];
+
+    _metal = [[PFMetalRenderer alloc]
+        initWithDevice:device
+                layers:@[ (CAMetalLayer *)_base.layer, (CAMetalLayer *)_overlay.layer ]];
+    if (!_metal) {
+        return nil;
+    }
+    _font = pf_font_open("JetBrains Mono", kFontSize);
+    _text = @"";
+    return self;
+}
+
+- (void)dealloc {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+    [_metal stop];
+}
+
+- (pf_renderer *)renderer {
+    return _metal.renderer;
+}
+
+- (NSUInteger)presentedFrames {
+    return (NSUInteger)_metal.presentedFrames;
+}
+
+- (BOOL)isFlipped {
     return YES;
 }
 
 - (void)setText:(NSString *)text {
     _text = [text copy];
-    _textTexture = nil;
-    [self.layer setNeedsDisplay];
+    [self rebuild];
+}
+
+- (void)viewWillMoveToWindow:(NSWindow *)window {
+    [super viewWillMoveToWindow:window];
+    [NSNotificationCenter.defaultCenter removeObserver:self
+                                                  name:NSWindowDidChangeOcclusionStateNotification
+                                                object:nil];
+    if (window) {
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:@selector(occlusionChanged:)
+                                                   name:NSWindowDidChangeOcclusionStateNotification
+                                                 object:window];
+    }
+}
+
+- (void)viewDidMoveToWindow {
+    [super viewDidMoveToWindow];
+    if (self.window) {
+        [self updateScale];
+        [_metal startWithView:self];
+        [self rebuild];
+    } else {
+        [_metal stop];
+    }
+}
+
+/* Frames presented before the window is on screen are dropped, and the render thread idles
+ * once it has drawn, so redraw whenever the window becomes visible. */
+- (void)occlusionChanged:(NSNotification *)note {
+    (void)note;
+    if (self.window.occlusionState & NSWindowOcclusionStateVisible) {
+        [_metal redraw];
+    }
 }
 
 - (void)viewDidChangeBackingProperties {
     [super viewDidChangeBackingProperties];
-    self.layer.contentsScale = self.window.backingScaleFactor;
-    [self.layer setNeedsDisplay];
+    [self updateScale];
+    [self rebuild];
 }
 
 - (void)viewDidChangeEffectiveAppearance {
     [super viewDidChangeEffectiveAppearance];
-    [self.layer setNeedsDisplay];
+    [self rebuild];
+}
+
+- (void)setFrameSize:(NSSize)size {
+    [super setFrameSize:size];
+    [self rebuild];
+}
+
+- (void)updateScale {
+    CGFloat scale = self.window ? self.window.backingScaleFactor : 1.0;
+    _base.layer.contentsScale = scale;
+    _overlay.layer.contentsScale = scale;
 }
 
 - (PFPalette)palette {
@@ -128,155 +185,78 @@ static CTFontRef create_code_font(CGFloat size) {
     return [name isEqualToString:NSAppearanceNameDarkAqua] ? kDarkPalette : kLightPalette;
 }
 
-- (nullable id<MTLTexture>)textTextureAtScale:(CGFloat)scale {
-    if (_textTexture && _textScale == scale) {
-        return _textTexture;
-    }
-    _textTexture = nil;
-    _textScale = scale;
-    if (_text.length == 0) {
-        return nil;
-    }
+static CGColorRef create_cgcolor(uint32_t c) {
+    return CGColorCreateSRGB(((c >> 24) & 0xFF) / 255.0, ((c >> 16) & 0xFF) / 255.0,
+                             ((c >> 8) & 0xFF) / 255.0, (c & 0xFF) / 255.0);
+}
 
-    CTFontRef font = create_code_font(kFontSize * scale);
-    NSDictionary *attrs = @{
-        (__bridge id)kCTFontAttributeName : (__bridge id)font,
-        (__bridge id)kCTForegroundColorFromContextAttributeName : @YES,
-    };
-    NSAttributedString *string = [[NSAttributedString alloc] initWithString:_text attributes:attrs];
+/* Rebuilds and submits both layers' display lists. Interim content until the display engine
+ * (layout cache, windows) lands: one centered line of text. */
+- (void)rebuild {
+    if (!self.window || !_metal) {
+        return;
+    }
+    NSSize size = self.bounds.size;
+    float scale = (float)self.window.backingScaleFactor;
+    PFPalette palette = [self palette];
+    CGColorRef background = create_cgcolor(palette.background);
+    _base.layer.backgroundColor = background; /* shows under a resize until the next frame */
+    CGColorRelease(background);
+
+    pf_display *base =
+        pf_display_new((float)size.width, (float)size.height, scale, palette.background);
+    [self addLine:_text toDisplay:base size:size color:palette.foreground];
+    const pf_display *frozen = pf_display_finish(base);
+    pf_renderer_submit(_metal.renderer, PF_LAYER_BASE, frozen);
+    pf_display_release(frozen);
+
+    const pf_display *overlay =
+        pf_display_finish(pf_display_new((float)size.width, (float)size.height, scale, 0));
+    pf_renderer_submit(_metal.renderer, PF_LAYER_OVERLAY, overlay);
+    pf_display_release(overlay);
+}
+
+- (void)addLine:(NSString *)text
+      toDisplay:(pf_display *)display
+           size:(NSSize)size
+          color:(uint32_t)color {
+    CTFontRef font = PFFontGet(_font);
+    if (!font || text.length == 0) {
+        return;
+    }
+    NSDictionary *attrs = @{(__bridge id)kCTFontAttributeName : (__bridge id)font};
+    NSAttributedString *string = [[NSAttributedString alloc] initWithString:text attributes:attrs];
     CTLineRef line = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)string);
     CGFloat ascent = 0, descent = 0;
     double width = CTLineGetTypographicBounds(line, &ascent, &descent, NULL);
-    size_t w = (size_t)ceil(width) + 2, h = (size_t)ceil(ascent + descent) + 2;
+    float x0 = (float)floor((size.width - width) / 2);
+    float baseline = (float)floor((size.height - (ascent + descent)) / 2 + ascent);
 
-    /* Coverage only: the shader applies the color. Bitmap rows are stored top-down. */
-    CGContextRef ctx = CGBitmapContextCreate(NULL, w, h, 8, 0, NULL, (CGBitmapInfo)kCGImageAlphaOnly);
-    if (ctx) {
-        CGContextSetTextPosition(ctx, 1, ceil(descent) + 1);
-        CTLineDraw(line, ctx);
-        MTLTextureDescriptor *desc =
-            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatR8Unorm
-                                                               width:w
-                                                              height:h
-                                                           mipmapped:NO];
-        desc.usage = MTLTextureUsageShaderRead;
-        desc.storageMode = MTLStorageModeShared;
-        _textTexture = [_device newTextureWithDescriptor:desc];
-        [_textTexture replaceRegion:MTLRegionMake2D(0, 0, w, h)
-                        mipmapLevel:0
-                          withBytes:CGBitmapContextGetData(ctx)
-                        bytesPerRow:CGBitmapContextGetBytesPerRow(ctx)];
-        CGContextRelease(ctx);
+    CFArrayRef runs = CTLineGetGlyphRuns(line);
+    for (CFIndex r = 0; r < CFArrayGetCount(runs); r++) {
+        CTRunRef run = CFArrayGetValueAtIndex(runs, r);
+        /* Core Text may substitute a fallback font for some characters (emoji, CJK). */
+        CTFontRef runFont = CFDictionaryGetValue(CTRunGetAttributes(run), kCTFontAttributeName);
+        pf_font_id fid = runFont ? PFFontIdForCTFont(runFont) : _font;
+        CFIndex n = CTRunGetGlyphCount(run);
+        if (n <= 0) {
+            continue;
+        }
+        CGGlyph *glyphs = malloc((size_t)n * sizeof *glyphs);
+        CGPoint *positions = malloc((size_t)n * sizeof *positions);
+        CTRunGetGlyphs(run, CFRangeMake(0, n), glyphs);
+        CTRunGetPositions(run, CFRangeMake(0, n), positions);
+        for (CFIndex i = 0; i < n; i++) {
+            pf_display_glyph(display, fid, glyphs[i], x0 + (float)positions[i].x, baseline, color);
+        }
+        free(glyphs);
+        free(positions);
     }
     CFRelease(line);
-    CFRelease(font);
-    return _textTexture;
-}
-
-/* Encodes one frame of PX pixels into TARGET (a drawable or an offscreen snapshot texture). */
-- (void)encodeFrameInto:(id<MTLTexture>)target
-                   size:(CGSize)px
-                  scale:(CGFloat)scale
-               commands:(id<MTLCommandBuffer>)commands {
-    PFPalette palette = [self palette];
-    MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
-    pass.colorAttachments[0].texture = target;
-    pass.colorAttachments[0].loadAction = MTLLoadActionClear;
-    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
-    pass.colorAttachments[0].clearColor =
-        MTLClearColorMake(palette.background.r, palette.background.g, palette.background.b, 1.0);
-
-    id<MTLRenderCommandEncoder> encoder = [commands renderCommandEncoderWithDescriptor:pass];
-    id<MTLTexture> text = [self textTextureAtScale:scale];
-    if (text) {
-        /* Centered, pixel-aligned; converted from top-down pixels to device coordinates. */
-        double x0 = floor((px.width - (double)text.width) / 2);
-        double y0 = floor((px.height - (double)text.height) / 2);
-        float rect[4] = {
-            (float)(x0 / px.width * 2 - 1),
-            (float)(1 - y0 / px.height * 2),
-            (float)((x0 + text.width) / px.width * 2 - 1),
-            (float)(1 - (y0 + text.height) / px.height * 2),
-        };
-        [encoder setRenderPipelineState:_textPipeline];
-        [encoder setVertexBytes:rect length:sizeof rect atIndex:0];
-        [encoder setFragmentBytes:&palette.foreground length:sizeof palette.foreground atIndex:0];
-        [encoder setFragmentTexture:text atIndex:0];
-        [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
-    }
-    [encoder endEncoding];
-}
-
-- (CGSize)pixelSizeAtScale:(CGFloat)scale {
-    return CGSizeMake(round(self.bounds.size.width * scale),
-                      round(self.bounds.size.height * scale));
-}
-
-- (void)render {
-    CAMetalLayer *layer = (CAMetalLayer *)self.layer;
-    CGFloat scale = layer.contentsScale;
-    CGSize px = [self pixelSizeAtScale:scale];
-    if (px.width < 1 || px.height < 1) {
-        return;
-    }
-    layer.drawableSize = px;
-    id<CAMetalDrawable> drawable = [layer nextDrawable];
-    if (!drawable) {
-        return;
-    }
-    id<MTLCommandBuffer> commands = [_queue commandBuffer];
-    [self encodeFrameInto:drawable.texture size:px scale:scale commands:commands];
-    [commands commit];
-    [commands waitUntilScheduled];
-    [drawable present];
-    _presentedFrames++;
 }
 
 - (BOOL)writeSnapshotToURL:(NSURL *)url {
-    CGFloat scale = self.layer.contentsScale;
-    CGSize px = [self pixelSizeAtScale:scale];
-    if (px.width < 1 || px.height < 1) {
-        return NO;
-    }
-    size_t w = (size_t)px.width, h = (size_t)px.height;
-    MTLTextureDescriptor *desc =
-        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
-                                                           width:w
-                                                          height:h
-                                                       mipmapped:NO];
-    desc.usage = MTLTextureUsageRenderTarget;
-    desc.storageMode = MTLStorageModeShared;
-    id<MTLTexture> target = [_device newTextureWithDescriptor:desc];
-    id<MTLCommandBuffer> commands = [_queue commandBuffer];
-    [self encodeFrameInto:target size:px scale:scale commands:commands];
-    [commands commit];
-    [commands waitUntilCompleted];
-
-    NSMutableData *pixels = [NSMutableData dataWithLength:w * h * 4];
-    [target getBytes:pixels.mutableBytes
-         bytesPerRow:w * 4
-          fromRegion:MTLRegionMake2D(0, 0, w, h)
-         mipmapLevel:0];
-    CGColorSpaceRef srgb = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-    CGDataProviderRef provider = CGDataProviderCreateWithCFData((__bridge CFDataRef)pixels);
-    CGImageRef image =
-        CGImageCreate(w, h, 8, 32, w * 4, srgb,
-                      kCGBitmapByteOrder32Little | (CGBitmapInfo)kCGImageAlphaPremultipliedFirst,
-                      provider, NULL, false, kCGRenderingIntentDefault);
-    CGImageDestinationRef dest = CGImageDestinationCreateWithURL(
-        (__bridge CFURLRef)url, (__bridge CFStringRef)UTTypePNG.identifier, 1, NULL);
-    BOOL ok = NO;
-    if (image && dest) {
-        CGImageDestinationAddImage(dest, image, NULL);
-        ok = CGImageDestinationFinalize(dest);
-    }
-    if (dest) {
-        CFRelease(dest);
-    }
-    CGImageRelease(image);
-    CGDataProviderRelease(provider);
-    CGColorSpaceRelease(srgb);
-    return ok;
+    return [_metal writeSnapshotToURL:url];
 }
 
 @end

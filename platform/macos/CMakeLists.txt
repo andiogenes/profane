@@ -6,9 +6,10 @@ set(_metallib "${CMAKE_CURRENT_BINARY_DIR}/default.metallib")
 add_custom_command(
   OUTPUT "${_metallib}"
   COMMAND xcrun -sdk macosx metal -c "${CMAKE_CURRENT_SOURCE_DIR}/Shaders.metal"
+    -I "${CMAKE_CURRENT_SOURCE_DIR}"
     -mmacosx-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET} -o "${_shader_air}"
   COMMAND xcrun -sdk macosx metallib "${_shader_air}" -o "${_metallib}"
-  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Shaders.metal"
+  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Shaders.metal" "${CMAKE_CURRENT_SOURCE_DIR}/PFShaderTypes.h"
   VERBATIM)
 set_source_files_properties("${_metallib}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 list(APPEND PROFANE_RESOURCES "${_metallib}")
@@ -35,6 +36,9 @@ list(APPEND PROFANE_RESOURCES ${_scheme_files})
 add_executable(profane MACOSX_BUNDLE
   main.m
   PFAppDelegate.m
+  PFFont.m
+  PFGlyphAtlas.m
+  PFMetalRenderer.m
   PFReplServer.m
   PFScheme.m
   ProfaneView.m

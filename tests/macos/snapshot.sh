@@ -9,3 +9,10 @@ dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
 PROFANE_REPL_SOCKET="$dir/repl.sock" "$app/Contents/MacOS/profane" --snapshot "$dir/frame.png"
 [ -s "$dir/frame.png" ] || { echo "no snapshot written" >&2; exit 1; }
+
+# Regression: a frame whose drawable was unavailable was consumed and never retried, so the
+# window stayed blank (the display link pauses when idle). Drop the first drawables on purpose.
+rm -f "$dir/frame.png"
+PROFANE_TEST_DROP_DRAWABLES=3 PROFANE_REPL_SOCKET="$dir/repl.sock" \
+    "$app/Contents/MacOS/profane" --snapshot "$dir/frame.png"
+[ -s "$dir/frame.png" ] || { echo "no snapshot written after dropped drawables" >&2; exit 1; }
