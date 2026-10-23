@@ -12,7 +12,7 @@ Scope is shaped by the owner's actual Emacs usage (andiogenes/.emacs.d).
 | GPU | Metal directly (`CAMetalLayer`, `CAMetalDisplayLink`) behind a thin `pf_renderer` C interface |
 | Text | Core Text shaping/fallback/rasterization; grayscale + color-emoji atlas |
 | Core language | C17 core, Objective-C platform shell, no Swift |
-| Scripting | Chez Scheme 10.x (threaded, `tarm64osx`), R6RS libraries + R7RS shim |
+| Scripting | Chez Scheme 10.x (threaded, `tarm64osx`), R6RS libraries + R7RS shim; vendored as a submodule at `subprojects/chez` (v10.4.1), built via CMake ExternalProject |
 | Elisp compatibility | None. Emacs-familiar names, own Scheme API; owner's config gets ported |
 | Git | libgit2 for reads, `git` CLI for all mutations |
 | Async | GCD + CFRunLoop, FSEvents, kqueue; Scheme `await` on one-shot continuations; engines for preemption/`C-g` |
@@ -280,7 +280,7 @@ Estimated: usable prototype (M4) ≈ 3 weeks of sessions; widgets ≈ +4–5 wee
 
 | Risk | Mitigation |
 |---|---|
-| Hardened runtime vs Chez runtime codegen | Verify in M0; fallback entitlement or `interpret` for user code |
+| Hardened runtime vs Chez runtime codegen | **Verified in M0**: Chez maps code with `MAP_JIT`; `com.apple.security.cs.allow-jit` alone suffices (main + worker threads). Without it codegen traps (SIGTRAP). `macos.signing` test guards it |
 | Moving GC vs C pointers | Handles + ftypes only, `lock-object` for callbacks, GC stress builds |
 | R6RS immutable exports vs live hacking | Symbol-keyed registries, interaction environment |
 | Org files corrupted by partial support | Lossless round-trip tests over the owner's real notes |
@@ -305,6 +305,7 @@ profane/
 ├── packages/             dashboard, irc, listing
 ├── tools/profane-client/
 ├── packaging/
-├── tests/                C, SRFI-64, Metal golden images, org round-trip corpus
+├── tests/                C, SRFI-64 (minimal in-repo shim), Metal golden images, org round-trip corpus, macOS app integration
+├── cmake/                Chez.cmake (ExternalProject for subprojects/chez)
 └── CMakeLists.txt
 ```

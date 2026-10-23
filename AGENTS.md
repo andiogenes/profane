@@ -19,21 +19,32 @@ Layers (top to bottom):
 
 ## Current status
 
-Pre-M0: repository scaffold only. Work proceeds milestone by milestone (plan §9). Do not start work from a
-later milestone unless asked; when a task touches a later milestone's area, leave a seam, not an implementation.
+M0 (skeleton) on branch `m0-skeleton`: CMake build, vendored Chez, signed `.app` with hardened runtime +
+`allow-jit` (verified), Metal clear + Core Text hello line, socket REPL + `profane-client`. Work proceeds
+milestone by milestone (plan §9). Do not start work from a later milestone unless asked; when a task touches
+a later milestone's area, leave a seam, not an implementation.
 
 ## Commands
 
-Build system is CMake + Ninja (not yet created; M0 adds `CMakeLists.txt`).
+Build system is CMake + Ninja. Chez Scheme is a submodule (`subprojects/chez`, pinned to a release tag) built
+once per build tree by `cmake/Chez.cmake` (~90 s); after bumping it, delete `build/chez`.
 
 ```sh
+git submodule update --init --recursive                 # first checkout
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug   # configure
-cmake --build build                                     # build
+cmake --build build                                     # build + sign build/platform/macos/profane.app
 ctest --test-dir build --output-on-failure              # all tests
-clang-format -i <files>                                 # format C / ObjC
+ctest --test-dir build -L c                             # by label: c | scheme | macos
+clang-format -i <files>                                 # format C / ObjC (brew install clang-format)
 ```
 
-Update this section as soon as real targets, test labels or scripts exist.
+- Targets: `pf_core` (C core), `profane` (app bundle), `profane_signed` (codesign step), `profane-client`.
+- `-DPROFANE_CODESIGN_IDENTITY=...` selects the signing identity (default `-`, ad-hoc).
+- `profane --self-test` boots Scheme and checks JIT codegen under the hardened runtime; `--headless` runs
+  Scheme + REPL without a window; `--snapshot out.png` waits for the first on-screen frame, renders it
+  offscreen to PNG and quits (fails if AppKit never displayed the view).
+- REPL socket: `~/Library/Application Support/profane/repl.sock` (override with `PROFANE_REPL_SOCKET`; paths
+  are limited to 104 bytes). `profane-client --eval '(+ 1 2)'`, or pipe source into `profane-client`.
 
 ## Architecture rules (do not violate)
 
@@ -41,6 +52,8 @@ Update this section as soon as real targets, test labels or scripts exist.
   display snapshots and never touches the Scheme heap. Workers (GCD) post results back as C structs.
 - **FFI**: Scheme sees integer handles only, never raw C pointers. Callbacks into Scheme are `lock-object`ed.
   Chez's GC moves objects — never hold a Scheme object's address in C across a call that can allocate.
+  C calls Scheme only via `pf_scheme_call`, which goes through the guarded `pf-ffi-call` trampoline in
+  `scheme/boot.ss` (an exception escaping into C terminates the process).
 - **GC**: collections are deferred to post-frame/idle via `collect-request-handler`.
 - **Live redefinition**: commands, keymaps, vars, hooks, faces, modes live in symbol-keyed registries; keys bind
   symbols, not procedures. Don't capture procedures where a symbol lookup is expected.
@@ -68,7 +81,10 @@ Update this section as soon as real targets, test labels or scripts exist.
 ## Testing
 
 - `tests/c/` — C unit tests for `core/` (portable, run anywhere).
-- `tests/scheme/` — SRFI-64 suites for `scheme/profane/`.
+- `tests/scheme/*-test.ss` — SRFI-64 suites for `scheme/profane/`, run by the built `scheme` binary. SRFI 64 is
+  a minimal in-repo subset (`tests/scheme/lib/srfi/:64.sls`); extend it as suites need more.
+- `tests/macos/` — app integration scripts (signing/JIT self-test, socket REPL, on-screen frame + snapshot),
+  label `macos`; `macos.snapshot` opens a window, so it needs a GUI login session.
 - `tests/golden/` — Metal golden images (macOS only).
 - `tests/org-corpus/` — Org-lite lossless round-trip corpus.
 - Every bug fix gets a regression test. Core and Scheme tests must not require a GPU or a window.

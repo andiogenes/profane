@@ -2,7 +2,7 @@
 
 A GPU-accelerated, Emacs-like editor for macOS, scripted in Chez Scheme, with Magit-like Git porcelain.
 
-Status: pre-M0 (scaffold). See [`profane-plan.md`](profane-plan.md) for decisions, architecture and milestones.
+Status: M0 (skeleton) in progress. See [`profane-plan.md`](profane-plan.md) for decisions, architecture and milestones.
 
 ## Layout
 
@@ -19,4 +19,13 @@ tests/             C, SRFI-64, Metal golden images, Org round-trip corpus
 
 ## Requirements
 
-macOS 14+ on Apple Silicon, Xcode command-line tools, CMake, Ninja.
+macOS 14+ on Apple Silicon, Xcode (for the Metal compiler), CMake ≥ 3.28, Ninja.
+
+```sh
+git submodule update --init --recursive
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+ctest --test-dir build --output-on-failure
+open build/platform/macos/profane.app
+build/tools/profane-client/profane-client --eval '(scheme-version)'
+```
