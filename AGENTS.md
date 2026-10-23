@@ -34,7 +34,7 @@ git submodule update --init --recursive                 # first checkout
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug   # configure
 cmake --build build                                     # build + sign build/platform/macos/profane.app
 ctest --test-dir build --output-on-failure              # all tests
-ctest --test-dir build -L '^c$'                         # by label (a regex): c | scheme | macos
+ctest --test-dir build -L '^c$'                         # by label (a regex): c | scheme | macos | screen
 clang-format -i <files>                                 # format C / ObjC (brew install clang-format)
 ```
 
@@ -89,6 +89,8 @@ clang-format -i <files>                                 # format C / ObjC (brew 
   (`tests/scheme/lib/srfi/:64.sls`); extend it as suites need more.
 - `tests/macos/` — app integration scripts (signing/JIT self-test, socket REPL, on-screen frame + snapshot),
   label `macos`; `macos.snapshot` opens a window, so it needs a GUI login session.
+- `tests/macos/screen.sh` (label `screen`) — checks what the window server actually shows; skipped unless
+  `PROFANE_SCREEN_TESTS=1` (needs Screen Recording permission). Run it after touching presentation/redisplay.
 - `tests/golden/` — Metal golden images (macOS only).
 - `tests/org-corpus/` — Org-lite lossless round-trip corpus.
 - Every bug fix gets a regression test. Core and Scheme tests must not require a GPU or a window.

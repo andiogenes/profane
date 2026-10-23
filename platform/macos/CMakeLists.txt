@@ -41,6 +41,7 @@ add_executable(profane MACOSX_BUNDLE
   PFMetalRenderer.m
   PFReplServer.m
   PFScheme.m
+  PFShaper.m
   ProfaneView.m
   ${PROFANE_RESOURCES})
 

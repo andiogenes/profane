@@ -18,7 +18,9 @@
           marker? marker-buffer marker-position copy-marker set-marker! delete-marker!
           mark set-mark!
           undo-boundary undo redo buffer-modified? set-buffer-unmodified!
-          find-file-noselect save-buffer)
+          find-file-noselect save-buffer
+          ;; internal, for other (profane ...) libraries
+          %buffer-handle %buffer-point-marker)
   (import (chezscheme) (profane native))
 
   ;; ---- buffers ----
@@ -36,6 +38,8 @@
   (define buffer-order '())                              ; most recently created first
 
   (define (buffer-live? b) (and (buffer-handle b) #t))
+  (define (%buffer-handle b) (live-handle b '%buffer-handle))
+  (define (%buffer-point-marker b) (buffer-point-marker b))
 
   (define (live-handle b who)
     (or (buffer-handle b) (error who "buffer has been killed" (buffer-name b))))

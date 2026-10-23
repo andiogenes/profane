@@ -5,7 +5,7 @@
 (library-directories (list (cons pf-scheme-dir pf-scheme-dir)))
 (library-extensions '((".sls" . ".so")))
 
-(import (profane repl) (profane buffer))
+(import (profane repl) (profane buffer) (profane window))
 
 ;;; FFI trampoline. An exception escaping into C would terminate the process, so every call
 ;;; from C lands here. Returns a UTF-8 bytevector for a string result, #t for any other
@@ -49,6 +49,19 @@
 
 (define (pf-hello-text)
   (format "Hello, profane — ~a" (scheme-version)))
+
+;;; Called by the shell once its window exists: show *scratch*.
+(define (pf-startup)
+  (let ([scratch (get-buffer-create "*scratch*")])
+    (with-current-buffer scratch
+      (when (zero? (buffer-size))
+        (insert ";; " (pf-hello-text) "\n"
+                ";; This buffer is for notes you don't want to save. Evaluate Scheme with\n"
+                ";; profane-client, e.g.: profane-client --eval '(insert \"hi\")'\n\n")
+        (set-buffer-unmodified!)))
+    (set-buffer scratch)
+    (let ([w (selected-window)])
+      (when w (set-window-buffer! w scratch)))))
 
 ;;; Socket REPL sessions, keyed by connection id (an integer chosen by the shell).
 

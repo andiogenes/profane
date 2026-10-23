@@ -12,6 +12,7 @@ typedef uint32_t pf_handle;
 
 typedef enum pf_handle_kind {
     PF_HANDLE_TEXT = 1,
+    PF_HANDLE_WINDOW = 2,
 } pf_handle_kind;
 
 pf_handle pf_handle_new(pf_handle_kind kind, void *object); /* 0 if out of memory or slots */

@@ -294,12 +294,29 @@ Layers: libgit2 reader (workers, ftype structs) → git CLI runner (`GIT_EDITOR`
 - **Fonts** are integer ids (`pf_font`); fallback fonts chosen by Core Text during shaping are registered on the fly.
 - **View stack**: `ProfaneView` = base Metal layer / native-view host / transparent overlay Metal layer (ignores the
   mouse). Shaping is still done ad hoc in the view until the layout cache (next M1 item) replaces it.
+- **Present inside an explicit CA transaction**: Metal layers use `presentsWithTransaction`, and the render thread
+  presents each drawable between `[CATransaction begin]`/`commit` after `waitUntilScheduled`. Presenting straight
+  from the command buffer on the render thread was not reliably delivered early in a window's life — the window kept
+  its first frame (blank `*scratch*` ~9/10 launches; edits right after launch never shown). Covered by the opt-in
+  `screen.first-frames` test, which checks the window server's actual pixels.
 - **Frames are confirmed, not assumed**: a frame presented before the window is on screen is dropped with no error
   (and `presentedTime` reads 0 even for visible windowed frames, so it can't tell). A committed frame counts as shown
   only when its presented handler fires; otherwise it is re-presented every ~250 ms, up to 10 times. Found as an
   intermittent blank window (≈1 in 3 launches right after another instance quit).
 - Verified: emoji/CJK fallback render, overlay composites over base on screen and in `--snapshot`, TSan-clean
   across startup, live resizes and snapshots.
+
+## 8c. Layout and windows (M1)
+
+- **Layout cache** (`core/layout`): lines shaped into glyphs + a caret x per character, cached by *content* (font +
+  code points) in an LRU; an edit only misses for changed lines, identical lines share a layout, and nothing is
+  keyed by line number. Entries used in the current frame are never evicted mid-frame. Tabs expand in the core;
+  shaping (ligatures, fallback) is behind `pf_shaper`, Core Text on macOS, a fake monospace shaper in C tests.
+- **Window display** (`core/display/pf_window`): renders a buffer into a display list, scrolls minimally to keep
+  point visible, skips rendering when text snapshot, point, size and style are unchanged, and draws Emacs's filled
+  box cursor. Lines are truncated (no soft wrap yet); at most 4096 characters per line are shaped.
+- Redisplay runs after Scheme work from the main run loop's idle observer, so REPL edits show up immediately.
+  Scheme picks what a window shows via `(profane window)`; the shell owns the window (one per frame in M1).
 
 ## 9. Milestones
 

@@ -267,7 +267,13 @@ uint64_t pf_renderer_presented_frames(const pf_renderer *r) {
         return YES;
     }
     if (!CGSizeEqualToSize(layer.drawableSize, px)) {
+        /* Layer changes on a background thread open an implicit transaction that nothing
+         * commits (only the main run loop does), leaving the layer stale until some unrelated
+         * main-thread transaction flushes it. Commit explicitly. */
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
         layer.drawableSize = px;
+        [CATransaction commit];
     }
     id<CAMetalDrawable> drawable = [layer nextDrawable];
     if (drawable && _dropDrawables > 0) {
@@ -289,8 +295,17 @@ uint64_t pf_renderer_presented_frames(const pf_renderer *r) {
         atomic_store(&self->_confirmed[index], generation);
         atomic_fetch_add(&self->_presented, 1);
     }];
-    [commands presentDrawable:drawable];
+    /* Present inside an explicit, committed transaction (the layers use presentsWithTransaction).
+     * Presenting straight from the command buffer on this thread was not reliably delivered
+     * to the window server early in a window's life: the window kept showing its first frame
+     * and dropped later ones (blank *scratch* at startup ~9 in 10 launches; edits made right
+     * after launch never appeared). */
     [commands commit];
+    [commands waitUntilScheduled];
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [drawable present];
+    [CATransaction commit];
     _lastCommands = commands;
     [_encodeLock unlock];
     return YES;

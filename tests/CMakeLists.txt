@@ -15,6 +15,10 @@ add_executable(test_display c/test_display.c)
 target_link_libraries(test_display PRIVATE pf_core)
 add_test(NAME c.display COMMAND test_display)
 
+add_executable(test_layout c/test_layout.c)
+target_link_libraries(test_layout PRIVATE pf_core)
+add_test(NAME c.layout COMMAND test_layout)
+
 add_executable(test_scheme c/test_scheme.c)
 target_link_libraries(test_scheme PRIVATE pf_core_whole)
 target_compile_definitions(test_scheme PRIVATE
@@ -22,10 +26,10 @@ target_compile_definitions(test_scheme PRIVATE
   PF_TEST_SCHEME_DIR="${PROJECT_SOURCE_DIR}/scheme")
 add_test(NAME c.scheme COMMAND test_scheme)
 
-foreach(_t IN ITEMS test_utf8 test_text test_text_undo test_display test_scheme)
+foreach(_t IN ITEMS test_utf8 test_text test_text_undo test_display test_layout test_scheme)
   target_compile_options(${_t} PRIVATE ${PROFANE_WARNINGS})
 endforeach()
-set_tests_properties(c.utf8 c.text c.text_undo c.display c.scheme PROPERTIES LABELS c)
+set_tests_properties(c.utf8 c.text c.text_undo c.display c.layout c.scheme PROPERTIES LABELS c)
 
 # Scheme suites (label: scheme), run by the standalone Chez against the source tree.
 file(GLOB _scheme_suites CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/scheme/*-test.ss")
@@ -59,3 +63,14 @@ add_test(NAME macos.repl
 add_test(NAME macos.snapshot
   COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/macos/snapshot.sh" "$<TARGET_BUNDLE_DIR:profane>")
 set_tests_properties(macos.signing macos.repl macos.snapshot PROPERTIES LABELS macos TIMEOUT 60)
+
+# On-screen checks (label: screen), opt-in via PROFANE_SCREEN_TESTS=1: need Screen Recording.
+add_executable(png_ink macos/png_ink.m)
+target_compile_options(png_ink PRIVATE -fobjc-arc ${PROFANE_WARNINGS})
+target_link_libraries(png_ink PRIVATE "-framework CoreGraphics" "-framework Foundation"
+  "-framework ImageIO")
+add_test(NAME screen.first-frames
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/macos/screen.sh" "$<TARGET_BUNDLE_DIR:profane>"
+    "$<TARGET_FILE:profane-client>" "$<TARGET_FILE:png_ink>")
+set_tests_properties(screen.first-frames PROPERTIES LABELS screen TIMEOUT 120
+  SKIP_RETURN_CODE 77)

@@ -1,8 +1,11 @@
 # Code Scheme reaches through foreign-procedure. It must not depend on Chez, so that it can also
 # be built as a dylib for Scheme tests run by the standalone `scheme` binary.
 set(PF_NATIVE_SOURCES
+  display/pf_window.c
   embed/pf_buffer_ffi.c
   embed/pf_handles.c
+  embed/pf_window_ffi.c
+  layout/pf_layout.c
   render/pf_display.c
   text/pf_text.c
   text/pf_utf8.c)
@@ -13,7 +16,9 @@ add_library(pf_core STATIC
   ${PF_NATIVE_SOURCES})
 
 target_include_directories(pf_core PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}/display"
   "${CMAKE_CURRENT_SOURCE_DIR}/embed"
+  "${CMAKE_CURRENT_SOURCE_DIR}/layout"
   "${CMAKE_CURRENT_SOURCE_DIR}/render"
   "${CMAKE_CURRENT_SOURCE_DIR}/text")
 target_compile_options(pf_core PRIVATE ${PROFANE_WARNINGS})
@@ -27,7 +32,9 @@ target_link_libraries(pf_core_whole INTERFACE "$<LINK_LIBRARY:WHOLE_ARCHIVE,pf_c
 
 add_library(pf_native SHARED ${PF_NATIVE_SOURCES})
 target_include_directories(pf_native PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/display"
   "${CMAKE_CURRENT_SOURCE_DIR}/embed"
+  "${CMAKE_CURRENT_SOURCE_DIR}/layout"
   "${CMAKE_CURRENT_SOURCE_DIR}/render"
   "${CMAKE_CURRENT_SOURCE_DIR}/text")
 target_compile_options(pf_native PRIVATE ${PROFANE_WARNINGS})

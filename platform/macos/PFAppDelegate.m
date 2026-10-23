@@ -16,6 +16,7 @@
     BOOL _schemeReady;
     NSWindow *_window;
     PFReplServer *_repl;
+    ProfaneView *_view;
     CFRunLoopObserverRef _idleObserver;
 }
 
@@ -63,9 +64,9 @@
         [NSApp terminate:nil];
         return;
     }
-    NSString *hello = PFSchemeCallString("pf-hello-text");
-    view.text = hello ? hello : @"Hello, profane";
     _window.contentView = view;
+    _view = view;
+    pf_scheme_call("pf-startup", NULL, 0, NULL); /* shows *scratch* in the selected window */
     [_window center];
     [_window makeKeyAndOrderFront:nil];
     [NSApp activate];
@@ -125,6 +126,7 @@
         ^(CFRunLoopObserverRef observer, CFRunLoopActivity activity) {
             (void)observer, (void)activity;
             pf_scheme_idle();
+            [self->_view redisplay];
         });
     CFRunLoopAddObserver(CFRunLoopGetMain(), _idleObserver, kCFRunLoopCommonModes);
 }

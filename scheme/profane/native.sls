@@ -9,7 +9,8 @@
   (export %buf-new %buf-free %buf-chars %buf-bytes %buf-lines %buf-insert %buf-delete
           %buf-range-bytes %buf-copy %buf-char-at %buf-line-start %buf-line-of
           %buf-marker-new %buf-marker-free %buf-marker-pos %buf-marker-set
-          %buf-undo-boundary %buf-undo %buf-redo %buf-modified %buf-mark-saved)
+          %buf-undo-boundary %buf-undo %buf-redo %buf-modified %buf-mark-saved
+          %win-selected %win-set-buffer %win-top-line %win-body-lines)
   (import (chezscheme))
 
   (define loaded
@@ -43,4 +44,8 @@
   (define-native %buf-undo "pf_buf_undo" (unsigned-32) integer-64)
   (define-native %buf-redo "pf_buf_redo" (unsigned-32) integer-64)
   (define-native %buf-modified "pf_buf_modified" (unsigned-32) int)
-  (define-native %buf-mark-saved "pf_buf_mark_saved" (unsigned-32) int))
+  (define-native %buf-mark-saved "pf_buf_mark_saved" (unsigned-32) int)
+  (define-native %win-selected "pf_win_selected" () unsigned-32)
+  (define-native %win-set-buffer "pf_win_set_buffer" (unsigned-32 unsigned-32 unsigned-32) int)
+  (define-native %win-top-line "pf_win_top_line" (unsigned-32) integer-64)
+  (define-native %win-body-lines "pf_win_body_lines" (unsigned-32) integer-64))

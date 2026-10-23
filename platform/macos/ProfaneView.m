@@ -6,8 +6,14 @@
 
 #import "PFFont.h"
 #import "PFMetalRenderer.h"
+#import "PFShaper.h"
+
+#include <math.h>
 
 #include "pf_display.h"
+#include "pf_layout.h"
+#include "pf_window.h"
+#include "pf_window_ffi.h"
 
 /* Interim colors (modus-operandi / modus-vivendi) until theme design tokens land in M2. */
 typedef struct PFPalette {
@@ -18,6 +24,7 @@ static const PFPalette kLightPalette = {0xFFFFFFFF, 0x000000FF};
 static const PFPalette kDarkPalette = {0x000000FF, 0xFFFFFFFF};
 
 static const float kFontSize = 14.0f;
+static const size_t kLayoutCacheLines = 4096;
 
 /* A view backed by a CAMetalLayer that the render thread draws; AppKit never displays it. */
 @interface PFMetalLayerView : NSView
@@ -46,6 +53,7 @@ static const float kFontSize = 14.0f;
     layer.device = _device;
     layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
     layer.framebufferOnly = YES;
+    layer.presentsWithTransaction = YES; /* see -[PFMetalRenderer present:onLayer:index:] */
     layer.opaque = _opaque;
     CGColorSpaceRef srgb = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     layer.colorspace = srgb;
@@ -71,6 +79,8 @@ static const float kFontSize = 14.0f;
     PFMetalLayerView *_overlay;
     PFMetalRenderer *_metal;
     pf_font_id _font;
+    pf_layout_cache *_cache;
+    pf_window *_window;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame {
@@ -98,13 +108,20 @@ static const float kFontSize = 14.0f;
         return nil;
     }
     _font = pf_font_open("JetBrains Mono", kFontSize);
-    _text = @"";
+    _cache = pf_layout_cache_new(PFCoreTextShaper(), kLayoutCacheLines, 8);
+    pf_window_style style = [self windowStyle];
+    _window = pf_window_new(_cache, &style);
+    _windowHandle = pf_win_register(_window);
+    pf_win_set_selected(_windowHandle);
     return self;
 }
 
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self];
     [_metal stop];
+    pf_win_unregister(_windowHandle);
+    pf_window_free(_window);
+    pf_layout_cache_free(_cache);
 }
 
 - (pf_renderer *)renderer {
@@ -117,11 +134,6 @@ static const float kFontSize = 14.0f;
 
 - (BOOL)isFlipped {
     return YES;
-}
-
-- (void)setText:(NSString *)text {
-    _text = [text copy];
-    [self rebuild];
 }
 
 - (void)viewWillMoveToWindow:(NSWindow *)window {
@@ -179,6 +191,25 @@ static const float kFontSize = 14.0f;
     _overlay.layer.contentsScale = scale;
 }
 
+- (pf_window_style)windowStyle {
+    pf_font_metrics m = {0};
+    pf_font_metrics_get(_font, &m);
+    PFPalette palette = [self palette];
+    /* Whole-point line boxes keep rows pixel-aligned at every scale. */
+    return (pf_window_style){
+        .font = _font,
+        .ascent = roundf(m.ascent),
+        .descent = m.descent,
+        .line_height = ceilf(m.ascent + m.descent + m.leading),
+        .cell_width = m.advance,
+        .pad_left = 4,
+        .pad_top = 2,
+        .background = palette.background,
+        .foreground = palette.foreground,
+        .cursor = palette.foreground,
+    };
+}
+
 - (PFPalette)palette {
     NSAppearanceName name = [self.effectiveAppearance
         bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
@@ -190,8 +221,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
                              ((c >> 8) & 0xFF) / 255.0, (c & 0xFF) / 255.0);
 }
 
-/* Rebuilds and submits both layers' display lists. Interim content until the display engine
- * (layout cache, windows) lands: one centered line of text. */
+/* Style or geometry changed: update the window and the empty overlay, then redraw. */
 - (void)rebuild {
     if (!self.window || !_metal) {
         return;
@@ -203,12 +233,10 @@ static CGColorRef create_cgcolor(uint32_t c) {
     _base.layer.backgroundColor = background; /* shows under a resize until the next frame */
     CGColorRelease(background);
 
-    pf_display *base =
-        pf_display_new((float)size.width, (float)size.height, scale, palette.background);
-    [self addLine:_text toDisplay:base size:size color:palette.foreground];
-    const pf_display *frozen = pf_display_finish(base);
-    pf_renderer_submit(_metal.renderer, PF_LAYER_BASE, frozen);
-    pf_display_release(frozen);
+    pf_window_style style = [self windowStyle];
+    pf_window_set_style(_window, &style);
+    pf_window_set_size(_window, (float)size.width, (float)size.height, scale);
+    [self redisplay];
 
     const pf_display *overlay =
         pf_display_finish(pf_display_new((float)size.width, (float)size.height, scale, 0));
@@ -216,43 +244,15 @@ static CGColorRef create_cgcolor(uint32_t c) {
     pf_display_release(overlay);
 }
 
-- (void)addLine:(NSString *)text
-      toDisplay:(pf_display *)display
-           size:(NSSize)size
-          color:(uint32_t)color {
-    CTFontRef font = PFFontGet(_font);
-    if (!font || text.length == 0) {
+- (void)redisplay {
+    if (!self.window || !_metal) {
         return;
     }
-    NSDictionary *attrs = @{(__bridge id)kCTFontAttributeName : (__bridge id)font};
-    NSAttributedString *string = [[NSAttributedString alloc] initWithString:text attributes:attrs];
-    CTLineRef line = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)string);
-    CGFloat ascent = 0, descent = 0;
-    double width = CTLineGetTypographicBounds(line, &ascent, &descent, NULL);
-    float x0 = (float)floor((size.width - width) / 2);
-    float baseline = (float)floor((size.height - (ascent + descent)) / 2 + ascent);
-
-    CFArrayRef runs = CTLineGetGlyphRuns(line);
-    for (CFIndex r = 0; r < CFArrayGetCount(runs); r++) {
-        CTRunRef run = CFArrayGetValueAtIndex(runs, r);
-        /* Core Text may substitute a fallback font for some characters (emoji, CJK). */
-        CTFontRef runFont = CFDictionaryGetValue(CTRunGetAttributes(run), kCTFontAttributeName);
-        pf_font_id fid = runFont ? PFFontIdForCTFont(runFont) : _font;
-        CFIndex n = CTRunGetGlyphCount(run);
-        if (n <= 0) {
-            continue;
-        }
-        CGGlyph *glyphs = malloc((size_t)n * sizeof *glyphs);
-        CGPoint *positions = malloc((size_t)n * sizeof *positions);
-        CTRunGetGlyphs(run, CFRangeMake(0, n), glyphs);
-        CTRunGetPositions(run, CFRangeMake(0, n), positions);
-        for (CFIndex i = 0; i < n; i++) {
-            pf_display_glyph(display, fid, glyphs[i], x0 + (float)positions[i].x, baseline, color);
-        }
-        free(glyphs);
-        free(positions);
+    const pf_display *d = pf_window_redisplay(_window);
+    if (d) {
+        pf_renderer_submit(_metal.renderer, PF_LAYER_BASE, d);
+        pf_display_release(d);
     }
-    CFRelease(line);
 }
 
 - (BOOL)writeSnapshotToURL:(NSURL *)url {
