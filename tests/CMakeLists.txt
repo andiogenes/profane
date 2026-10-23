@@ -7,6 +7,10 @@ add_executable(test_text c/test_text.c)
 target_link_libraries(test_text PRIVATE pf_core)
 add_test(NAME c.text COMMAND test_text)
 
+add_executable(test_text_undo c/test_text_undo.c)
+target_link_libraries(test_text_undo PRIVATE pf_core)
+add_test(NAME c.text_undo COMMAND test_text_undo)
+
 add_executable(test_scheme c/test_scheme.c)
 target_link_libraries(test_scheme PRIVATE pf_core)
 target_compile_definitions(test_scheme PRIVATE
@@ -14,10 +18,10 @@ target_compile_definitions(test_scheme PRIVATE
   PF_TEST_SCHEME_DIR="${PROJECT_SOURCE_DIR}/scheme")
 add_test(NAME c.scheme COMMAND test_scheme)
 
-foreach(_t IN ITEMS test_utf8 test_text test_scheme)
+foreach(_t IN ITEMS test_utf8 test_text test_text_undo test_scheme)
   target_compile_options(${_t} PRIVATE ${PROFANE_WARNINGS})
 endforeach()
-set_tests_properties(c.utf8 c.text c.scheme PROPERTIES LABELS c)
+set_tests_properties(c.utf8 c.text c.text_undo c.scheme PROPERTIES LABELS c)
 
 # Scheme suites (label: scheme), run by the standalone Chez against the source tree.
 file(GLOB _scheme_suites CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/scheme/*-test.ss")

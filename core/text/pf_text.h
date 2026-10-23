@@ -30,6 +30,37 @@ int pf_text_insert(pf_text *text, size_t pos, const char *bytes, size_t len);
 /* Deletes characters [START, END) (clamped). */
 void pf_text_delete(pf_text *text, size_t start, size_t end);
 
+/* ---- markers ----
+ * A marker is a position that follows edits. Text inserted exactly at a marker goes after it
+ * unless the marker ADVANCES (Emacs insertion type t). Deleting text around a marker moves it to
+ * the start of the deletion. Handles are never 0; freed or foreign handles are rejected. */
+typedef uint32_t pf_marker;
+
+pf_marker pf_marker_new(pf_text *text, size_t pos, int advances); /* 0 if out of memory */
+void pf_marker_free(pf_text *text, pf_marker marker);
+size_t pf_marker_pos(const pf_text *text, pf_marker marker); /* SIZE_MAX if invalid */
+int pf_marker_set(pf_text *text, pf_marker marker, size_t pos); /* -1 if invalid */
+
+/* ---- undo ----
+ * Edits accumulate into the open undo group until a boundary (the command loop places one
+ * after each command). Undo reverses the group by grafting the removed text back in (O(log n)
+ * per change); editing after an undo starts a new branch, so no state is lost (undo tree).
+ * Markers move with the reversed changes. History is unbounded for now (limits come with M2
+ * vars); it costs about as much memory as the text it deleted. */
+void pf_text_undo_boundary(pf_text *text);
+
+/* Each returns 1 and sets *POS (if non-NULL) to where point belongs, or 0 if there is nothing
+ * to undo/redo. Redo enters the most recently created or left branch. */
+int pf_text_undo(pf_text *text, size_t *pos);
+int pf_text_redo(pf_text *text, size_t *pos);
+size_t pf_text_redo_branches(const pf_text *text);
+int pf_text_select_redo_branch(pf_text *text, size_t index); /* -1 if out of range */
+
+/* Modified means the undo history has moved off the state of the last pf_text_mark_saved (or
+ * creation); undoing back to that state makes the text unmodified again. */
+void pf_text_mark_saved(pf_text *text);
+int pf_text_modified(const pf_text *text);
+
 /* Current snapshot, borrowed: valid until the next edit or pf_text_free. Retain to keep it. */
 const pf_text_snapshot *pf_text_current(const pf_text *text);
 

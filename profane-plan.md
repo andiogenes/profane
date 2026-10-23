@@ -264,6 +264,13 @@ Layers: libgit2 reader (workers, ftype structs) → git CLI runner (`GIT_EDITOR`
 - **Positions** are characters (UTF-8 units), as in Emacs; byte offsets are available for search/regex. Invalid
   bytes count as one character each, per piece, and are never rewritten (lossless saves). Measured at -O2 on a 64 MB
   file: load 37 ms, typing 0.55 µs/insert, random edit ~6 µs, line lookup ~0.5 µs.
+- **Markers**: integer handles (slot + generation, stale handles rejected) with Emacs insertion types; adjusted
+  linearly per edit — fine for point/mark/window starts; overlays/intervals get their own structure later.
+- **Undo tree** in C: changes accumulate into a group until `pf_text_undo_boundary` (Scheme's command loop decides
+  grouping); typing and backspace runs coalesce. Each change keeps the *removed subtree*, and undo/redo graft
+  subtrees back in O(log n), so history costs about what it deleted (100k random edits: +16 MB of undo). Keeping a
+  whole root per undo state was tried first and rejected: it pinned ~24 KB per state (141 MB for the same run).
+  Editing after undo branches instead of discarding; "modified" is a per-state version compare.
 
 ## 9. Milestones
 
