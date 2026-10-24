@@ -13,6 +13,7 @@ set(PF_NATIVE_SOURCES
   embed/pf_handles.c
   embed/pf_input.c
   embed/pf_window_ffi.c
+  fs/pf_fs.c
   layout/pf_layout.c
   process/pf_process.c
   render/pf_display.c
@@ -29,6 +30,7 @@ target_include_directories(pf_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/async"
   "${CMAKE_CURRENT_SOURCE_DIR}/display"
   "${CMAKE_CURRENT_SOURCE_DIR}/embed"
+  "${CMAKE_CURRENT_SOURCE_DIR}/fs"
   "${CMAKE_CURRENT_SOURCE_DIR}/layout"
   "${CMAKE_CURRENT_SOURCE_DIR}/process"
   "${CMAKE_CURRENT_SOURCE_DIR}/render"
@@ -47,6 +49,7 @@ target_include_directories(pf_native PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/async"
   "${CMAKE_CURRENT_SOURCE_DIR}/display"
   "${CMAKE_CURRENT_SOURCE_DIR}/embed"
+  "${CMAKE_CURRENT_SOURCE_DIR}/fs"
   "${CMAKE_CURRENT_SOURCE_DIR}/layout"
   "${CMAKE_CURRENT_SOURCE_DIR}/process"
   "${CMAKE_CURRENT_SOURCE_DIR}/render"

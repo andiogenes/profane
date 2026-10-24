@@ -28,6 +28,7 @@
           %async-wake-ack %async-rewake
           %proc-spawn %proc-pid %proc-write %proc-eof %proc-signal %proc-resize %proc-consumed
           %proc-release
+          %fs-stat %fs-readlink %fs-owner %fs-copy %fs-rename %fs-mkdir %fs-remove
           %face-define %face-role-set %buf-put-prop %buf-get-prop %display-set-line-spacing)
   (import (chezscheme))
 
@@ -59,6 +60,13 @@
   (define-native %proc-resize "pf_proc_resize" (unsigned-32 unsigned-32 unsigned-32) int)
   (define-native %proc-consumed "pf_proc_consumed" (unsigned-32 size_t) int)
   (define-native %proc-release "pf_proc_release" (unsigned-32) int)
+  (define-native %fs-stat "pf_fs_stat" (u8* size_t int u8*) int)
+  (define-native %fs-readlink "pf_fs_readlink" (u8* size_t u8* size_t) integer-64)
+  (define-native %fs-owner "pf_fs_owner" (int unsigned-32 u8* size_t) integer-64)
+  (define-native %fs-copy "pf_fs_copy" (u8* size_t u8* size_t int) int)
+  (define-native %fs-rename "pf_fs_rename" (u8* size_t u8* size_t) int)
+  (define-native %fs-mkdir "pf_fs_mkdir" (u8* size_t int) int)
+  (define-native %fs-remove "pf_fs_remove" (u8* size_t) int)
   (define-native %buf-new "pf_buf_new" (u8* size_t) unsigned-32)
   (define-native %buf-free "pf_buf_free" (unsigned-32) int)
   (define-native %buf-chars "pf_buf_chars" (unsigned-32) integer-64)

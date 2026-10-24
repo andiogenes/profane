@@ -18,6 +18,7 @@
           marker? marker-buffer marker-position copy-marker set-marker! delete-marker!
           mark set-mark!
           erase-buffer buffer-edit-count
+          buffer-read-only? set-buffer-read-only! with-inhibit-read-only
           undo-boundary undo redo buffer-disable-undo buffer-enable-undo
           buffer-modified? set-buffer-unmodified!
           find-file-noselect save-buffer set-visited-file-name! file-name-nondirectory
@@ -30,7 +31,8 @@
   (define-record-type (buffer %make-buffer buffer?)
     (fields (mutable name) (mutable handle) (mutable file-name)
             (mutable point-marker) (mutable mark-marker)
-            locals) ; buffer-local variable values: symbol -> value, see (profane var)
+            locals  ; buffer-local variable values: symbol -> value, see (profane var)
+            (mutable read-only))
     (nongenerative profane-buffer))
 
   (define-record-type (marker %make-marker marker?)
@@ -63,7 +65,7 @@
   (define (new-buffer name bytes)
     (let ([h (%buf-new bytes (bytevector-length bytes))])
       (when (zero? h) (error 'generate-new-buffer "out of memory" name))
-      (let ([b (%make-buffer name h #f #f #f (make-eq-hashtable))])
+      (let ([b (%make-buffer name h #f #f #f (make-eq-hashtable) #f)])
         (buffer-point-marker-set! b (%buf-marker-new h 0 #f))
         (hashtable-set! buffers name b)
         (set! buffer-order (cons b buffer-order))
@@ -128,6 +130,24 @@
 
   (define (position-of x) (if (marker? x) (marker-position x) x))
 
+  ;; ---- read-only buffers ----
+  ;; A read-only buffer refuses insertions, deletions and undo (an error, as in Emacs); code that
+  ;; maintains such a buffer (dired redrawing its listing) edits inside with-inhibit-read-only.
+
+  (define inhibit-read-only #f)
+  (define (buffer-read-only?) (buffer-read-only (current-buffer)))
+  (define (set-buffer-read-only! flag) (buffer-read-only-set! (current-buffer) (and flag #t)))
+
+  (define (with-inhibit-read-only thunk)
+    (let ([old inhibit-read-only])
+      (dynamic-wind (lambda () (set! inhibit-read-only #t))
+                    thunk
+                    (lambda () (set! inhibit-read-only old)))))
+
+  (define (check-writable who)
+    (when (and (buffer-read-only (current-buffer)) (not inhibit-read-only))
+      (error who "buffer is read-only" (buffer-name (current-buffer)))))
+
   ;; ---- text ----
 
   (define (insert . things)
@@ -137,6 +157,7 @@
                        [else (error 'insert "not a string or character" x)])]
               [bv (string->utf8 s)]
               [at (point)])
+         (check-writable 'insert)
          (unless (zero? (%buf-insert (h 'insert) at bv (bytevector-length bv)))
            (error 'insert "out of memory"))
          (note-edit!)
@@ -159,7 +180,7 @@
 
   (define (delete-region start end)
     (let-values ([(lo hi) (check-region 'delete-region start end)])
-      (when (< lo hi) (note-edit!))
+      (when (< lo hi) (check-writable 'delete-region) (note-edit!))
       (%buf-delete (h 'delete-region) lo hi)))
 
   (define delete-char
@@ -308,6 +329,7 @@
   (define (undo-boundary) (%buf-undo-boundary (h 'undo-boundary)) (void))
 
   (define (undo-or-redo native who)
+    (check-writable who)
     (let ([pos (native (h who))])
       (when (< pos 0) (error who (if (eq? who 'undo) "no further undo information"
                                      "no further redo information")))

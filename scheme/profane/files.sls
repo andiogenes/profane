@@ -16,7 +16,7 @@
 (library (profane files)
   (export expand-file-name abbreviate-file-name file-name-directory file-name-nondirectory
           file-name-as-directory directory-name? default-directory read-file-name
-          directory-entries)
+          directory-entries set-directory-handler! visit-directory)
   (import (chezscheme) (profane buffer) (profane window) (profane command) (profane command-loop)
           (profane keymap) (profane minibuffer) (profane var))
 
@@ -156,6 +156,13 @@
                                        (let ([input (minibuffer-contents)])
                                          (if (or (string=? input "") (directory-name? input)) #f 0)))))]))
 
+  ;; What visiting a directory does: (profane dired) installs itself here (it needs this library
+  ;; for reading file names, so it cannot be imported). Until then a message says there is none.
+  (define directory-handler
+    (lambda (path) (message "~a is a directory (dired is not available)" path)))
+  (define (set-directory-handler! proc) (set! directory-handler proc))
+  (define (visit-directory path) (directory-handler path))
+
   ;; ---- commands ----
 
   (define-command (find-file)
@@ -163,8 +170,7 @@
     (read-file-name "Find file: "
                     (lambda (path)
                       (cond
-                        [(directory-name? path) (message "~a is a directory (dired is not available yet)" path)]
-                        [(file-directory? path) (message "~a is a directory (dired is not available yet)" path)]
+                        [(or (directory-name? path) (file-directory? path)) (visit-directory path)]
                         [else (switch-to-buffer (find-file-noselect path))]))))
 
   (define-command (save-buffer)

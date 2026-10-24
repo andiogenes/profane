@@ -360,4 +360,7 @@
       [else
        (when (current-message) (message #f))
        (set! input-text text)
-       (run-command 'self-insert-command)])))
+       ;; A mode may bind a plain character (dired's n, m, d): the command runs instead of
+       ;; inserting it. Everything else is typed.
+       (let ([b (and (= (string-length text) 1) (key-binding (list (char-key (string-ref text 0)))))])
+         (run-command (if (symbol? b) b 'self-insert-command)))])))

@@ -458,7 +458,7 @@ the renderer tags the frame answering each event and records when it was submitt
   whole component, M-DEL a component (or a word in other prompts), TAB takes the first candidate if none is selected, `//`
   or `/~` in the input starts over at the root or home. With the input empty or ending in `/` nothing is selected, so RET
   finishes with that directory; C-n then selects the first entry. Commands: `find-file` (`C-x C-f`; a directory is
-  refused until dired, M3), `save-buffer` (`C-x C-s`; asks where when the buffer has no file), `write-file`
+  now opens dired, M3 item 6a), `save-buffer` (`C-x C-s`; asks where when the buffer has no file), `write-file`
   (`C-x C-w`; `set-visited-file-name!`). *Not yet:* partial-component completion (`~/Re/pr`), file annotations
   (size, dates), `find-file-other-window`, `insert-file`, `save-some-buffers` and a prompt when killing a modified
   buffer, auto-save and backups, file watching, remote paths, and symlink-aware names (`truename`).
@@ -768,6 +768,45 @@ Decisions:
 - **Verified**: `secrets-test.ss` (the API over a fake backend, the no-backend errors) and `macos.sh` against the real login
   keychain with a throwaway service deleted afterwards (missing, set with non-ASCII text, replace, wrong account, delete
   twice); the keychain held no leftovers afterwards.
+
+**Item 6a: dired** (`core/fs/pf_fs.*`, `(profane fs)`, `(profane dired)`; read-only buffers in `(profane buffer)`). Decisions:
+
+- **Buffers, not native views** (owner's choice, 2026-10-24): dired is a read-only text buffer in `dired-mode`; the sidebar
+  (item 6b) will be a tree buffer in a side window; M7 rebuilds the sidebar on the widget toolkit. Two items (6a dired, 6b
+  sidebar and buffer menu), one commit each.
+- **File details come from a `stat` call in the C core** (`pf_fs_stat`, `readlink`, owner/group names, `copy`, `rename`,
+  `mkdir`, `remove`; all return `-errno`), not from `ls`: profane formats its own columns and groups directories first
+  (`dired-group-directories-first`, the thing macOS `ls` cannot do). Copies go through a temporary file renamed into place, keep
+  permissions and mtime, and copy a link as a link. `(profane fs)` wraps them with real error messages and adds recursive
+  copy/delete and a move that falls back to copy+delete across volumes (`EXDEV`; errno numbers are Darwin's).
+- **Read-only buffers** (new): `buffer-read-only?`, `set-buffer-read-only!`, `with-inhibit-read-only`. Insert, delete and undo
+  raise "buffer is read-only"; the mode line shows `%%` (or `%*` when modified). Dired edits its own text inside
+  `with-inhibit-read-only`.
+- **A mode can bind a plain character** (command-loop change): typed text of one character that an active keymap binds to a
+  command runs the command instead of inserting. Before this only chords and named keys reached keymaps. It is what makes dired's
+  `n`, `m`, `d` work. Consequence: plain keys follow the active layout (as typed text), so dired's letters do not work under a
+  Russian layout (chords still do); Emacs has the same limit without a reverse input method.
+- **The listing**: header line, then `* perms owner group size date name[ -> target]`, with `.` and `..`; mark column `*`
+  or `D`; faces `dired-header`, `dired-directory`, `dired-symlink`, `dired-mark`, `dired-marked`, `dired-flagged` (themed).
+  Entry data is kept in a buffer-local vector, so a line maps to its entry by index and nothing is parsed back from text.
+  `g` rebuilds keeping marks (by name) and point's file; one dired buffer per directory (`dired` reuses it); `default-directory`
+  follows, so `C-x C-f` starts there.
+- **Commands**: `RET`/`f`, `o` (other window, splitting if needed), `^`, `n`/`p`/`SPC`, `m u U t d`, `x`, `D`, `R`, `C`,
+  `+`, `g`, `s` (name, time, size), `w`, `W` (full path; the owner's `arx/dired-copy-full-filename-as-kill`; the directory on
+  the header line), `q` (switch away, buffer stays), `C-x d`. `D`, `x`, an overwrite and any directory delete ask for `yes`;
+  `R` and `C` read the destination with file-name completion (many files need a directory; into a directory keeps names).
+  `find-file` on a directory and the search commands call `visit-directory`, which `(profane dired)` installs (the
+  `files` library cannot import it). `delete-by-moving-to-trash` (default off, as Emacs) sends files to the Trash through
+  `move-to-trash` in `(profane macos)`.
+- **Not done**: `*` mark commands (by regexp or extension), `%` commands, `!` shell command on files, chmod/chown, subdirectory
+  insertion (`i`), `dired-hide-details`, wdired, find-dired, `C-x C-j` dired-jump (the owner's key is avy), copying
+  into another visible dired window by default, symbolic-link creation (`S`), an undo of operations.
+- **Verified**: `c.fs` (stat/readlink/owner/copy/rename/mkdir/remove, a 2.5 MB copy, errors), `fs-test.ss`, `buffer-test.ss`
+  (read-only), `command-test.ss` (a bound plain character; fails on the old code, checked), `dired-test.ss` (68 checks on a
+  throwaway tree: order, motion, marks, open/up, find-file and `C-x d`, names, sorts, mkdir, copy/rename incl. overwrite
+  prompts and into a directory, delete, flags, links, refresh, quit) and the running app (real key events `n n m RET`
+  through `post_keys`). **Not verified**: the look of the listing and its faces on screen, `move-to-trash` (it would put a file in
+  the owner's Trash), `o` in a real window, large directories (10k+ entries), non-UTF-8 file names.
 
 ## 9. Milestones
 

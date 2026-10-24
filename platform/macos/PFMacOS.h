@@ -38,3 +38,6 @@ int64_t pf_app_secret_get(const void *service, size_t slen, const void *account,
 int64_t pf_app_secret_set(const void *service, size_t slen, const void *account, size_t alen,
                           const void *value, size_t vlen);
 int64_t pf_app_secret_delete(const void *service, size_t slen, const void *account, size_t alen);
+
+/* Moves PATH to the Trash. Returns 0, or minus the length of the error message (kept as text). */
+int64_t pf_app_trash(const void *path, size_t len);

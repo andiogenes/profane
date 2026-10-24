@@ -258,5 +258,19 @@
 (keys "C-a")
 (test-assert "ordinary commands do not" (not (command-busy?)))
 
+;; a mode may bind a plain character: typed text runs the command instead of inserting
+(define bound-ran 0)
+(register-command! 'test-bound-key (lambda () (set! bound-ran (+ bound-ran 1))) "")
+(define-major-mode test-keys-mode fundamental-mode "Keys" "")
+(define-key! (mode-keymap 'test-keys-mode) "z" 'test-bound-key)
+(define-key! (mode-keymap 'test-keys-mode) "SPC" 'test-bound-key)
+(set-buffer (generate-new-buffer "bound"))
+(set-major-mode! 'test-keys-mode)
+(handle-text "z")
+(handle-text " ")
+(handle-text "q")
+(test-eqv "typed text with a binding runs the command" 2 bound-ran)
+(test-equal "and other text is still inserted" "q" (buffer-string))
+
 (test-end "command")
 (test-exit)

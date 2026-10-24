@@ -61,6 +61,7 @@ int PFSchemeBoot(void) {
         {"pf_app_pasteboard_set", (void *)pf_app_pasteboard_set},
         {"pf_app_pasteboard_count", (void *)pf_app_pasteboard_count},
         {"pf_app_open_url", (void *)pf_app_open_url},
+        {"pf_app_trash", (void *)pf_app_trash},
         {"pf_app_applescript", (void *)pf_app_applescript},
         {"pf_app_window_bounds", (void *)pf_app_window_bounds},
         {"pf_app_secret_get", (void *)pf_app_secret_get},

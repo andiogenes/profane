@@ -910,7 +910,10 @@
     (and (window-label w) `(:face mode-line-highlight ,(format "[~a]" (window-label w)) " ")))
 
   (define-mode-line-segment (mode-line-modified w)
-    (if (buffer-modified?) "**" "--"))
+    (cond [(and (buffer-read-only?) (buffer-modified?)) "%*"]
+          [(buffer-read-only?) "%%"]
+          [(buffer-modified?) "**"]
+          [else "--"]))
 
   (define-mode-line-segment (mode-line-buffer-identification w)
     `(:face mode-line-buffer-id ,(buffer-name (window-buffer w))))

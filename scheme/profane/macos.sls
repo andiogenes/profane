@@ -8,7 +8,7 @@
 
 (library (profane macos)
   (export pasteboard-string pasteboard-set! pasteboard-change-count set-pasteboard-backend!
-          open-url open-file run-applescript app-window-bounds)
+          open-url open-file run-applescript app-window-bounds move-to-trash)
   (import (chezscheme))
 
   (define (entry name) (and (foreign-entry? name) name))
@@ -82,6 +82,15 @@
                       path
                       (string-append (current-directory) "/" path))])
          (open-url (string-append "file://" (percent-encode-path abs)) activate?))]))
+
+  ;; Moves the file or directory at PATH to the Trash (it can be put back from the Finder). Raises
+  ;; if it cannot.
+  (define (move-to-trash path)
+    (unless (entry "pf_app_trash") (need-shell 'move-to-trash))
+    (let* ([bv (string->utf8 path)]
+           [n ((foreign-procedure "pf_app_trash" (u8* size_t) integer-64) bv (bytevector-length bv))])
+      (when (< n 0) (error 'move-to-trash (stash-string (- n)) path))
+      (void)))
 
   ;; ---- AppleScript ----
 

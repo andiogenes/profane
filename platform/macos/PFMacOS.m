@@ -182,3 +182,17 @@ int64_t pf_app_secret_delete(const void *service, size_t slen, const void *accou
     OSStatus status = SecItemDelete((__bridge CFDictionaryRef)query);
     return status == errSecSuccess ? 0 : PFKeychainFail(status);
 }
+
+int64_t pf_app_trash(const void *path, size_t len) {
+    NSString *p = PFString(path, len);
+    if (!p) {
+        return -keep(@"path is not valid UTF-8");
+    }
+    NSError *error = nil;
+    if ([NSFileManager.defaultManager trashItemAtURL:[NSURL fileURLWithPath:p]
+                                    resultingItemURL:nil
+                                               error:&error]) {
+        return 0;
+    }
+    return -keep(error.localizedDescription);
+}

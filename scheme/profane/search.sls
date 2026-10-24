@@ -306,7 +306,7 @@
              (source-stop! src)
              (let ([path (expand-file-name cand dir)])
                (if (file-directory? path)
-                   (message "~a is a directory (dired is not available yet)" path)
+                   (visit-directory path)
                    (switch-to-buffer (find-file-noselect path)))))
            'raw #t 'history 'find
            'quit (lambda () (source-stop! src))))))))
