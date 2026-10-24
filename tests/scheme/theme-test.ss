@@ -1,5 +1,5 @@
 (import (chezscheme) (srfi :64) (profane var) (profane hook) (profane face) (profane theme)
-        (profane themes) (profane display))
+        (profane themes) (profane display) (profane command))
 
 (for-each invoke-library '((profane display) (profane themes)))
 
@@ -52,6 +52,12 @@
 (check-theme 'profane-dark)
 
 ;; ---- loading ----
+(load-theme 'profane-light)
+((command-procedure 'toggle-theme))
+(test-eq "toggle-theme: light to dark" 'profane-dark (current-theme))
+((command-procedure 'toggle-theme))
+(test-eq "toggle-theme: dark to light" 'profane-light (current-theme))
+
 (define loaded '())
 (add-hook! 'after-load-theme-hook (lambda (name) (set! loaded (cons name loaded))))
 (load-theme 'profane-light)

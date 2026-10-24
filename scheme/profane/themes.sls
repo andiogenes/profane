@@ -6,7 +6,7 @@
 
 (library (profane themes)
   (export builtin-themes)
-  (import (chezscheme) (profane theme))
+  (import (chezscheme) (profane theme) (profane command) (profane var))
 
   ;; Shared by both themes; values are points unless noted.
   (define tokens
@@ -127,6 +127,13 @@
                  (term-bright-yellow . "#f5df9a") (term-bright-blue . "#b0d0ff") (term-bright-magenta . "#f9c0ef")
                  (term-bright-cyan . "#a0e8f5") (term-bright-white . "#ffffff"))))
       '(profane-light profane-dark)))
+
+  (define-command (toggle-theme)
+    "Switch between the light and the dark theme."
+    (let* ([want (if (and (current-theme) (eq? (theme-appearance (current-theme)) 'dark)) 'light 'dark)]
+           [e (assq want (var-ref 'theme-for-appearance))])
+      (load-theme (if e (cdr e) (if (eq? want 'dark) 'profane-dark 'profane-light)))
+      (message "Theme: ~a" (current-theme))))
 
   ;; ---- UI style presets (plan §6): which chrome is on. minimal is the default. ----
   ;; The variables are consumed as the chrome lands (mode line and fringes with windows, M2;
