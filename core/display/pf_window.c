@@ -67,6 +67,9 @@ struct pf_window {
     uint32_t term_faces[4];
     uint64_t shown_term_version;
     const pf_term *shown_term;
+    int wrap;                   /* PF_WRAP_* */
+    size_t *brk;                /* first character of each screen row of the line last wrapped */
+    size_t brk_cap;
     float hscroll, min_hscroll; /* points the text is scrolled left; scroll-left's minimum */
 };
 
@@ -101,6 +104,7 @@ void pf_window_free(pf_window *w) {
         free(w->fids);
         free(w->runs);
         free(w->props_buf);
+        free(w->brk);
         pf_strip_free(&w->mode_line);
         pf_strip_free(&w->header);
         free(w);
@@ -260,6 +264,11 @@ int pf_window_set_option(pf_window *w, pf_window_option option, int on) {
                 : option == PF_WINDOW_HL_LINE    ? &w->hl_line
                 : option == PF_WINDOW_SHOW_PAREN ? &w->show_paren
                                                  : NULL;
+    if (option == PF_WINDOW_WRAP) {
+        w->wrap = on == PF_WRAP_CHAR || on == PF_WRAP_WORD ? on : PF_WRAP_NONE;
+        w->dirty = 1;
+        return 0;
+    }
     if (!slot) {
         return -1;
     }
@@ -273,6 +282,7 @@ int pf_window_option_value(const pf_window *w, pf_window_option option) {
            : option == PF_WINDOW_HL_LINE    ? w->hl_line
            : option == PF_WINDOW_SHOW_PAREN ? w->show_paren
            : option == PF_WINDOW_CURSOR     ? w->cursor_kind
+           : option == PF_WINDOW_WRAP       ? w->wrap
                                             : -1;
 }
 
@@ -289,20 +299,6 @@ size_t pf_window_body_lines(const pf_window *w) {
     float usable = w->height - w->mode_line_h - top_inset(w);
     size_t n = lh > 0 && usable > 0 ? (size_t)floorf(usable / lh) : 0;
     return n ? n : 1;
-}
-
-/* Scrolls minimally so the line holding POS is fully visible. */
-static void keep_visible(pf_window *w, const pf_text_snapshot *s, size_t pos) {
-    size_t line = pf_text_line_of(s, pos), body = pf_window_body_lines(w);
-    if (line < w->top) {
-        w->top = line;
-    } else if (line >= w->top + body) {
-        w->top = line - body + 1;
-    }
-    size_t last = pf_text_lines(s) - 1;
-    if (w->top > last) {
-        w->top = last;
-    }
 }
 
 /* Decodes characters [START, END) of S into *OUT (grown as needed; raw bytes as U+FFFD). */
@@ -453,15 +449,15 @@ static void emit_glyphs(pf_display *d, const pf_line_layout *lay, float x0, floa
     }
 }
 
-/* Background and underline rects for runs of characters whose face sets them. */
+/* Background and underline rects for runs of characters [FROM, TO) whose face sets them. */
 static void emit_face_decorations(pf_display *d, const pf_line_layout *lay, const uint32_t *fids,
                                   float x0, float left, float right, float top, float baseline,
-                                  const pf_window_style *st, float scale, uint32_t default_fg) {
-    size_t n = lay->nchars;
+                                  const pf_window_style *st, float scale, uint32_t default_fg,
+                                  size_t from, size_t to) {
     uint32_t def = pf_face_role_id(PF_ROLE_DEFAULT);
-    for (size_t i = 0; i < n;) {
+    for (size_t i = from; i < to;) {
         size_t j = i + 1;
-        while (j < n && fids[j] == fids[i]) {
+        while (j < to && fids[j] == fids[i]) {
             j++;
         }
         if (fids[i] == def) {
@@ -574,6 +570,207 @@ static void cursor_span(const pf_window *w, const row *r, float *cx, float *cw) 
     }
 }
 
+/* The text area's left and right edges (points): the gutter for line numbers is inside it. */
+static void text_area(const pf_window *w, const pf_text_snapshot *s, float *left, float *right) {
+    float gutter =
+        w->line_numbers ? (float)(count_digits(pf_text_lines(s)) + 2) * w->style.cell_width : 0;
+    *left = w->style.pad_left + w->fringe_left + gutter;
+    *right = w->width - w->divider - w->fringe_right;
+}
+
+static int is_blank(uint32_t c) {
+    return c == ' ' || c == '\t';
+}
+
+/* Splits the line of R (just laid out, so w->cps holds its characters) into screen rows no wider
+ * than WIDTH: w->brk[i] is row i's first character. Returns the row count, 1 without wrapping.
+ * A row always holds a character; word wrap breaks after whitespace and lets whitespace hang
+ * past the edge. */
+static size_t wrap_line(pf_window *w, const row *r, float width) {
+    const pf_line_layout *lay = r->lay;
+    size_t n = lay->nchars, rows = 1, a = 0;
+    w->brk = grow(w->brk, &w->brk_cap, 2, sizeof *w->brk);
+    w->brk[0] = 0;
+    while (w->wrap && width > 0 && a < n) {
+        size_t b = a;
+        while (b < n && lay->caret_x[b + 1] - lay->caret_x[a] <= width + 0.01f) {
+            b++;
+        }
+        if (b == a) {
+            b = a + 1;
+        }
+        if (b >= n) {
+            break;
+        }
+        if (w->wrap == PF_WRAP_WORD) {
+            if (is_blank(w->cps[b])) {
+                while (b < n && is_blank(w->cps[b])) {
+                    b++;
+                }
+            } else {
+                size_t c = b;
+                while (c > a + 1 && !is_blank(w->cps[c - 1])) {
+                    c--;
+                }
+                if (c > a + 1) {
+                    b = c;
+                }
+            }
+            if (b >= n) {
+                break;
+            }
+        }
+        w->brk = grow(w->brk, &w->brk_cap, rows + 2, sizeof *w->brk);
+        w->brk[rows++] = b;
+        a = b;
+    }
+    return rows;
+}
+
+/* Screen rows of LINE at the current width. */
+static size_t line_rows(pf_window *w, pf_text *text, const pf_text_snapshot *s, size_t line) {
+    float left, right;
+    text_area(w, s, &left, &right);
+    row r = layout_row(w, text, s, line, (size_t)-1, scaled_font(w, default_font_of(w)));
+    return wrap_line(w, &r, right - left);
+}
+
+/* A screen row: the laid-out line (w->cps, w->brk and the layout stay valid until the next
+ * layout_row) and the row's characters [a, b) of it. */
+typedef struct vrow {
+    row r;
+    size_t line, seg, nsegs, a, b;
+} vrow;
+
+/* Lays out LINE and picks its screen row: number SEL (BY_INDEX 0), the one holding laid-out
+ * character SEL (1), or the last (2). */
+static vrow vrow_load(pf_window *w, pf_text *text, const pf_text_snapshot *s, size_t line,
+                      size_t sel, int mode) {
+    float left, right;
+    text_area(w, s, &left, &right);
+    vrow v = {0};
+    v.line = line;
+    v.r = layout_row(w, text, s, line, (size_t)-1, scaled_font(w, default_font_of(w)));
+    v.nsegs = wrap_line(w, &v.r, right - left);
+    if (mode == 2) {
+        v.seg = v.nsegs - 1;
+    } else if (mode == 1) {
+        while (v.seg + 1 < v.nsegs && w->brk[v.seg + 1] <= sel) {
+            v.seg++;
+        }
+    } else {
+        v.seg = sel < v.nsegs ? sel : v.nsegs - 1;
+    }
+    v.a = w->brk[v.seg];
+    v.b = v.seg + 1 < v.nsegs ? w->brk[v.seg + 1] : v.r.lay->nchars;
+    return v;
+}
+
+/* The laid-out character of V whose cell holds x GOAL (relative to the row's start). */
+static size_t vrow_char_at(const vrow *v, float goal) {
+    const pf_line_layout *lay = v->r.lay;
+    int last = v->seg + 1 == v->nsegs;
+    size_t max = last ? v->b : (v->b > v->a ? v->b - 1 : v->a), i = v->a;
+    while (i < max && lay->caret_x[i + 1] - lay->caret_x[v->a] <= goal) {
+        i++;
+    }
+    return i;
+}
+
+/* Scrolls minimally so the screen row holding POS is fully visible. */
+static void keep_visible(pf_window *w, pf_text *text, const pf_text_snapshot *s, size_t pos) {
+    size_t line = pf_text_line_of(s, pos), body = pf_window_body_lines(w);
+    size_t last = pf_text_lines(s) - 1;
+    if (w->top > last) {
+        w->top = last;
+    }
+    if (line < w->top) {
+        w->top = line;
+        return;
+    }
+    if (!w->wrap) {
+        if (line >= w->top + body) {
+            w->top = line - body + 1;
+        }
+        return;
+    }
+    /* Rows from the top of the first line that fits above point's row, up to it. */
+    vrow v = vrow_load(w, text, s, line, pos - pf_text_line_start(s, line), 1);
+    size_t used = v.seg + 1, t = line;
+    while (t > 0) {
+        size_t above = line_rows(w, text, s, t - 1);
+        if (used + above > body) {
+            break;
+        }
+        used += above;
+        t--;
+    }
+    if (w->top < t) {
+        w->top = t;
+    }
+}
+
+int pf_window_row_bounds(pf_window *w, size_t pos, size_t *start, size_t *end) {
+    pf_text *text = pf_handle_get(w->buf, PF_HANDLE_TEXT);
+    const pf_text_snapshot *s = text ? pf_text_current(text) : NULL;
+    if (!s || w->native || w->canvas || w->term) {
+        return -1;
+    }
+    size_t line = pf_text_line_of(s, pos), ls = pf_text_line_start(s, line);
+    vrow v = vrow_load(w, text, s, line, pos - ls, 1);
+    *start = ls + v.a;
+    *end = ls + v.b;
+    return 0;
+}
+
+float pf_window_row_x(pf_window *w, size_t pos) {
+    pf_text *text = pf_handle_get(w->buf, PF_HANDLE_TEXT);
+    const pf_text_snapshot *s = text ? pf_text_current(text) : NULL;
+    if (!s || w->native || w->canvas || w->term) {
+        return 0;
+    }
+    size_t line = pf_text_line_of(s, pos), ls = pf_text_line_start(s, line);
+    vrow v = vrow_load(w, text, s, line, pos - ls, 1);
+    size_t i = pos - ls < v.r.lay->nchars ? pos - ls : v.r.lay->nchars;
+    return v.r.lay->caret_x[i] - v.r.lay->caret_x[v.a];
+}
+
+size_t pf_window_move_rows(pf_window *w, size_t pos, long delta, float goal_x) {
+    pf_text *text = pf_handle_get(w->buf, PF_HANDLE_TEXT);
+    const pf_text_snapshot *s = text ? pf_text_current(text) : NULL;
+    if (!s || w->native || w->canvas || w->term) {
+        return pos;
+    }
+    size_t lines = pf_text_lines(s);
+    size_t line = pf_text_line_of(s, pos);
+    vrow v = vrow_load(w, text, s, line, pos - pf_text_line_start(s, line), 1);
+    size_t seg = v.seg;
+    for (; delta > 0; delta--) {
+        if (seg + 1 < v.nsegs) {
+            seg++;
+        } else if (line + 1 < lines) {
+            line++;
+            seg = 0;
+            v = vrow_load(w, text, s, line, 0, 0);
+        } else {
+            break;
+        }
+    }
+    for (; delta < 0; delta++) {
+        if (seg > 0) {
+            seg--;
+        } else if (line > 0) {
+            line--;
+            v = vrow_load(w, text, s, line, 0, 2);
+            seg = v.seg;
+        } else {
+            break;
+        }
+    }
+    v = vrow_load(w, text, s, line, seg, 0);
+    return pf_text_line_start(s, line) + vrow_char_at(&v, goal_x);
+}
+
 /* Emacs auto-hscroll: if the cursor at CX..CX+CW is not within the text area of width WIDTH
  * (keeping a margin), scroll so it is centered, in whole cells, never below min_hscroll. */
 static void auto_hscroll(pf_window *w, float cx, float cw, float width) {
@@ -599,14 +796,14 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
     size_t visible = !w->mode_line.face           ? pf_window_body_lines(w)
                      : st->line_height > 0 && body_h > 0 ? (size_t)ceilf(body_h / st->line_height)
                                                        : 0;
-    float right = w->width - w->divider - w->fringe_right;
     size_t point_line = pf_text_line_of(s, point);
     paren_match paren = w->show_paren ? find_paren(w, s, point) : (paren_match){0};
-    /* Gutter sized for the buffer's last line number, one cell of padding on each side. */
-    size_t digits = count_digits(lines);
-    float gutter = w->line_numbers ? (float)(digits + 2) * st->cell_width : 0;
-    float left = st->pad_left + w->fringe_left + gutter; /* the text area: left .. right */
-    if (point_line >= w->top && point_line < w->top + visible) {
+    float left, right; /* the text area, after the gutter sized for the last line number */
+    text_area(w, s, &left, &right);
+    float gutter = left - st->pad_left - w->fringe_left;
+    if (w->wrap) {
+        w->hscroll = 0;
+    } else if (point_line >= w->top && point_line < w->top + visible) {
         row r = layout_row(w, text, s, point_line, point, default_font);
         float cx, cw;
         cursor_span(w, &r, &cx, &cw);
@@ -618,22 +815,28 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
     uint32_t mark = role_color(PF_ROLE_FRINGE, PF_FACE_HAS_FG,
                                role_color(PF_ROLE_LINE_NUMBER, PF_FACE_HAS_FG, fg));
 
-    for (size_t i = 0; i < visible && w->top + i < lines; i++) {
-        size_t line = w->top + i;
+    size_t srow = 0; /* screen rows drawn */
+    for (size_t line = w->top; srow < visible && line < lines; line++) {
         row r = layout_row(w, text, s, line, point, default_font);
         const pf_line_layout *lay = r.lay;
-        float top = top_inset(w) + (float)i * st->line_height;
+        size_t nsegs = wrap_line(w, &r, right - left);
+        for (size_t seg = 0; seg < nsegs && srow < visible; seg++, srow++) {
+        size_t a = w->brk[seg], b = seg + 1 < nsegs ? w->brk[seg + 1] : lay->nchars;
+        int last = seg + 1 == nsegs;
+        float xs = w->wrap ? left - lay->caret_x[a] : x0; /* where this row's line start would be */
+        float top = top_inset(w) + (float)srow * st->line_height;
         float baseline = top + st->ascent;
 
         /* Backgrounds first: faces, the hl-line band (an overlay in Emacs, so above them), then
          * bracket highlights. */
-        emit_face_decorations(d, lay, w->fids, x0, left, right, top, baseline, st, w->scale, fg);
+        emit_face_decorations(d, lay, w->fids, xs, left, right, top, baseline, st, w->scale, fg, a,
+                              b);
         if (w->hl_line && line == point_line) {
             pf_display_rect(d, left, top, right - left, st->line_height,
                             role_color(PF_ROLE_HL_LINE, PF_FACE_HAS_BG, 0));
         }
         if (w->region_end > r.start && w->region_start <= r.end && w->region_start != w->region_end) {
-            /* The part of the region on this line; a newline inside it is one more cell. */
+            /* The part of the region on this row; a newline inside it is one more cell. */
             size_t from = w->region_start > r.start ? w->region_start - r.start : 0;
             size_t to = w->region_end < r.end ? w->region_end - r.start : r.end - r.start;
             if (r.pre) {
@@ -642,13 +845,15 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
             }
             from = from < lay->nchars ? from : lay->nchars;
             to = to < lay->nchars ? to : lay->nchars;
-            float rx = fmaxf(x0 + lay->caret_x[from], left);
-            float rr = x0 + lay->caret_x[to];
-            if (w->region_end > r.end && line + 1 < lines) {
+            from = from > a ? from : a;
+            to = to < b ? to : b;
+            float rx = fmaxf(xs + lay->caret_x[from], left);
+            float rr = xs + lay->caret_x[to > from ? to : from];
+            if (last && w->region_end > r.end && line + 1 < lines) {
                 rr += st->cell_width;
             }
             rr = fminf(rr, right);
-            if (rr > rx) {
+            if ((to > from || (last && w->region_end > r.end && line + 1 < lines)) && rr > rx) {
                 pf_display_rect(d, rx, top, rr - rx, st->line_height,
                                 role_color(PF_ROLE_REGION, PF_FACE_HAS_BG, 0));
             }
@@ -665,14 +870,14 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
                 if (r.pre && idx >= r.k) {
                     idx += r.pre; /* after the spliced-in composition */
                 }
-                if (idx < lay->nchars) {
-                    float px = fmaxf(x0 + lay->caret_x[idx], left);
-                    float pw = fminf(x0 + lay->caret_x[idx + 1], right) - px;
+                if (idx >= a && idx < b && idx < lay->nchars) {
+                    float px = fmaxf(xs + lay->caret_x[idx], left);
+                    float pw = fminf(xs + lay->caret_x[idx + 1], right) - px;
                     pf_display_rect(d, px, top, pw, st->line_height, pc);
                 }
             }
         }
-        if (w->line_numbers) {
+        if (w->line_numbers && seg == 0) {
             char num[24];
             int len = snprintf(num, sizeof num, "%zu", line + 1);
             uint32_t ncps[24];
@@ -686,28 +891,30 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
             emit_glyphs(d, nl, nx, baseline, 0, right, role_color(role, PF_FACE_HAS_FG, fg), NULL,
                         0, (size_t)-1);
         }
-        emit_glyphs(d, lay, x0, baseline, left, right, fg, w->fids, 0, (size_t)-1);
+        emit_glyphs(d, lay, xs, baseline, left, right, fg, w->fids, a, b);
 
-        /* Continuation marks: a short bar in the fringe beside text past either edge. */
+        /* Continuation marks: a short bar in the fringe beside text past either edge, or at the
+         * right of a row the line goes on from. */
         float mh = roundf(st->line_height * 0.6f), my = top + (st->line_height - mh) / 2;
-        if (lay->nchars && x0 + lay->width > right + 0.5f) {
+        if (w->wrap ? !last : lay->nchars && x0 + lay->width > right + 0.5f) {
             pf_display_rect(d, right, my, fmaxf(w->fringe_right, 1.0f / w->scale), mh, mark);
         }
-        if (lay->nchars && w->hscroll > 0) {
+        if (!w->wrap && lay->nchars && w->hscroll > 0) {
             pf_display_rect(d, left - gutter - w->fringe_left, my,
                             fmaxf(w->fringe_left, 1.0f / w->scale), mh, mark);
         }
 
-        if (r.here) {
+        /* Point's row: the last one whose first character is at or before it. */
+        if (r.here && r.k >= a && (r.k < b || last)) {
             if (r.pre) {
-                float ux = fmaxf(x0 + lay->caret_x[r.k], left);
-                float uw = fminf(x0 + lay->caret_x[r.k + r.pre], right) - ux;
+                float ux = fmaxf(xs + lay->caret_x[r.k], left);
+                float uw = fminf(xs + lay->caret_x[r.k + r.pre], right) - ux;
                 pf_display_rect(d, ux, baseline + st->descent * 0.5f, uw, 1.0f / w->scale,
                                 fg); /* one device pixel */
             }
             float cx, cw;
             cursor_span(w, &r, &cx, &cw);
-            cx += x0;
+            cx += xs;
             size_t k = r.k + (r.pre ? w->preedit_caret : 0);
             /* Only a cursor inside the text area is drawn (scroll-left can leave point out). */
             int shown = cx >= left - 0.5f && cx + cw <= right + 0.5f;
@@ -717,7 +924,7 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
                 /* Filled box; the character under it is redrawn in the background color. */
                 pf_display_rect(d, cx, top, cw, lh, cc);
                 if (k < lay->nchars) {
-                    emit_glyphs(d, lay, x0, baseline, left, right, bg, NULL, k, k + 1);
+                    emit_glyphs(d, lay, xs, baseline, left, right, bg, NULL, k, k + 1);
                 }
             } else if (shown && w->cursor_kind == PF_CURSOR_HOLLOW) {
                 pf_display_rect(d, cx, top, cw, px, cc);
@@ -732,6 +939,7 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
                 w->cursor[3] = lh;
                 w->cursor_valid = 1;
             }
+        }
         }
     }
 }
@@ -824,24 +1032,31 @@ int pf_window_pos_rect(pf_window *w, size_t pos, float rect[4]) {
     size_t visible = !w->mode_line.face           ? pf_window_body_lines(w)
                      : st->line_height > 0 && body_h > 0 ? (size_t)ceilf(body_h / st->line_height)
                                                        : 0;
-    if (line < w->top || line >= w->top + visible || line >= lines) {
+    if (line < w->top || line >= lines) {
         return -1;
     }
-    float right = w->width - w->divider - w->fringe_right;
-    float gutter = w->line_numbers ? (float)(count_digits(lines) + 2) * st->cell_width : 0;
-    float left = st->pad_left + w->fringe_left + gutter;
-    row r = layout_row(w, text, s, line, (size_t)-1, scaled_font(w, default_font_of(w)));
-    size_t idx = pos - r.start;
-    if (pos < r.start || idx > r.lay->nchars) {
+    size_t srow = 0; /* screen rows above the line */
+    for (size_t l = w->top; l < line && srow < visible; l++) {
+        srow += line_rows(w, text, s, l);
+    }
+    if (srow >= visible) {
         return -1;
     }
-    float x = left - w->hscroll + r.lay->caret_x[idx];
-    float cw = idx < r.lay->nchars ? r.lay->caret_x[idx + 1] - r.lay->caret_x[idx] : st->cell_width;
+    float left, right;
+    text_area(w, s, &left, &right);
+    size_t idx = pos - pf_text_line_start(s, line);
+    vrow v = vrow_load(w, text, s, line, idx, 1);
+    if (srow + v.seg >= visible || idx > v.r.lay->nchars) {
+        return -1;
+    }
+    const pf_line_layout *lay = v.r.lay;
+    float x = (w->wrap ? left - lay->caret_x[v.a] : left - w->hscroll) + lay->caret_x[idx];
+    float cw = idx < lay->nchars ? lay->caret_x[idx + 1] - lay->caret_x[idx] : st->cell_width;
     if (x < left - 0.5f || x + cw > right + 0.5f) {
         return -1;
     }
     rect[0] = x;
-    rect[1] = top_inset(w) + (float)(line - w->top) * st->line_height;
+    rect[1] = top_inset(w) + (float)(srow + v.seg) * st->line_height;
     rect[2] = cw > 0 ? cw : st->cell_width;
     rect[3] = st->line_height;
     return 0;
@@ -859,20 +1074,32 @@ int64_t pf_window_pos_at(pf_window *w, float x, float y) {
         return -1;
     }
     size_t lines = pf_text_lines(s);
-    size_t row_index = y < top_inset(w) ? 0 : (size_t)((y - top_inset(w)) / st->line_height);
-    size_t line = w->top + row_index;
-    if (line >= lines) {
+    size_t target = y < top_inset(w) ? 0 : (size_t)((y - top_inset(w)) / st->line_height);
+    size_t line = w->top, srow = 0, nrows = 1;
+    for (; line < lines; line++) {
+        nrows = line_rows(w, text, s, line);
+        if (target < srow + nrows) {
+            break;
+        }
+        srow += nrows;
+    }
+    int past = line >= lines; /* below the last line: its end */
+    if (past) {
         line = lines - 1;
     }
-    float gutter = w->line_numbers ? (float)(count_digits(lines) + 2) * st->cell_width : 0;
-    float left = st->pad_left + w->fringe_left + gutter;
-    row r = layout_row(w, text, s, line, (size_t)-1, scaled_font(w, default_font_of(w)));
-    float rx = x - (left - w->hscroll);
-    size_t idx = 0;
-    while (idx < r.lay->nchars && r.lay->caret_x[idx + 1] <= rx) {
-        idx++;
+    float left, right;
+    text_area(w, s, &left, &right);
+    vrow v = vrow_load(w, text, s, line, past ? nrows : target - srow, past ? 2 : 0);
+    float rx = x - (w->wrap ? left : left - w->hscroll);
+    size_t idx = vrow_char_at(&v, rx);
+    if (!w->wrap) {
+        /* An unwrapped row is the whole line; x may also be left of the scrolled-out start. */
+        idx = 0;
+        while (idx < v.r.lay->nchars && v.r.lay->caret_x[idx + 1] <= rx) {
+            idx++;
+        }
     }
-    return (int64_t)(r.start + idx);
+    return (int64_t)(v.r.start + idx);
 }
 
 /* The terminal grid: background runs, then the cursor, then the glyphs of each cell in the font
@@ -1001,7 +1228,7 @@ const pf_display *pf_window_redisplay(pf_window *w) {
         if (point == SIZE_MAX) {
             point = 0;
         }
-        keep_visible(w, s, point);
+        keep_visible(w, text, s, point);
     }
     uint64_t faces = pf_face_generation();
     uint64_t props = text ? pf_props_generation(pf_text_props(text)) : 0;

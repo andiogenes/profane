@@ -510,11 +510,105 @@ static void test_terminal_window(void) {
     pf_layout_cache_free(cache);
 }
 
+/* The glyph with code point CH drawn in the display, or NULL. */
+static const pf_display_item *find_glyph(const pf_display *d, uint32_t ch) {
+    const pf_display_item *it = pf_display_items(d);
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        if (it[i].kind == PF_DISPLAY_GLYPH && it[i].u.glyph.glyph == ch) {
+            return &it[i];
+        }
+    }
+    return NULL;
+}
+
+static void test_soft_wrap(void) {
+    pf_layout_cache *cache = pf_layout_cache_new(fake, 256, 8);
+    pf_window_style s = style();
+    pf_window *w = pf_window_new(cache, &s);
+    pf_window_set_size(w, 105, 120, 1); /* the text area is 5..105: ten cells; six rows */
+    const char *text = "abcdefghijklmnopqrstuvwxyz\nSHORT\nAAA BBB CCCCC DD";
+    pf_handle buf = pf_buf_new(text, strlen(text));
+    uint32_t point = pf_buf_marker_new(buf, 0, 0);
+    pf_window_set_buffer(w, buf, point);
+
+    /* Truncated: nothing past the tenth cell. */
+    const pf_display *d = frame_at(w, buf, point, 0);
+    PF_CHECK(find_glyph(d, 'j') && !find_glyph(d, 'k'));
+    pf_display_release(d);
+
+    PF_CHECK_EQ_INT(pf_window_set_option(w, PF_WINDOW_WRAP, PF_WRAP_CHAR), 0);
+    PF_CHECK_EQ_INT(pf_window_option_value(w, PF_WINDOW_WRAP), PF_WRAP_CHAR);
+    d = frame_at(w, buf, point, 0);
+    const pf_display_item *g = find_glyph(d, 'k');
+    PF_CHECK(g && NEAR(g->x, 5) && NEAR(g->y, 20 + 12)); /* second row */
+    g = find_glyph(d, 'u');
+    PF_CHECK(g && NEAR(g->x, 5) && NEAR(g->y, 40 + 12));
+    g = find_glyph(d, 'z');
+    PF_CHECK(g && NEAR(g->x, 55) && NEAR(g->y, 40 + 12));
+    g = find_glyph(d, 'H'); /* "SHORT" starts the fourth row */
+    PF_CHECK(g && NEAR(g->y, 60 + 12));
+    pf_display_release(d);
+
+    /* The cursor follows point onto the continuation row. */
+    d = frame_at(w, buf, point, 13);
+    float rect[4];
+    PF_CHECK(pf_window_cursor_rect(w, rect) == 0 && NEAR(rect[0], 35) && NEAR(rect[1], 20));
+    pf_display_release(d);
+    /* The end of a full row is the start of the next. */
+    d = frame_at(w, buf, point, 10);
+    PF_CHECK(pf_window_cursor_rect(w, rect) == 0 && NEAR(rect[0], 5) && NEAR(rect[1], 20));
+    pf_display_release(d);
+    /* The end of the last row stays on it. */
+    d = frame_at(w, buf, point, 26);
+    PF_CHECK(pf_window_cursor_rect(w, rect) == 0 && NEAR(rect[0], 65) && NEAR(rect[1], 40));
+    pf_display_release(d);
+
+    /* Positions and the mouse. */
+    PF_CHECK(pf_window_pos_rect(w, 23, rect) == 0 && NEAR(rect[0], 35) && NEAR(rect[1], 40));
+    PF_CHECK_EQ_INT((int)pf_window_pos_at(w, 36, 25), 13);
+    PF_CHECK_EQ_INT((int)pf_window_pos_at(w, 104, 25), 19); /* past a row's end: before the next */
+    PF_CHECK_EQ_INT((int)pf_window_pos_at(w, 104, 45), 26); /* the last row: the line's end */
+
+    /* Screen-row queries and motion. */
+    size_t a, b;
+    PF_CHECK(pf_window_row_bounds(w, 13, &a, &b) == 0 && a == 10 && b == 20);
+    PF_CHECK(pf_window_row_bounds(w, 26, &a, &b) == 0 && a == 20 && b == 26);
+    PF_CHECK(NEAR(pf_window_row_x(w, 13), 30));
+    PF_CHECK_EQ_SIZE(pf_window_move_rows(w, 3, 1, 30), 13);
+    PF_CHECK_EQ_SIZE(pf_window_move_rows(w, 3, 2, 90), 26); /* the shorter row's end */
+    PF_CHECK_EQ_SIZE(pf_window_move_rows(w, 3, 3, 30), 30); /* into "SHORT" (starts at 27) */
+    PF_CHECK_EQ_SIZE(pf_window_move_rows(w, 13, -1, 30), 3);
+    PF_CHECK_EQ_SIZE(pf_window_move_rows(w, 27, -1, 20), 22); /* the last row of the line above */
+    PF_CHECK_EQ_SIZE(pf_window_move_rows(w, 3, -1, 30), 3);   /* the first row stays */
+
+    /* Word wrap breaks after whitespace and keeps words whole. */
+    pf_window_set_option(w, PF_WINDOW_WRAP, PF_WRAP_WORD);
+    size_t l3 = strlen("abcdefghijklmnopqrstuvwxyz\nSHORT\n");
+    d = frame_at(w, buf, point, l3);
+    g = find_glyph(d, 'C');
+    PF_CHECK(g && NEAR(g->x, 5)); /* "CCCCC DD" moved to its own row */
+    pf_display_release(d);
+    PF_CHECK(pf_window_row_bounds(w, l3, &a, &b) == 0 && a == l3 && b == l3 + 8);
+
+    /* Scrolling counts screen rows: point on the last of 7 rows, four fit, drops the first line. */
+    pf_window_set_option(w, PF_WINDOW_WRAP, PF_WRAP_CHAR);
+    pf_window_set_size(w, 105, 80, 1); /* four rows */
+    d = frame_at(w, buf, point, strlen(text));
+    PF_CHECK(pf_window_top_line(w) == 1);
+    PF_CHECK(find_glyph(d, 'C') && !find_glyph(d, 'k'));
+    pf_display_release(d);
+    PF_CHECK(pf_window_cursor_rect(w, rect) == 0 && rect[1] < 80);
+
+    pf_window_free(w);
+    pf_layout_cache_free(cache);
+}
+
 int main(void) {
     test_terminal_window();
     test_layout();
     test_window();
     test_editing_modes();
+    test_soft_wrap();
     test_faces();
     return PF_TEST_RESULT();
 }

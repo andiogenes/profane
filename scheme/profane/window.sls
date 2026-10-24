@@ -24,7 +24,7 @@
           window-point set-window-point! window-start-line set-window-start-line!
           window-body-lines window-hscroll set-window-hscroll! window-edges window-list next-window window-label set-window-label!
           window-prev-buffers window-next-buffers scroll-window-lines!
-          window-pos-rect window-visible-range window-native set-window-native! native-view-kinds register-native-view-kind!
+          window-pos-rect window-row-start window-row-end window-row-x window-move-rows window-visible-range window-native set-window-native! native-view-kinds register-native-view-kind!
           split? split-direction split-children split-weights split-parent
           split-window delete-window delete-other-windows balance-windows resize-window!
           switch-to-buffer other-buffer
@@ -160,6 +160,7 @@
   ;; ---- windows ----
 
   (define cursor-option 4) ; pf_window_option PF_WINDOW_CURSOR
+  (define wrap-option 5)   ; PF_WINDOW_WRAP: 0 truncate, 1 at the last character, 2 at whitespace
   (define cursor-box 1)
   (define cursor-hollow 2)
 
@@ -301,6 +302,14 @@
     (let ([bv (make-bytevector 16)])
       (and (zero? (%win-pos-rect (window-handle w) pos bv))
            (map (lambda (i) (bytevector-ieee-single-native-ref bv (* 4 i))) '(0 1 2 3)))))
+
+  ;; Screen rows (soft wrap), as W would lay them out now: where POS's row starts and ends (the
+  ;; end is the next row's start, or the line's end on the last row), its x within the row in
+  ;; points, and the position K rows down (up when negative) nearest x GOAL.
+  (define (window-row-start w pos) (%win-row-start (window-handle w) pos))
+  (define (window-row-end w pos) (%win-row-end (window-handle w) pos))
+  (define (window-row-x w pos) (%win-row-x (window-handle w) pos))
+  (define (window-move-rows w pos k goal) (%win-move-rows (window-handle w) pos k (inexact goal)))
 
   ;; The characters from the first line W shows to the end of its last: (values start end).
   (define (window-visible-range w)
@@ -873,6 +882,22 @@
     "Whether windows showing this buffer have line numbers (when display-line-numbers-mode is on)."
     '(local))
 
+  (defvar truncate-lines #t
+    "Cut lines at the window edge instead of continuing them on the next row (Emacs's default is
+#f; here text buffers opt in to wrapping, with visual-line-mode)."
+    '(local))
+
+  (defvar word-wrap #f
+    "Continue lines at whitespace instead of mid-word, when lines are not truncated."
+    '(local))
+
+  (define (wrap-mode-of w)
+    (with-current-buffer (window-buffer w)
+      (cond [(minor-mode-enabled? 'visual-line-mode) 2]
+            [(var-ref 'truncate-lines) 0]
+            [(var-ref 'word-wrap) 2]
+            [else 1])))
+
   (define display-modes
     '((display-line-numbers-mode . 1) (global-hl-line-mode . 2) (show-paren-mode . 3)))
 
@@ -890,7 +915,8 @@
                                                   (var-ref 'display-line-numbers))))
                                        1
                                        0))))
-              display-modes))
+              display-modes)
+    (%win-set-option (window-handle w) wrap-option (if (window-minibuffer? w) 0 (wrap-mode-of w))))
 
   (define (apply-options!)
     (for-each (lambda (f) (for-each apply-display-options! (frame-windows f)))
@@ -902,6 +928,11 @@
 
   (define-minor-mode global-hl-line-mode (global)
     "Highlight the line point is on."
+    (apply-options!))
+
+  (define-minor-mode visual-line-mode ()
+    "Continue long lines on the next screen row, at word boundaries; C-n, C-p, C-a and C-e move by
+screen rows."
     (apply-options!))
 
   (define-minor-mode show-paren-mode (global)
@@ -1094,6 +1125,8 @@
                        (for-each %relayout! (vector->list (hashtable-values frames))))))
                 '(ui-fringe-width ui-mode-line-style line-spacing))
       (add-var-watcher! 'global-hl-line-sticky-flag (lambda (name value where) (apply-options!)))
+      (add-var-watcher! 'truncate-lines (lambda (name value where) (apply-options!)))
+      (add-var-watcher! 'word-wrap (lambda (name value where) (apply-options!)))
       #t))
 
   ;; ---- commands ----

@@ -635,8 +635,8 @@ waits for. Keep this list current: remove an entry when it is done, add one when
 - Text properties use arrays (O(runs) per edit); switch to a tree when tree-sitter makes runs dense (M5).
 - show-paren counts brackets without syntax (strings and comments count) until M5.
 - The kill ring shares the macOS pasteboard through `(profane macos)` (M3, §8k item 3).
-- Lines are truncated, not wrapped; windows scroll sideways to keep point visible. Soft wrap is M4. At most 4096
-  characters per line are shaped.
+- Lines are truncated unless `visual-line-mode` or `truncate-lines` #f (soft wrap, §8l); truncated windows scroll
+  sideways to keep point visible. At most 4096 characters per line are shaped.
 - No CI. `tests/macos/latency.sh` is the CI latency benchmark the plan asks for, once there is macOS CI.
 - Unexplained latency outlier: single ≈900 ms commit samples appeared in 100k-line benchmark runs while the owner
   was using the machine, and not when it was idle (five clean runs, max < 6 ms). Hypothesis (unconfirmed): the
@@ -949,6 +949,26 @@ a Retina display (the machine is 1x), vim's mouse, fish's completions menu, less
 (7), Keychain (5), `(profane macos)` (3) and TLS sockets (8), on the async foundation (1). One thing the row did not name
 but the work needed: read-only buffers and the keyboard-takeover hooks of the command loop. Left for later on purpose: the
 terminal's mouse and focus handling, listening sockets, a process-level coding system, worker pool and timer heap (no user yet).
+
+## 8l. Editing surface and motion (M4)
+
+M4 items, one branch each (`m4-<topic>`): 1 soft wrap, 2 fringe git marks, 3 motion system, 4 Git v1 (status, stage,
+diff, commit, push/pull), 5 ediff. Item 1 is done; the rest are not started.
+
+**1. Soft wrap** (`m4-soft-wrap`).
+- `pf_window` has a wrap option (`PF_WINDOW_WRAP`: truncate, break at the last character that fits, break after
+  whitespace). A buffer line is laid out once (the layout cache is unchanged) and split into screen rows by caret x
+  (`wrap_line`); each row draws the same layout shifted left by its first character's x and clipped to its
+  character range. Whitespace may hang past the right edge in word mode. No hscroll while wrapping.
+- The window still scrolls by buffer line (`window-start-line`); `keep_visible` counts screen rows, so point's row is
+  always shown. A line taller than the window is not scrolled within (seam: a start offset in rows).
+- Scheme: `truncate-lines` (default `#t`, so existing buffers, dired, vterm and the sidebar are unchanged),
+  `word-wrap`, and `visual-line-mode` (buffer-local, word wrap and screen-row `C-n`, `C-p`, `C-a`, `C-e`). The goal
+  column of a run of row moves is kept in points. `window-row-start/end/x`, `window-move-rows` are the queries.
+- Mouse (`pos_at`), `pos_rect` (avy), the cursor, region, hl-line (all rows of the line) and show-paren follow rows.
+- Not done: only the first 4096 characters of a line are shaped, so a longer line wraps only that far; `C-k` and
+  other commands still act on logical lines (as in Emacs); no fringe arrows for continuation, a bar is drawn.
+- Verified: C test `test_soft_wrap`, Scheme `wrap-test.ss`. Not verified on screen.
 
 ## 9. Milestones
 

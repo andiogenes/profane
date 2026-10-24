@@ -12,8 +12,8 @@
 #include "pf_term.h"
 
 /* A window shows one buffer: it scrolls to keep point visible and renders the visible lines
- * into a display list through the layout cache. Lines are truncated at the window edge (no
- * soft wrap yet). Main thread only; portable (fonts arrive as ids and metrics). */
+ * into a display list through the layout cache. Lines are truncated at the window edge unless
+ * PF_WINDOW_WRAP is set. Main thread only; portable (fonts arrive as ids and metrics). */
 
 /* Geometry and the default font; colors come from faces (pf_face.h): the default face for text
  * and background, role faces for the cursor, line numbers, hl-line and show-paren, and the
@@ -35,7 +35,12 @@ typedef enum pf_window_option {
     PF_WINDOW_HL_LINE = 2,
     PF_WINDOW_SHOW_PAREN = 3,
     PF_WINDOW_CURSOR = 4,
+    PF_WINDOW_WRAP = 5, /* PF_WRAP_* */
 } pf_window_option;
+
+/* Lines longer than the text area: cut at the edge (Emacs's truncate-lines), continued on the next
+ * screen row at the last character that fits, or at the last whitespace (word-wrap). */
+enum { PF_WRAP_NONE = 0, PF_WRAP_CHAR = 1, PF_WRAP_WORD = 2 };
 
 enum { PF_CURSOR_NONE = 0, PF_CURSOR_BOX = 1, PF_CURSOR_HOLLOW = 2 };
 
@@ -140,6 +145,16 @@ void pf_window_set_terminal(pf_window *w, pf_term *term, const uint32_t faces[4]
 pf_term *pf_window_terminal(const pf_window *w);
 /* How many rows and columns of terminal cells fit the body now. */
 void pf_window_terminal_size(const pf_window *w, int *rows, int *cols);
+
+/* Screen rows (soft wrap). The row of POS as the window would lay it out now, visible or not:
+ * its characters are [*START, *END) (END is the line's end on its last row, else the first
+ * character of the next row). Returns -1 if the window shows no text. */
+int pf_window_row_bounds(pf_window *w, size_t pos, size_t *start, size_t *end);
+/* X of POS in its row, in points from the row's first character. */
+float pf_window_row_x(pf_window *w, size_t pos);
+/* The position DELTA screen rows from POS (negative: up) whose x in its row is nearest GOAL_X
+ * (past the row's end: the end), stopping at the first and last rows of the buffer. */
+size_t pf_window_move_rows(pf_window *w, size_t pos, long delta, float goal_x);
 
 /* Forces the next redisplay to render. */
 void pf_window_invalidate(pf_window *w);

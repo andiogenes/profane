@@ -4,7 +4,7 @@
 (library (profane simple)
   (export kill-ring kill-new current-kill)
   (import (chezscheme) (profane macos) (profane buffer) (profane keymap) (profane command)
-          (profane command-loop) (profane var) (profane mode))
+          (profane command-loop) (profane var) (profane mode) (profane window))
 
   (define (n) (prefix-numeric-value))
 
@@ -81,10 +81,28 @@
 
   (define-command (forward-char) (forward-char (n)))
   (define-command (backward-char) (backward-char (n)))
-  (define-command (move-beginning-of-line) (forward-line (- (n) 1)))
+  ;; With visual-line-mode, motion goes by screen rows of the selected window when it shows the
+  ;; current buffer; otherwise by lines.
+  (define (visual-window)
+    (let ([w (selected-window)])
+      (and w (minor-mode-enabled? 'visual-line-mode) (eq? (window-buffer w) (current-buffer)) w)))
+
+  (define-command (move-beginning-of-line)
+    (let ([w (visual-window)])
+      (if (and w (= (n) 1))
+          (goto-char (window-row-start w (point)))
+          (forward-line (- (n) 1)))))
+
   (define-command (move-end-of-line)
-    (unless (= (n) 1) (forward-line (- (n) 1)))
-    (goto-char (line-end-position)))
+    (let ([w (visual-window)])
+      (cond
+       [(and w (= (n) 1))
+        ;; A row that ends where the next begins (a wrapped one) stops before that character.
+        (let ([e (window-row-end w (point))])
+          (goto-char (if (< e (line-end-position)) (- e 1) e)))]
+       [else
+        (unless (= (n) 1) (forward-line (- (n) 1)))
+        (goto-char (line-end-position))])))
 
   (define-command (beginning-of-buffer) (set-mark! (point)) (goto-char (point-min)))
   (define-command (end-of-buffer) (set-mark! (point)) (goto-char (point-max)))
@@ -99,7 +117,23 @@
   ;; Line motion keeps the column the run of line moves started from.
   (define goal-column 0)
 
+  (define (move-rows w k)
+    (unless (memq (last-command) '(next-line previous-line))
+      (set! goal-column (window-row-x w (point))))
+    (let* ([from (window-row-start w (point))]
+           [to (window-move-rows w (point) k goal-column)])
+      (goto-char to)
+      ;; Still on the same row: there was no further row.
+      (when (= (window-row-start w to) from)
+        (error (if (> k 0) 'next-line 'previous-line)
+               (if (> k 0) "end of buffer" "beginning of buffer")))))
+
   (define (move-lines k)
+    (cond
+     [(visual-window) => (lambda (w) (move-rows w k))]
+     [else (move-lines-logical k)]))
+
+  (define (move-lines-logical k)
     (unless (memq (last-command) '(next-line previous-line))
       (set! goal-column (- (point) (line-beginning-position))))
     (let ([short (forward-line k)])

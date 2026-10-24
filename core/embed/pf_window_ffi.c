@@ -329,6 +329,28 @@ int64_t pf_win_pos_at(pf_handle win, float x, float y) {
     return w ? pf_window_pos_at(w, x, y) : INVALID;
 }
 
+int64_t pf_win_row_start(pf_handle win, size_t pos) {
+    pf_window *w = window_of(win);
+    size_t a, b;
+    return w && pf_window_row_bounds(w, pos, &a, &b) == 0 ? (int64_t)a : INVALID;
+}
+
+int64_t pf_win_row_end(pf_handle win, size_t pos) {
+    pf_window *w = window_of(win);
+    size_t a, b;
+    return w && pf_window_row_bounds(w, pos, &a, &b) == 0 ? (int64_t)b : INVALID;
+}
+
+double pf_win_row_x(pf_handle win, size_t pos) {
+    pf_window *w = window_of(win);
+    return w ? (double)pf_window_row_x(w, pos) : 0.0;
+}
+
+int64_t pf_win_move_rows(pf_handle win, size_t pos, int64_t delta, float goal_x) {
+    pf_window *w = window_of(win);
+    return w ? (int64_t)pf_window_move_rows(w, pos, (long)delta, goal_x) : INVALID;
+}
+
 int pf_frm_cursor_at(pf_handle frame, float x, float y) {
     pf_frame *f = frame_of(frame);
     return f ? pf_frame_cursor_at(f, x, y) : INVALID;

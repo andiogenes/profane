@@ -63,6 +63,12 @@ int pf_win_pos_rect(pf_handle win, size_t pos, uint8_t *out);
 
 /* The buffer position under window point (X, Y) (pf_window_pos_at), or -1. */
 int64_t pf_win_pos_at(pf_handle win, float x, float y);
+/* Screen rows (pf_window_row_bounds, pf_window_row_x, pf_window_move_rows): the first and one past
+ * the last character of POS's row, its x within the row, and the position DELTA rows away at GOAL_X. */
+int64_t pf_win_row_start(pf_handle win, size_t pos);
+int64_t pf_win_row_end(pf_handle win, size_t pos);
+double pf_win_row_x(pf_handle win, size_t pos);
+int64_t pf_win_move_rows(pf_handle win, size_t pos, int64_t delta, float goal_x);
 /* The mouse cursor over frame point (X, Y) (pf_frame_cursor_at): 0 arrow, 1 pointer, 2 text. */
 int pf_frm_cursor_at(pf_handle frame, float x, float y);
 

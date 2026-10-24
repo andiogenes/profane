@@ -26,6 +26,16 @@ static int pf_test_failures;
         }                                                                                          \
     } while (0)
 
+#define PF_CHECK_EQ_INT(actual, expected)                                                          \
+    do {                                                                                           \
+        long a_ = (long)(actual), e_ = (long)(expected);                                           \
+        if (a_ != e_) {                                                                            \
+            fprintf(stderr, "%s:%d: %s == %ld, expected %ld\n", __FILE__, __LINE__, #actual, a_,   \
+                    e_);                                                                           \
+            pf_test_failures++;                                                                    \
+        }                                                                                          \
+    } while (0)
+
 #define PF_CHECK_EQ_STR(actual, expected)                                                          \
     do {                                                                                           \
         const char *a_ = (actual), *e_ = (expected);                                               \
