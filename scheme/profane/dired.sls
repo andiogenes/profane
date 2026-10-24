@@ -284,13 +284,7 @@
           (dired (full-name e))
           (switch-to-buffer (find-file-noselect (full-name e))))))
 
-  (define (show-in-other-window! b)
-    (let* ([w (selected-window)]
-           [others (filter (lambda (x) (and (not (eq? x w)) (not (window-minibuffer? x))))
-                           (frame-windows (window-frame w)))]
-           [target (if (pair? others) (car others) (split-window w 'right))])
-      (set-window-buffer! target b)
-      (select-window target)))
+  (define (show-in-other-window! b) (display-buffer-in-other-window b #t))
 
   (define-command (dired-find-file-other-window)
     "Open the file or directory at point in the other window."

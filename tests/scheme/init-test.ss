@@ -26,7 +26,8 @@
 (for-each (lambda (b) (test-eq (car b) (cdr b) (lookup-key (global-map) (kbd (car b)))))
           '(("M-[" . previous-buffer) ("M-]" . next-buffer) ("M-o" . ace-window)
             ("C-M-v" . edge-of-buffer) ("M-g b" . consult-buffer)
-            ("M-g y" . consult-yank-from-kill-ring) ("M-g s" . consult-search-transient)))
+            ("M-g y" . consult-yank-from-kill-ring) ("M-g s" . consult-search-transient)
+            ("M-g t" . sidebar-toggle) ("C-x C-b" . buffer-menu) ("C-x 4 C-x C-b" . list-buffers)))
 
 ;; edge-of-buffer: the end, or the beginning with C--.
 (define b (get-buffer-create "edge"))

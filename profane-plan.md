@@ -526,7 +526,7 @@ the renderer tags the frame answering each event and records when it was submitt
   `edge-of-buffer` (end, or beginning with `C--`; the same key in the minibuffer selects the last/first candidate),
   `M-g b` `consult-buffer` (live preview, restored on quit), `M-g y` `consult-yank-from-kill-ring`, `vertico-count 5`.
   *Not ported yet, waiting for their features:* `M-g i` imenu and `M-g s` search (modes, tree-sitter, search core),
-  `M-g t` neotree and `C-x C-b` buffer menu (listing/tree views),   vertico's directory keys (`RET`, `DEL`, `M-DEL` on file names; file-name reading), electric-pair, `C-x 4 C-x C-b`.
+  (`M-g t` neotree and `C-x C-b` / `C-x 4 C-x C-b` buffer menu arrived with M3 item 6b; vertico's directory keys and electric-pair arrived earlier.)
   transpose-frame and tabs are unbound in the config (used by command name); the stock `C-x t` tab keys exist.
 - **Canvas windows** (M2, after item 7). `pf_window_set_canvas` (through `pf_frame_set_window_canvas`) makes a window draw a canvas
   in its body instead of text, on the base layer from the body's top-left, so it sits under native views and the
@@ -609,7 +609,7 @@ waits for. Keep this list current: remove an entry when it is done, add one when
 
 **M2 items still open** (§9, M2 row): none that was planned; the rest is deferred below. The owner's port (`scheme/init.ss`) still lacks
 `M-g i` (imenu), which needs modes and tree-sitter (M5); `M-g s` (ripgrep and find) arrived with M3 item 4;
-`M-g t` (neotree) and `C-x C-b` (buffer menu), which need listing and tree views; `C-x 4 C-x C-b`.
+(`M-g t` and the buffer menu keys arrived with M3 item 6b.)
 
 **Deferred, by area:**
 
@@ -807,6 +807,36 @@ Decisions:
   prompts and into a directory, delete, flags, links, refresh, quit) and the running app (real key events `n n m RET`
   through `post_keys`). **Not verified**: the look of the listing and its faces on screen, `move-to-trash` (it would put a file in
   the owner's Trash), `o` in a real window, large directories (10k+ entries), non-UTF-8 file names.
+
+**Item 6b: sidebar and buffer menu** (`(profane sidebar)`, `(profane buffer-menu)`; side and dedicated windows in
+`(profane window)`). Decisions:
+
+- **Sidebar = neotree** (`M-g t`, `sidebar-toggle`), a tree buffer in a **dedicated side window** on the left, 30 columns
+  (`sidebar-width`). The root is the project root (nearest `.git`, else the buffer's directory); dotfiles and files git
+  ignores are hidden (`sidebar-show-hidden`, `H`). Ignored files come from one `git ls-files --others --ignored
+  --exclude-standard --directory -z` per open/refresh (so there is no `.gitignore` parser to get wrong; no git or no
+  repository means only dotfiles are hidden). The command waits for git with `await`, so the editor stays alive. Keys: `RET`
+  (file: open in the main window; directory: expand), `TAB`, `n`/`p`, `g`, `H`, `U` (parent as root), `C` (directory as
+  root), `d` (dired there), `q`. Expanded directories are remembered per buffer, also across root changes. Not done:
+  create/rename/delete in the tree, icons (the owner's `neo-theme 'nerd`; plain triangles for now, the widget toolkit (M7)
+  rebuilds the sidebar), reveal-current-file, maximize, a mouse.
+- **Window additions** (`(profane window)`): `add-side-window` (a full-height window along the left or right edge, whatever the
+  layout), `window-dedicated?`/`set-window-dedicated!` (switch-to-buffer in a dedicated window selects another window and
+  shows the buffer there), `display-buffer-in-other-window` (the most recently used other window, splitting if alone; dired's
+  `o` now uses it) and the per-buffer `display-line-numbers` (the sidebar and the buffer list turn them off; a window reads
+  it when it gets the buffer, which is why the sidebar buffer is prepared before its window exists).
+- **Buffer menu**: `buffer-menu` in this window and `list-buffers` in another window, without selecting it. `C-x C-b` is
+  `list-buffers` by default (as Emacs) and the owner's `init.ss` makes it `buffer-menu` and binds `C-x 4 C-x C-b` to
+  `list-buffers`. Columns: mark, `.` the buffer we came from, `%` read-only, `*` modified, name, size (characters), mode, file.
+  Keys: `RET f o`, `d k` (flag to kill), `s` (flag to save), `u`, `x`, `g`, `n p`, `q`. Killing a modified buffer asks first
+  (`yes`). Not done: `m`/`%`-marks, sorting columns, `~`, `t` (toggle read-only), file-visiting filter.
+- **Verified**: `window-test.ss` (side windows' geometry, left and right, with a split main window; dedicated; the other
+  window; per-buffer line numbers), `sidebar-test.ss` (39 checks on a throwaway git repository: ignored and hidden files,
+  expand/collapse, open in the main window, `H`, `g`, `C`/`U`, dired from the tree, hide/show, the key path where the
+  command parks while git runs, no git), `buffer-menu-test.ss` (28 checks) and the running app (a real window: `M-g t`, `n
+  RET`, `g`, `q` and `C-x C-b` through real key events; the tree was 252 points wide at 1x). **Not verified**: how any of it
+  looks (the glyph `▸▾` in the code font, faces), the sidebar with several tabs (it lives in the current tab's layout),
+  resizing it with the mouse, very large trees, git submodules.
 
 ## 9. Milestones
 

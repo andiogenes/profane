@@ -232,6 +232,7 @@ clang-format -i <files>                                 # format C / ObjC (brew 
 | Project search (consult-ripgrep, consult-find) | `scheme/profane/search.sls` (§8k) |
 | Keychain secrets | `PFMacOS.m`, `(profane secrets)` (§8k) |
 | File system calls, dired | `core/fs/pf_fs.*`, `(profane fs)`, `(profane dired)` (§8k) |
+| Sidebar file tree, buffer menu | `(profane sidebar)`, `(profane buffer-menu)` (§8k) |
 | Child processes and ptys | `core/process/pf_process.*`, `(profane process)` (§8k) |
 | Scheme libraries | `scheme/profane/*.sls`: async, buffer, window, tab-bar, ace-window, transpose-frame, var, hook, keymap, face, command, mode, command-loop, simple, minibuffer, complete, canvas, eval, display, theme, themes, native, repl |
 | Boot, C→Scheme entry points (`pf-key`, `pf-insert-text`, `pf-startup`, `pf-redisplay`, …), init files | `scheme/boot.ss`, `scheme/init.ss` |

@@ -28,6 +28,7 @@
           split? split-direction split-children split-weights split-parent
           split-window delete-window delete-other-windows balance-windows resize-window!
           switch-to-buffer other-buffer
+          add-side-window window-dedicated? set-window-dedicated! display-buffer-in-other-window
           define-mode-line-segment register-mode-line-segment! format-mode-line
           redisplay-prepare!
           ;; internal, for (profane tab-bar) and (profane transpose-frame)
@@ -212,7 +213,8 @@
     (free-marker! w)
     (window-buffer-set! w b)
     (window-marker-set! w (%buf-marker-new (%buffer-handle b) (buffer-point b) #f))
-    (push-buffer! w))
+    (push-buffer! w)
+    (apply-display-options! w))
 
   (define (set-window-buffer! w buffer)
     (check-live 'set-window-buffer! w)
@@ -428,6 +430,50 @@
            (%relayout! f)
            new))]))
 
+  ;; A dedicated window keeps its buffer: switch-to-buffer in it goes to another window.
+  (define dedicated (make-weak-eq-hashtable))
+  (define (window-dedicated? w) (hashtable-ref dedicated w #f))
+  (define (set-window-dedicated! w flag)
+    (if flag (hashtable-set! dedicated w #t) (hashtable-delete! dedicated w))
+    flag)
+
+  ;; A new window showing BUFFER along the whole left (or right) edge of F, COLUMNS wide (at most
+  ;; half the frame), like Emacs's side windows; the other windows keep their layout in the rest.
+  (define (add-side-window f buffer side columns)
+    (unless (memq side '(left right)) (error 'add-side-window "side is left or right" side))
+    (let* ([new (%make-window f (get-buffer buffer))]
+           [old (frame-root f)]
+           [total (max 1 (exact (round (frame-width f))))]
+           [frac (min 1/2 (/ (exact (round (* columns (cell-width f)))) total))]
+           [left? (eq? side 'left)])
+      (if (and (split? old) (eq? (split-direction old) 'right))
+          (let ([scaled (map (lambda (x) (* x (- 1 frac))) (split-weights old))])
+            (split-children-set! old (if left? (cons new (split-children old)) (append (split-children old) (list new))))
+            (split-weights-set! old (if left? (cons frac scaled) (append scaled (list frac))))
+            (set-parent! new old))
+          (let ([s (%make-split 'right (if left? (list new old) (list old new))
+                                (if left? (list frac (- 1 frac)) (list (- 1 frac) frac)) #f #f)])
+            (replace-node! f old s)
+            (set-parent! old s)
+            (set-parent! new s)))
+      (%relayout! f)
+      new))
+
+  ;; Shows BUFFER in a window other than the selected one (the most recently used that is not
+  ;; dedicated), splitting the selected window to the right if it is alone; selects it when SELECT?.
+  ;; Returns the window.
+  (define display-buffer-in-other-window
+    (case-lambda
+      [(b) (display-buffer-in-other-window b #f)]
+      [(b select?)
+       (let* ([w (selected-window)]
+              [others (filter (lambda (x) (not (or (eq? x w) (window-dedicated? x) (window-minibuffer? x))))
+                              (window-list (window-frame w)))]
+              [target (if (pair? others) (most-recently-used others) (split-window w 'right))])
+         (set-window-buffer! target b)
+         (when select? (select-window target))
+         target)]))
+
   (define (destroy-window! w)
     (let ([f (window-frame w)])
       (free-marker! w)
@@ -632,7 +678,17 @@
 
   (define (switch-to-buffer b)
     (let ([w (selected-window)] [b (get-buffer b)])
-      (if w (set-window-buffer! w b) (set-buffer b))))
+      (cond
+        [(and w (window-dedicated? w))
+         (let ([others (filter (lambda (x) (not (or (window-dedicated? x) (window-minibuffer? x))))
+                               (window-list (window-frame w)))])
+           (if (null? others)
+               (error 'switch-to-buffer "the window is dedicated to its buffer")
+               (let ([target (most-recently-used others)])
+                 (select-window target)
+                 (set-window-buffer! target b))))]
+        [w (set-window-buffer! w b)]
+        [else (set-buffer b)])))
 
   (define (cycle-buffer step)
     (let* ([bs (filter visible-buffer? (buffer-list))]
@@ -813,6 +869,10 @@
   (defvar global-hl-line-sticky-flag #f
     "Highlight the current line in every window, not only the selected one.")
 
+  (defvar display-line-numbers #t
+    "Whether windows showing this buffer have line numbers (when display-line-numbers-mode is on)."
+    '(local))
+
   (define display-modes
     '((display-line-numbers-mode . 1) (global-hl-line-mode . 2) (show-paren-mode . 3)))
 
@@ -824,7 +884,10 @@
                                     [else #f])])
                   (%win-set-option (window-handle w) (cdr m)
                                    (if (and (minor-mode-enabled? (car m))
-                                            (or everywhere (selected? w)))
+                                            (or everywhere (selected? w))
+                                            (or (not (eq? (car m) 'display-line-numbers-mode))
+                                                (with-current-buffer (window-buffer w)
+                                                  (var-ref 'display-line-numbers))))
                                        1
                                        0))))
               display-modes))
