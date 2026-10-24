@@ -1,0 +1,192 @@
+(import (chezscheme) (srfi :64) (profane buffer) (profane keymap) (profane command)
+        (profane command-loop) (profane async) (profane mode) (profane var) (profane window)
+        (profane display) (profane themes) (profane files) (profane minibuffer) (profane complete)
+        (profane canvas) (profane transient) (profane tab-bar) (profane simple) (profane section)
+        (profane git) (profane git status) (profane git commands))
+
+(for-each invoke-library '((profane simple) (profane window) (profane display) (profane themes)
+                           (profane tab-bar) (profane files) (profane minibuffer) (profane complete)
+                           (profane canvas) (profane transient) (profane section) (profane git)
+                           (profane git status) (profane git commands)))
+
+(test-begin "git-commands")
+
+(define (settle!)
+  (let loop ([n 0])
+    (when (and (command-busy?) (< n 4000))
+      (async-poll! 5)
+      (resume-busy!)
+      (loop (+ n 1)))))
+(define (keys . ks) (for-each (lambda (k) (for-each handle-key (kbd k)) (settle!)) ks))
+(define (type s) (string-for-each (lambda (c) (handle-text (string c))) s))
+(define (text) (buffer-substring 0 (buffer-size)))
+(define (contains? s sub)
+  (let ([n (string-length sub)])
+    (let loop ([i 0])
+      (cond [(> (+ i n) (string-length s)) #f]
+            [(string=? (substring s i (+ i n)) sub) #t]
+            [else (loop (+ i 1))]))))
+(define (sh fmt . args) (system (apply format fmt args)))
+
+(define base (let ([p (format "/tmp/pf-gcmd-~a" (random 1000000000))])
+               (sh "rm -rf ~a ~a-remote.git ~a-other; mkdir -p ~a" p p p p)
+               p))
+(define dir base)
+(define remote (string-append base "-remote.git"))
+(define other (string-append base "-other"))
+(define (git . args) (sh "cd ~a && git -c user.email=t@t -c user.name=t ~a >/dev/null 2>&1" dir
+                         (apply string-append (map (lambda (a) (format "'~a' " a)) args))))
+(define (out . args) (cadr (await (run-git dir args))))
+(define (rout . args) (cadr (await (run-git remote args))))
+(define (subject) (let ([s (out "log" "-1" "--format=%s")]) (substring s 0 (- (string-length s) 1))))
+(define (count) (string->number (let ([s (out "rev-list" "--count" "HEAD")]) (substring s 0 (- (string-length s) 1)))))
+(define (trim s) (if (and (> (string-length s) 0) (char=? (string-ref s (- (string-length s) 1)) #\newline)) (substring s 0 (- (string-length s) 1)) s))
+
+(sh "git init -q --bare -b main ~a" remote)
+(sh "cd ~a && git init -q -b main && git remote add origin ~a" dir remote)
+(sh "cd ~a && printf 'one\\ntwo\\n' > p.txt && printf 'x\\n' > q.txt" dir)
+(git "add" "-A")
+(git "commit" "-m" "first")
+(git "push" "-u" "origin" "main")
+
+(define f (select-frame (make-headless-frame 900 700)))
+(var-set! 'default-directory (string-append dir "/"))
+(keys "C-x g")
+(define status (current-buffer))
+
+;; ---- commit ----
+(test-assert "nothing staged: c c is an error and opens no message buffer"
+             (begin (keys "c" "c") (not (get-buffer "*git-commit*"))))
+(sh "cd ~a && printf 'three\\n' >> p.txt" dir)
+(git "add" "p.txt")
+(keys "g" "c")
+(test-assert "c opens the commit menu" (transient-open?))
+(keys "c")
+(define mb (current-buffer))
+(test-equal "the message buffer" "*git-commit*" (buffer-name mb))
+(test-eq "in git-commit-mode" 'git-commit-mode (var-ref 'major-mode))
+(test-assert "it lists the staged files in comments"
+             (and (contains? (text) "# Changes to be committed:") (contains? (text) "#\tp.txt")))
+(test-assert "the diff is shown beside it" (let ([d (get-buffer "*git-commit-diff*")])
+                                               (and d (contains? (with-current-buffer d (buffer-string)) "+three")
+                                                    (memq d (map window-buffer (window-list))) #t)))
+(test-assert "message and diff are in two windows" (= 2 (length (window-list))))
+
+;; an empty message is refused
+(keys "C-c C-c")
+(test-eq "an empty message keeps the buffer" mb (current-buffer))
+(test-eqv "and nothing was committed" 1 (count))
+
+;; cancel
+(keys "C-c C-k")
+(test-assert "C-c C-k kills both buffers" (not (or (get-buffer "*git-commit*") (get-buffer "*git-commit-diff*"))))
+(test-eq "back in the status buffer" status (current-buffer))
+(test-eqv "one window again" 1 (length (window-list)))
+
+;; commit for real
+(keys "c" "c")
+(goto-char 0)
+(type "add three")
+(keys "C-c C-c")
+(test-equal "the commit has the message" "add three" (subject))
+(test-eqv "and is new" 2 (count))
+(test-eq "back in the status buffer" status (current-buffer))
+(test-assert "which no longer shows staged changes" (not (contains? (text) "Staged changes")))
+(test-assert "and lists the new commit" (contains? (text) "add three"))
+
+;; amend
+(sh "cd ~a && printf 'four\\n' >> p.txt" dir)
+(git "add" "p.txt")
+(keys "g" "c" "a")
+(test-assert "amend prefills the last message" (contains? (text) "add three"))
+(goto-char (line-end-position))
+(type " and four")
+(keys "C-c C-c")
+(test-equal "amended message" "add three and four" (subject))
+(test-eqv "same number of commits" 2 (count))
+(test-assert "the new content is in" (contains? (out "show" "HEAD:p.txt") "four"))
+
+;; extend keeps the message
+(sh "cd ~a && printf 'five\\n' >> p.txt" dir)
+(git "add" "p.txt")
+(keys "g" "c" "e")
+(test-equal "extend keeps the message" "add three and four" (subject))
+(test-assert "and takes the changes" (contains? (out "show" "HEAD:p.txt") "five"))
+(test-eqv "still 2 commits" 2 (count))
+
+;; reword changes only the message
+(keys "c" "w")
+(goto-char 0)
+(type "reworded: ")
+(keys "C-c C-c")
+(test-equal "reword" "reworded: add three and four" (subject))
+(test-assert "without changing content" (contains? (out "show" "HEAD:p.txt") "five"))
+
+;; -a commits unstaged changes
+(sh "cd ~a && printf 'six\\n' >> p.txt" dir)
+(keys "g" "c" "- a" "c")
+(goto-char 0)
+(type "everything")
+(keys "C-c C-c")
+(test-equal "-a commits tracked changes" "everything" (subject))
+(test-assert "six is in" (contains? (out "show" "HEAD:p.txt") "six"))
+
+;; ---- branches ----
+(keys "b" "n")
+(type "side")
+(keys "RET")
+(test-assert "b n creates a branch" (contains? (out "branch") "side"))
+(keys "b" "c")
+(type "feature")
+(keys "RET")
+(test-equal "b c creates and checks out" "feature" (trim (out "rev-parse" "--abbrev-ref" "HEAD")))
+(test-assert "the status shows the new head" (contains? (text) "Head:     feature"))
+(keys "b" "b")
+(type "main")
+(keys "RET")
+(test-equal "b b checks out a branch" "main" (trim (out "rev-parse" "--abbrev-ref" "HEAD")))
+(keys "b" "m")
+(type "primary")
+(keys "RET")
+(test-equal "b m renames the current branch" "primary" (trim (out "rev-parse" "--abbrev-ref" "HEAD")))
+(git "branch" "-m" "main")
+(keys "g" "b" "k")
+(type "side")
+(keys "RET")
+(test-assert "b k asks to confirm" (minibuffer-active?))
+(type "y")
+(keys "RET")
+(test-assert "and deletes" (not (contains? (out "branch") "side")))
+
+;; ---- push, fetch, pull ----
+(test-assert "ahead of the remote" (not (string=? (trim (out "rev-parse" "HEAD")) (trim (rout "rev-parse" "main")))))
+(keys "P" "p")
+(test-equal "P p pushes to the upstream" (trim (out "rev-parse" "HEAD")) (trim (rout "rev-parse" "main")))
+
+(sh "git clone -q ~a ~a && cd ~a && printf 'from other\\n' > o.txt && git add o.txt && git -c user.email=t@t -c user.name=t commit -q -m 'other work' && git push -q origin main" remote other other)
+(keys "f" "f")
+(test-assert "f f fetches" (contains? (out "log" "-1" "--format=%s" "origin/main") "other work"))
+(test-assert "the status lists it as unpulled" (contains? (text) "Unpulled from origin/main (1)"))
+(keys "F" "p")
+(test-equal "F p pulls (a fast-forward)" "other work" (subject))
+(test-assert "and the status caught up" (not (contains? (text) "Unpulled")))
+
+;; push of a new branch sets its upstream
+(git "checkout" "-b" "topic")
+(sh "cd ~a && printf 'topic\\n' > t.txt" dir)
+(git "add" "t.txt")
+(git "commit" "-m" "topic work")
+(keys "g" "P" "p")
+(test-assert "pushing a branch without an upstream sets it" (contains? (rout "branch") "topic"))
+(test-equal "and records the upstream" "origin/topic" (trim (out "rev-parse" "--abbrev-ref" "topic@{upstream}")))
+
+;; failures are reported, not thrown
+(sh "cd ~a && git remote set-url origin /no/such/remote.git" dir)
+(keys "f" "f")
+(test-assert "a failing fetch leaves the editor usable" (not (command-busy?)))
+(test-assert "and logs the failure" (contains? (with-current-buffer (git-process-buffer) (buffer-string)) "[exit 128"))
+
+(sh "rm -rf ~a ~a ~a" base remote other)
+(delete-headless-frame! f)
+(test-end "git-commands")
+(test-exit)

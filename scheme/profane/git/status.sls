@@ -10,7 +10,7 @@
 
 (library (profane git status)
   (export git-item? git-item-kind git-item-area git-item-path git-item-change git-item-file
-          git-item-hunk git-item-commit git-status-buffer-refresh!)
+          git-item-hunk git-item-commit git-status-buffer-refresh! git-refresh-status-buffers!)
   (import (chezscheme) (profane buffer) (profane window) (profane command) (profane command-loop)
           (profane keymap) (profane mode) (profane var) (profane face) (profane display)
           (profane files) (profane minibuffer) (profane async) (profane git) (profane section)
@@ -191,6 +191,12 @@
            [data (read-everything root)] ; may wait: no buffer is current-buffer-sensitive here
            [tree (build-tree data)])
       (with-current-buffer b (section-refresh! tree))))
+
+  ;; Redraws every status buffer of the repository at ROOT.
+  (define (git-refresh-status-buffers! root)
+    (for-each (lambda (b) (when (equal? (with-current-buffer b (var-ref 'git-repo-root)) root)
+                            (git-status-buffer-refresh! b)))
+              (status-buffers)))
 
   (define-command (magit-status)
     "Show the status of the git repository containing the current directory."

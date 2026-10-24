@@ -1083,6 +1083,20 @@ Steps, one commit each, tested against throwaway repos with the real `git`:
 - **4e** commit transient and message buffer (`C-c C-c`, `C-c C-k`; amend prefills; staged diff shown beside);
   branch, push, pull and fetch transients. Credentials: git's own helper (osxkeychain) and ssh-agent; an askpass
   through `profane-client` is a seam.
+  *Done.* `(profane git commands)`, bound in the status buffer: `c` commit menu (switches `-a --allow-empty
+  --signoff --no-verify`; `c` commit, `e` extend, `a` amend, `w` reword), `b` branch (checkout including tracking a
+  remote branch, create-and-checkout, create, rename, delete with a second question for unmerged ones), `P` push
+  (to the upstream; a branch without one asks for a remote if there are several and sets the upstream; `e`
+  elsewhere; `-f` is `--force-with-lease`), `F` pull (`-r`, `-f`), `f` fetch (upstream, elsewhere, all; `-p`).
+  The message is written in `*git-commit*` (mode `git-commit-mode`, comment lines from the staged files, the diff
+  in `*git-commit-diff*` beside it) and committed by `C-c C-c` with `git commit -F <tmp> --cleanup=strip`; an empty
+  message is refused and keeps the buffer; `C-c C-k` closes both. Amend and reword prefill the last message. Each
+  command redraws the status buffers of the repository and shows the last line git printed (or its complaint) in
+  the echo area; the whole output is in `*git-process*`. Network commands wait without blocking the editor.
+  `run-git` sets `GIT_SSH_COMMAND="ssh -o BatchMode=yes"` (unless the user set one) so ssh fails instead of
+  waiting for a password it cannot read. Not done: askpass/passphrase prompts, hooks that need a terminal, signing
+  prompts, `commit --fixup`, merge/rebase/stash/tag, remote and upstream management beyond the first push, pushing
+  tags. Tested end to end against a bare remote and a second clone.
 - **4f** `d` diff, `RET` on a commit shows it, a plain `l` log list (the graph is v2).
 - **4g** word-level diff refinement (first to cut).
 Refresh is manual (`g`) and after every git command profane runs; FSEvents (§8k) would make it automatic.

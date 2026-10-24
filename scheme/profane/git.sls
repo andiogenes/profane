@@ -22,7 +22,7 @@
           git-diff-hunk? git-diff-hunk-header git-diff-hunk-old-start git-diff-hunk-old-len
           git-diff-hunk-new-start git-diff-hunk-new-len git-diff-hunk-lines
           git-status git-diff git-log define-git-backend! git-backend-names
-          git-hunk-patch git-hunk-region-patch git-apply-patch
+          git-hunk-patch git-hunk-region-patch git-apply-patch git-write-temp-file
           git-commit? git-commit-hash git-commit-short git-commit-subject git-commit-author
           git-commit-date git-commit-refs
           parse-git-status parse-git-diff parse-git-log)
@@ -82,7 +82,10 @@
                     (append `((cwd . ,root)
                               (env . (("GIT_TERMINAL_PROMPT" . "0") ("GIT_OPTIONAL_LOCKS" . "0")
                                       ("GIT_EDITOR" . "true") ("GIT_PAGER" . "cat")
-                                      ("LC_MESSAGES" . "C"))))
+                                      ("LC_MESSAGES" . "C")
+                                      ;; ssh must never wait for a password on a terminal it lacks
+                                      ("GIT_SSH_COMMAND" . ,(or (getenv "GIT_SSH_COMMAND")
+                                                                "ssh -o BatchMode=yes")))))
                             extra))
        (lambda (done)
          (define r (promise-value done))
@@ -316,6 +319,8 @@
 
   ;; Writes TEXT (UTF-8) to a new temporary file and returns its name; $TMPDIR if it can be
   ;; written, else /tmp.
+  (define (git-write-temp-file text) (write-temp-file text))
+
   (define (write-temp-file text)
     (let try ([dirs (append (let ([t (getenv "TMPDIR")]) (if t (list (trim-slash t)) '())) '("/tmp"))])
       (when (null? dirs) (error 'git-apply-patch "no writable temporary directory"))

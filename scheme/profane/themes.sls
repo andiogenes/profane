@@ -59,6 +59,7 @@
       (git-diff-added (foreground . green))
       (git-diff-removed (foreground . red))
       (git-diff-meta (foreground . fg-dim) (slant . italic))
+      (git-commit-comment (foreground . fg-dim))
       (dired-header (foreground . cyan) (weight . bold))
       (dired-directory (foreground . blue) (weight . bold))
       (dired-symlink (foreground . magenta))
