@@ -20,7 +20,7 @@
           erase-buffer buffer-edit-count
           undo-boundary undo redo buffer-disable-undo buffer-enable-undo
           buffer-modified? set-buffer-unmodified!
-          find-file-noselect save-buffer
+          find-file-noselect save-buffer set-visited-file-name! file-name-nondirectory
           ;; internal, for other (profane ...) libraries
           %buffer-handle %buffer-point-marker %buffer-locals)
   (import (chezscheme) (profane native))
@@ -346,6 +346,18 @@
                              (if (file-exists? path) (read-file-bytes path) #vu8()))])
           (buffer-file-name-set! b path)
           b)))
+
+  ;; Makes the current buffer visit PATH (without writing it) and names it after the file.
+  (define (set-visited-file-name! path)
+    (let ([b (current-buffer)])
+      (buffer-file-name-set! b path)
+      (let ([name (file-name-nondirectory path)])
+        (unless (string=? name (buffer-name b))
+          (hashtable-delete! buffers (buffer-name b))
+          (let ([new (unique-name name)])
+            (buffer-name-set! b new)
+            (hashtable-set! buffers new b))))
+      path))
 
   ;; Writes the whole buffer to its file atomically (temp file + rename).
   (define (save-buffer)

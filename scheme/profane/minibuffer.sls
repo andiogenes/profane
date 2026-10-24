@@ -25,6 +25,10 @@
 ;;;   preview PROC        called with the selected candidate whenever it changes (consult)
 ;;;   quit PROC           called, with no arguments, on C-g
 ;;;   history SYMBOL      history list, shared by name (M-p / M-n)
+;;;   display PROC        candidate -> the string shown for it (the value stays the candidate)
+;;;   raw #t              the collection's candidates are final: no filtering or sorting here
+;;;   files #t            file-name input: RET on a directory enters it, DEL and M-DEL delete
+;;;                       a path component (vertico-directory); see (profane files)
 ;;;
 ;;; Matching splits the input at spaces and wants every part somewhere in the candidate, in any
 ;;; order, ignoring case unless the input has capitals (orderless-style).
@@ -48,7 +52,7 @@
 
   (define-record-type session
     (fields buffer k prompt-end collection require-match annotate default preselect preview
-            quit history
+            quit history display raw files
             (mutable candidates)     ; the candidates shown, filtered
             (mutable selected)       ; index into candidates, or #f
             (mutable last-input)     ; input the candidates were computed for
@@ -143,7 +147,9 @@
     (let* ([s current] [input (minibuffer-contents)])
       (when (completing? s)
         (unless (equal? input (session-last-input s))
-          (let ([cands (completion-candidates (session-collection s) input)])
+          (let ([cands (if (session-raw s)
+                           (map ->string ((session-collection s) input))
+                           (completion-candidates (session-collection s) input))])
             (session-candidates-set! s cands)
             (session-last-input-set! s input)
             (session-selected-set!
@@ -178,7 +184,7 @@
             (unless (null? l)
               (insert "\n")
               (let ([from (point)])
-                (insert (car l))
+                (insert (if (session-display s) ((session-display s) (car l)) (car l)))
                 (when (eqv? i (session-selected s))
                   (put-text-property from (point) 'face 'highlight))
                 (let ([note (and (session-annotate s) ((session-annotate s) (car l)))])
@@ -218,6 +224,7 @@
             (make-session b k pe collection (opt 'require-match #f) (opt 'annotate #f)
                           (let ([d (opt 'default #f)]) (and d (->string d)))
                           (opt 'preselect #f) (opt 'preview #f) (opt 'quit #f) (opt 'history #f)
+                          (opt 'display #f) (opt 'raw #f) (opt 'files #f)
                           '() #f #f #f #f))))
       (%minibuffer-activate! b)
       (refresh!)))
@@ -255,6 +262,9 @@
     (let* ([s current] [input (minibuffer-contents)] [sel (session-selected s)])
       (cond
         [(and (string=? input "") (session-default s)) (finish! (session-default s))]
+        ;; file names: RET on a directory goes into it (vertico-directory-enter)
+        [(and (session-files s) sel (directory-candidate? (list-ref (session-candidates s) sel)))
+         (replace-input! (list-ref (session-candidates s) sel))]
         [(and (completing? s) sel) (finish! (list-ref (session-candidates s) sel))]
         [(and (completing? s) (session-require-match s))
          (error 'exit-minibuffer "match required")]
@@ -277,7 +287,10 @@
   (define (select! delta)
     (let* ([s current] [n (length (session-candidates s))])
       (when (> n 0)
-        (session-selected-set! s (mod (+ (or (session-selected s) 0) delta) n)))))
+        (session-selected-set!
+         s (cond [(session-selected s) (mod (+ (session-selected s) delta) n)]
+                 [(> delta 0) 0]            ; from the prompt: the first
+                 [else (- n 1)])))))
 
   (define-command (minibuffer-next-line) "Select the next candidate." (select! 1) (refresh!))
   (define-command (minibuffer-previous-line) "Select the previous candidate." (select! -1) (refresh!))
@@ -290,19 +303,55 @@
         (session-selected-set! s (if (eq? (current-prefix-arg) '-) 0 (- n 1)))
         (refresh!))))
 
+  (define (replace-input! text)
+    (let ([s current])
+      (with-current-buffer (session-buffer s)
+        (delete-region (session-prompt-end s) (input-end))
+        (goto-char (session-prompt-end s))
+        (insert text))))
+
+  (define (directory-candidate? c)
+    (and (> (string-length c) 0) (char=? (string-ref c (- (string-length c) 1)) #\/)))
+
   (define-command (minibuffer-complete)
     "Insert the selected candidate as the input."
-    (let ([s current] )
-      (when (session-selected s)
-        (let ([c (list-ref (session-candidates s) (session-selected s))])
-          (with-current-buffer (session-buffer s)
-            (delete-region (session-prompt-end s) (input-end))
-            (goto-char (session-prompt-end s))
-            (insert c))))))
+    (let ([s current])
+      (cond
+        [(session-selected s)
+         (replace-input! (list-ref (session-candidates s) (session-selected s)))]
+        [(pair? (session-candidates s))      ; the prompt is selected: take the first
+         (replace-input! (car (session-candidates s)))])))
 
+  ;; Deletes back to just after the previous "/" before position FROM (keeping that slash):
+  ;; a path component, or the rest of a partly typed one.
+  (define (delete-back-to-slash! from)
+    (let* ([pe (session-prompt-end current)]
+           [start (let back ([j (- from 1)])
+                    (cond [(< j pe) pe]
+                          [(eqv? (char-after j) #\/) (+ j 1)]
+                          [else (back (- j 1))]))])
+      (delete-region start (point))))
+
+  ;; DEL; in a file name, right after a "/" it deletes the whole component (vertico-directory).
   (define-command (minibuffer-delete-backward-char)
     (guard-prompt! 'delete-backward-char)
-    (delete-char (- (prefix-numeric-value))))
+    (if (and (session-files current) (eqv? (char-before) #\/) (= (point) (input-end))
+             (not (current-prefix-arg)))
+        (delete-back-to-slash! (- (point) 1))
+        (delete-char (- (prefix-numeric-value)))))
+
+  ;; M-DEL: a path component in a file name, else a word.
+  (define-command (minibuffer-delete-word-backward)
+    (guard-prompt! 'delete-word-backward)
+    (cond
+      [(session-files current)
+       (delete-back-to-slash! (if (eqv? (char-before) #\/) (- (point) 1) (point)))]
+      [else
+       (let* ([pe (session-prompt-end current)]
+              [word? (lambda (c) (and c (or (char-alphabetic? c) (char-numeric? c))))]
+              [skip (let loop ([i (point)]) (if (and (> i pe) (not (word? (char-before i)))) (loop (- i 1)) i))]
+              [start (let loop ([i skip]) (if (and (> i pe) (word? (char-before i))) (loop (- i 1)) i))])
+         (delete-region start (point)))]))
 
   (define-command (minibuffer-beginning-of-line)
     (goto-char (session-prompt-end current)))
@@ -337,7 +386,7 @@
                   ("C-n" . minibuffer-next-line) ("<down>" . minibuffer-next-line)
                   ("C-p" . minibuffer-previous-line) ("<up>" . minibuffer-previous-line)
                   ("TAB" . minibuffer-complete) ("C-M-v" . minibuffer-edge-of-candidates)
-                  ("DEL" . minibuffer-delete-backward-char)
+                  ("DEL" . minibuffer-delete-backward-char) ("M-DEL" . minibuffer-delete-word-backward)
                   ("C-b" . minibuffer-backward-char) ("<left>" . minibuffer-backward-char)
                   ("C-a" . minibuffer-beginning-of-line) ("<home>" . minibuffer-beginning-of-line)
                   ("M-p" . previous-history-element) ("M-n" . next-history-element)))

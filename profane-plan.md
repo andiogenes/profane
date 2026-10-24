@@ -422,6 +422,19 @@ the renderer tags the frame answering each event and records when it was submitt
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
   minibuffer reads input in this window (below).
+- **File names** (`(profane files)`, M2). `expand-file-name` (`~`, relative names from a directory, `.`/`..`, repeated slashes, trailing
+  slash kept), `abbreviate-file-name`, `file-name-directory`/`-nondirectory`, `directory-entries`, the buffer-local
+  `default-directory` (else the visited file's directory, else `~/`), and `read-file-name`: `completing-read` over the
+  entries of the directory typed so far (new minibuffer options `raw`, `display`, `files`), shown by name, names
+  starting with the typed text first, then directories before files, then alphabetical. vertico-directory behaviour: RET
+  on a directory goes into it, RET on a file or on a path nothing matches finishes, DEL right after `/` deletes the
+  whole component, M-DEL a component (or a word in other prompts), TAB takes the first candidate if none is selected, `//`
+  or `/~` in the input starts over at the root or home. With the input empty or ending in `/` nothing is selected, so RET
+  finishes with that directory; C-n then selects the first entry. Commands: `find-file` (`C-x C-f`; a directory is
+  refused until dired, M3), `save-buffer` (`C-x C-s`; asks where when the buffer has no file), `write-file`
+  (`C-x C-w`; `set-visited-file-name!`). *Not yet:* partial-component completion (`~/Re/pr`), file annotations
+  (size, dates), `find-file-other-window`, `insert-file`, `save-some-buffers` and a prompt when killing a modified
+  buffer, auto-save and backups, file watching, remote paths, and symlink-aware names (`truename`).
 - **Mouse** (`(profane mouse)`, M2). `ProfaneView` sends mouse events to Scheme as strings in frame coordinates (`pf-mouse`:
   `down|drag|up X Y CLICKS`, `scroll X Y DX DY PRECISE`; the first click that focuses the window also acts) and asks C
   only for the cursor shape (`pf_frame_cursor_at`, from a tracking area: a canvas region's cursor, the I-beam over
@@ -567,8 +580,7 @@ the renderer tags the frame answering each event and records when it was submitt
 State at the end of the M2 work so far (everything in §8i is on `main`). Deliberately deferred work, each with what it
 waits for. Keep this list current: remove an entry when it is done, add one when something is left as a seam.
 
-**M2 items still open** (§9, M2 row): file-name reading with
-vertico's directory keys (`RET`, `DEL`, `M-DEL` on paths) and `find-file`; window extras (`C-v`/`M-v`/
+**M2 items still open** (§9, M2 row): window extras (`C-v`/`M-v`/
 recenter, per-window buffer history, header lines); electric-pair. The owner's port (`scheme/init.ss`) still lacks
 `M-g i` (imenu) and `M-g s` (search), which need modes, tree-sitter and the search core (M5, ripgrep/find M3);
 `M-g t` (neotree) and `C-x C-b` (buffer menu), which need listing and tree views; `C-x 4 C-x C-b`.
