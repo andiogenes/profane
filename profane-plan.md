@@ -422,6 +422,14 @@ the renderer tags the frame answering each event and records when it was submitt
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
   minibuffer reads input in this window (below).
+- **Evaluating from the editor** (`(profane eval)`, after M2 item 8). `M-:` `eval-expression` (reads in the minibuffer, history
+  `eval-expression`), `C-x C-e` `eval-last-sexp` (the expression before point, found by a small tokenizer that skips
+  comments and knows strings, character literals and quote prefixes; inside a list it takes the inner form), `eval-region`
+  and `eval-buffer` (by `M-x`). Code runs in the interaction environment, as for the socket REPL; results and printed
+  output go to the echo area and *Messages*, an error shows its message. *Deferred:* `load-file` (needs file-name
+  reading, M3), interrupting a looping evaluation with `C-g` (needs engines: it blocks the editor today), `C-u C-x C-e`
+  inserting the value, `eval-print-last-sexp`, `eval-defun` (`C-M-x`, needs defun motion), a REPL buffer (comint-style,
+  with history and completion: with the REPL modes in M10). Needed before the M4 dogfood milestone: interruption.
 - **Press-and-hold** (fix after M2 item 8). macOS shows its accent picker for a held letter in any view that is an
   `NSTextInputClient`, so held keys did not repeat. The app now sets `ApplePressAndHoldEnabled` to NO at launch and,
   for each plain key sent through the input method, sets it for that key: on only if Scheme listed the key in

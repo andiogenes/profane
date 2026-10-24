@@ -40,6 +40,7 @@
 (completing-read "Pick: " '("a") (lambda (s) (set! got s)) 'quit (lambda () (set! quit? #t)))
 (keys "C-g")
 (test-assert "C-g closes without calling k" (and (not got) quit? (not (minibuffer-active?))))
+(test-eq "and the window's buffer is current again (regression: it stayed the minibuffer)" scratch (current-buffer))
 
 ;; ---- completion ----
 (test-equal "orderless: any order, case-insensitive"

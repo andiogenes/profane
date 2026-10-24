@@ -160,6 +160,12 @@ and the consult/corfu parts listed above; check §9 before choosing the next ite
 
 ## 7. Open items and known gaps
 
+- **Evaluating from the editor** exists (`M-:`, `C-x C-e`, `eval-region`, `eval-buffer`; plan §8i). Deferred, with
+  why: `load-file` (file-name reading, M3); `C-g` interrupting a looping eval (engines, **needed before M4**, since
+  a mistyped loop hangs the editor); `eval-defun`/`C-M-x` (defun motion, with modes in M5); `C-u C-x C-e`
+  inserting the value; a REPL buffer with history and completion (M10 REPL modes). Branch `m2-eval`, off
+  `m2-press-and-hold`.
+
 - **Press-and-hold** is off so held keys repeat; `press-and-hold-keys` turns the accent picker back on per key. Owner
   check: hold a key (it should repeat) and, after `(var-set! 'press-and-hold-keys '("e"))`, hold `e` (picker expected).
   Branch `m2-press-and-hold`, cut from `m2-keymaps`.

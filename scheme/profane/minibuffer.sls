@@ -1,7 +1,7 @@
 ;;; (profane minibuffer) — reading input in the minibuffer window, with completion. Unstable API
 ;;; (plan §10).
 ;;;
-;;;   (read-from-minibuffer prompt k [initial])      ; k receives the string
+;;;   (read-from-minibuffer prompt k [initial option value ...])   ; k receives the string
 ;;;   (completing-read prompt collection k option value ...)
 ;;;
 ;;; Input is callback-based, not blocking: keys arrive one at a time from the shell, so a command
@@ -229,7 +229,7 @@
       s))
 
   (define (read-from-minibuffer prompt k . rest)
-    (open! (if (pair? rest) (car rest) "") k #f '() prompt))
+    (open! (if (pair? rest) (car rest) "") k #f (if (pair? rest) (cdr rest) '()) prompt))
 
   (define (read-string prompt k . rest) (apply read-from-minibuffer prompt k rest))
 
@@ -266,6 +266,8 @@
 
   (define (abort-minibuffer)
     (let ([s (close!)])
+      (let ([w (selected-window)])
+        (when w (set-buffer (window-buffer w))))
       (when (session-quit s) ((session-quit s)))
       (message "Quit")))
 
