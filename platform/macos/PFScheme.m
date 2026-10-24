@@ -3,6 +3,7 @@
 #import <AppKit/AppKit.h>
 
 #import "PFMacOS.h"
+#import "PFNet.h"
 #import "ProfaneView.h"
 
 #include "pf_async.h"
@@ -71,6 +72,10 @@ int PFSchemeBoot(void) {
         {"pf_app_trash", (void *)pf_app_trash},
         {"pf_app_applescript", (void *)pf_app_applescript},
         {"pf_app_window_bounds", (void *)pf_app_window_bounds},
+        {"pf_net_connect", (void *)pf_net_connect},
+        {"pf_net_send", (void *)pf_net_send},
+        {"pf_net_close", (void *)pf_net_close},
+        {"pf_net_consumed", (void *)pf_net_consumed},
         {"pf_app_secret_get", (void *)pf_app_secret_get},
         {"pf_app_secret_set", (void *)pf_app_secret_set},
         {"pf_app_secret_delete", (void *)pf_app_secret_delete},

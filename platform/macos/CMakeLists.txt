@@ -40,6 +40,7 @@ add_executable(profane MACOSX_BUNDLE
   PFGlyphAtlas.m
   PFKeys.m
   PFMacOS.m
+  PFNet.m
   PFMetalRenderer.m
   PFNativeViews.m
   PFReplServer.m
@@ -62,6 +63,7 @@ target_link_libraries(profane PRIVATE
   "-framework CoreText"
   "-framework ImageIO"
   "-framework Metal"
+  "-framework Network"
   "-framework QuartzCore"
   "-framework Security"
   "-framework UniformTypeIdentifiers")

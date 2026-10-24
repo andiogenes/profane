@@ -891,6 +891,36 @@ Decisions:
   latency in a terminal, full-screen programs (vim, htop, less) on the real renderer, a very fast output flood (`yes`),
   fish's own key bindings beyond the shown prompt, the Russian layout (plain keys go as typed text, so letters follow the layout).
 
+**Item 8: TLS sockets** (`platform/macos/PFNet.*`, `(profane net)`). Decisions:
+
+- **Network.framework** (`nw_connection`), not raw sockets and SecureTransport: system trust, host-name checking, proxies,
+  Happy Eyeballs and the TLS stack come with it. It is platform code (Objective-C in the app, like the pasteboard); the core
+  stays portable. Client connections only: no listening sockets, no UDP/QUIC, no client certificates (add with a user).
+- **Same event model as processes**: connecting is asynchronous and everything is posted to the async queue for the
+  connection's token: open (the negotiated ALPN protocol), data, closed, error (the system's message and domain/code). The
+  shell stops receiving while 256 KiB of data are unacknowledged (`pf_net_consumed`, sent after each filter call). A
+  connection in the "waiting" state (no route, refused) is reported as an error instead of waiting for the network to return;
+  the connection timeout is 20 s.
+- **Scheme**: `open-network-stream host port [options]` returns a connection at once; `(await (connection-ready c))` waits for
+  it (resolved with the connection, rejected with the system's message). Options: `tls` (verified against the system's trust and
+  the host name), `insecure` (with tls: accept any certificate, for tests and self-signed servers; deliberately explicit),
+  `alpn` (offered protocols; `connection-protocol` tells the chosen one), `filter` (bytevectors, never decoded) and `sentinel`
+  (`"open\n"`, `"closed\n"`, `"failed: ...\n"`). `connection-send` (bytes or a string), `connection-close`, `connection-status`.
+  The HTTPS/SSE client of M5 is built on this.
+- **Verified**: `tests/macos/net.sh` against local servers, no outside network: `nc` for plain TCP (greeting, data both ways,
+  closing, sentinel order, a 3 MB transfer through the pause/resume path), a refused port (message), bad arguments, the system
+  `openssl s_server` with a self-signed certificate (verification fails with a message; `insecure` connects, negotiates ALPN `h2`
+  when offered and none otherwise, and carries an HTTP request). By hand against the real internet: `example.com` over
+  verified TLS (ALPN `http/1.1`, a real `200 OK` response) and `expired.badssl.com` (fails: "chain had an expired cert").
+  **Not verified**: proxies, IPv6-only hosts, connections surviving sleep/network changes, TLS 1.3 session resumption, a
+  `PF_NET_MAX_OUTSTANDING` stall under a slow consumer (the large transfer passed but its pause was not observed), and
+  closing while a send is in flight.
+
+**M3 is complete** (plan §9, M3 row): processes/PTY (item 2), ripgrep/find (4), dired and the sidebar (6), vterm and shell-here
+(7), Keychain (5), `(profane macos)` (3) and TLS sockets (8), on the async foundation (1). One thing the row did not name
+but the work needed: read-only buffers and the keyboard-takeover hooks of the command loop. Left for later on purpose: the
+terminal's mouse and focus handling, listening sockets, a process-level coding system, worker pool and timer heap (no user yet).
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |
