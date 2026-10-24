@@ -2,6 +2,7 @@
  * entry points. Needs no window or GPU. */
 
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -71,6 +72,23 @@ int main(void) {
     hello = call_text("pf-hello-text", NULL, 0, &status);
     PF_CHECK_EQ_STR(hello, "redefined");
     free(hello);
+
+    /* Startup scripts: the shipped init.ss binds the owner's keys; a failing user init.ss is
+     * reported and does not stop startup. */
+    char user_init[] = "/tmp/pf-init-XXXXXX";
+    int fd = mkstemp(user_init);
+    PF_CHECK(fd >= 0);
+    if (fd >= 0) {
+        const char *src = "(define user-init-ran #t)\n(error 'user \"boom\")\n(define after-error #t)\n";
+        PF_CHECK(write(fd, src, strlen(src)) == (ssize_t)strlen(src));
+        close(fd);
+        setenv("PROFANE_INIT", user_init, 1);
+        check_repl(1, "(pf-load-init-files)\n", "");
+        check_repl(1, "(list (lookup-key (global-map) (kbd \"M-o\")) user-init-ran)\n",
+                   "(ace-window #t)\n");
+        check_repl(1, "(and (current-message) #t)\n", "#t\n");
+        unlink(user_init);
+    }
 
     /* Collection requests are deferred until idle. */
     check_repl(1, "(define c0 (collections))\n(define junk #f)\n", "");

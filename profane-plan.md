@@ -422,6 +422,16 @@ the renderer tags the frame answering each event and records when it was submitt
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
   minibuffer reads input in this window (below).
+- **Default and ported keymaps** (M2 item 8). Stock Emacs bindings live in the libraries (`(profane simple)` and friends); the
+  owner's port of their `init.el` is `scheme/init.ss`, shipped in the bundle and loaded by `pf-startup` (`pf-load-init-files`)
+  before the user's own `~/Library/Application Support/profane/init.ss` (`PROFANE_INIT` overrides; an error in either goes
+  to the echo area and *Messages*, startup continues). Ported: `M-[`/`M-]` previous/next buffer, `M-o` ace-window, `C-M-v`
+  `edge-of-buffer` (end, or beginning with `C--`; the same key in the minibuffer selects the last/first candidate),
+  `M-g b` `consult-buffer` (live preview, restored on quit), `M-g y` `consult-yank-from-kill-ring`, `vertico-count 5`.
+  *Not ported yet, waiting for their features:* `M-g i` imenu and `M-g s` search (modes, tree-sitter, search core),
+  `M-g t` neotree and `C-x C-b` buffer menu (listing/tree views), `C-x C-j` avy (jump labels on the canvas),
+  vertico's directory keys (`RET`, `DEL`, `M-DEL` on file names; file-name reading), electric-pair, `C-x 4 C-x C-b`.
+  transpose-frame and tabs are unbound in the config (used by command name); the stock `C-x t` tab keys exist.
 - **Canvas windows** (M2, after item 7). `pf_window_set_canvas` (through `pf_frame_set_window_canvas`) makes a window draw a canvas
   in its body instead of text, on the base layer from the body's top-left, so it sits under native views and the
   overlay; no fringes or cursor, mode line kept. A canvas change redraws just that window. Hit testing looks at

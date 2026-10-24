@@ -38,6 +38,13 @@
   (define-command (beginning-of-buffer) (set-mark! (point)) (goto-char (point-min)))
   (define-command (end-of-buffer) (set-mark! (point)) (goto-char (point-max)))
 
+  ;; One key for both ends of the buffer: the end, or the beginning with a negative argument
+  ;; (C-- C-M-v), as the owner's edge-of-buffer does.
+  (define-command (edge-of-buffer)
+    "Go to the end of the buffer, or with a negative argument (C--) to its beginning."
+    (set-mark! (point))
+    (goto-char (if (eq? (current-prefix-arg) '-) (point-min) (point-max))))
+
   ;; Line motion keeps the column the run of line moves started from.
   (define goal-column 0)
 

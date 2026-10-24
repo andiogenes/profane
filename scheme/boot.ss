@@ -87,6 +87,26 @@
 ;;; Called by the shell before each redisplay: layout, mode lines, echo area, tab bar.
 (define (pf-redisplay) (redisplay-prepare!))
 
+;;; Startup scripts: the shipped init.ss (the owner's port of their Emacs setup), then the user's
+;;; own, ~/Library/Application Support/profane/init.ss (PROFANE_INIT overrides it). An error in
+;;; either is reported in the echo area and *Messages*; startup goes on.
+(define (pf-user-init-path)
+  (or (getenv "PROFANE_INIT")
+      (let ([home (getenv "HOME")])
+        (and home (string-append home "/Library/Application Support/profane/init.ss")))))
+
+(define (pf-load-init-files)
+  (for-each
+   (lambda (path)
+     (when (and path (file-exists? path))
+       (guard (c [else (message "init ~a: ~a" path
+                                (if (condition? c)
+                                    (call-with-string-output-port (lambda (p) (display-condition c p)))
+                                    c))])
+         (load path))))
+   (list (string-append pf-scheme-dir "/init.ss") (pf-user-init-path)))
+  (void))
+
 ;;; Called by the shell once its window exists: show *scratch*.
 (define (pf-startup)
   (let ([scratch (get-buffer-create "*scratch*")])
@@ -101,7 +121,8 @@
       (when w (set-window-buffer! w scratch)))
     ;; The owner's Emacs setup (plan §2): all on in the default preset.
     (for-each (lambda (m) (set-minor-mode! m #t))
-              '(display-line-numbers-mode global-hl-line-mode show-paren-mode))))
+              '(display-line-numbers-mode global-hl-line-mode show-paren-mode))
+    (pf-load-init-files)))
 
 ;;; Socket REPL sessions, keyed by connection id (an integer chosen by the shell).
 

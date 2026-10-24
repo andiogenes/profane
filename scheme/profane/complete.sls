@@ -7,7 +7,7 @@
 (library (profane complete)
   (export read-command read-buffer-name)
   (import (chezscheme) (profane buffer) (profane window) (profane keymap) (profane command)
-          (profane command-loop) (profane minibuffer) (profane tab-bar))
+          (profane command-loop) (profane minibuffer) (profane tab-bar) (profane simple))
 
   (define (hidden? b) (char=? (string-ref (buffer-name b) 0) #\space))
 
@@ -51,6 +51,35 @@
     "Switch the selected window to a buffer chosen by name, creating it if it is new."
     (read-buffer-name "Switch to buffer: "
                       (lambda (name) (switch-to-buffer (get-buffer-create name)))))
+
+  ;; consult-buffer: like C-x b, with the window showing the selected candidate as you move
+  ;; (live preview) and restoring its buffer if you quit.
+  (define-command (consult-buffer)
+    "Switch buffer with a live preview of the selected candidate."
+    (let* ([w (selected-window)] [orig (window-buffer w)])
+      (read-buffer-name "Buffer: "
+                        (lambda (name) (switch-to-buffer (get-buffer-create name)))
+                        'preview (lambda (name)
+                                   (let ([b (get-buffer name)] [cur (current-buffer)])
+                                     (when b (set-window-buffer! w b))
+                                     (set-buffer cur)))
+                        'quit (lambda () (set-window-buffer! w orig)))))
+
+  ;; consult-yank-from-kill-ring: pick an earlier kill to insert. Newlines show as a symbol
+  ;; so every kill takes one candidate line.
+  (define (one-line s)
+    (let ([t (list->string (map (lambda (c) (if (char=? c #\newline) #\x21B5 c)) (string->list s)))])
+      (if (> (string-length t) 200) (substring t 0 200) t)))
+
+  (define-command (consult-yank-from-kill-ring)
+    "Insert a kill chosen from the kill ring, with a preview of what it is."
+    (let ([kills (map (lambda (k) (cons (one-line k) k)) (kill-ring))])
+      (when (null? kills) (error 'consult-yank-from-kill-ring "kill ring is empty"))
+      (completing-read "Yank from kill ring: " (map car kills)
+                       (lambda (shown)
+                         (set-mark! (point))
+                         (insert (cdr (assoc shown kills))))
+                       'require-match #t)))
 
   (define-command (kill-buffer)
     "Kill a buffer chosen by name (default: the current one)."

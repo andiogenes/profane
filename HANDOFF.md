@@ -150,9 +150,13 @@ The order was agreed with the owner. Each item is a branch, cut from `m2-windows
    PDF), key and mouse routing into native views and focus handoff. Canvas windows are done (`m2-canvas-window`);
    inline canvases and clipping are not. The placement was checked in the running app by a window-ID capture, which does not include
    the Metal layers while the window is covered; check it visually with the window in front.
-8. **Default and ported keymaps:** fetch the owner's `andiogenes/.emacs.d` and port its bindings, e.g. `M-[`/`M-]`
-   and `C-M-v` edge-of-buffer (plan §2), into an `init.ss`-style default. Bind `ace-window` (unbound so far) and
-   whatever the config uses for tabs and transpose-frame.
+8. **Done: default and ported keymaps** (`m2-keymaps`, plan §8i): `scheme/init.ss` (the owner's port) plus the user's
+   init file loader in boot.ss; new commands `edge-of-buffer`, `consult-buffer`, `consult-yank-from-kill-ring`,
+   `minibuffer-edge-of-candidates`; `tests/scheme/init-test.ss`. The port list says what waits for which feature.
+
+M2 items 1-8 are done (item 6 also has canvas windows). Branches stack: `m2-windows` < `m2-minibuffer` < `m2-canvas` <
+`m2-native-view` < `m2-canvas-window` < `m2-keymaps`; none is merged or pushed. Remaining M2 scope per plan §9: transients,
+and the consult/corfu parts listed above; check §9 before choosing the next item.
 
 ## 7. Open items and known gaps
 

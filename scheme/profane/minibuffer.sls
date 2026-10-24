@@ -280,6 +280,14 @@
   (define-command (minibuffer-next-line) "Select the next candidate." (select! 1) (refresh!))
   (define-command (minibuffer-previous-line) "Select the previous candidate." (select! -1) (refresh!))
 
+  ;; Like the owner's edge-of-vertico-buffer: the last candidate, or the first with C--.
+  (define-command (minibuffer-edge-of-candidates)
+    "Select the last candidate, or with a negative argument (C--) the first."
+    (let* ([s current] [n (length (session-candidates s))])
+      (when (> n 0)
+        (session-selected-set! s (if (eq? (current-prefix-arg) '-) 0 (- n 1)))
+        (refresh!))))
+
   (define-command (minibuffer-complete)
     "Insert the selected candidate as the input."
     (let ([s current] )
@@ -326,7 +334,7 @@
                   ("C-g" . minibuffer-keyboard-quit)
                   ("C-n" . minibuffer-next-line) ("<down>" . minibuffer-next-line)
                   ("C-p" . minibuffer-previous-line) ("<up>" . minibuffer-previous-line)
-                  ("TAB" . minibuffer-complete)
+                  ("TAB" . minibuffer-complete) ("C-M-v" . minibuffer-edge-of-candidates)
                   ("DEL" . minibuffer-delete-backward-char)
                   ("C-b" . minibuffer-backward-char) ("<left>" . minibuffer-backward-char)
                   ("C-a" . minibuffer-beginning-of-line) ("<home>" . minibuffer-beginning-of-line)
