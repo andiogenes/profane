@@ -105,6 +105,12 @@ void pf_window_body_rect(const pf_window *w, float rect[4]);
  * scrolled out sideways. Used for jump labels (avy) and the like. */
 int pf_window_pos_rect(pf_window *w, size_t pos, float rect[4]);
 
+/* The character whose cell contains window point (X, Y), as a buffer position: below the last
+ * line is the end of the last line, past a line's end is its end. Returns -1 for a point
+ * outside the text area vertically (the mode line, or a window without text). The inverse of
+ * pf_window_pos_rect, for the mouse. */
+int64_t pf_window_pos_at(pf_window *w, float x, float y);
+
 /* The active region [START, END) in characters, drawn in the region face's background under the
  * text; START == END shows none. A newline inside the region shows as one extra cell, as in
  * Emacs. Callers show it in the selected window only. */

@@ -126,6 +126,11 @@ int main(void) {
     PF_CHECK(pf_frame_hit_test(f, 5, 5, &hit, &cursor) == -1);
     PF_CHECK(pf_canvas_hit_test(c, 100, 10, NULL) == -1); /* right edge is outside */
 
+    /* The mouse cursor: a region's own, else the text cursor over text, else the arrow. */
+    PF_CHECK(pf_frame_cursor_at(f, 41 + 15, 30 + 15) == 1);  /* over the pointer region */
+    PF_CHECK(pf_frame_cursor_at(f, 41 + 50, 30 + 40) == 0);  /* the arrow region */
+    PF_CHECK(pf_frame_cursor_at(f, 395, 295) == 0);          /* empty frame corner */
+
     /* Pop-ups stack: the later one is on top, for drawing and hits. */
     pf_canvas *top = pf_canvas_new(30, 30);
     pf_canvas_add_hit(top, 0, 0, 30, 30, 9, 0);

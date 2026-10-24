@@ -354,6 +354,88 @@ static CGColorRef create_cgcolor(uint32_t c) {
     return YES;
 }
 
+/* ---- mouse ----
+ * Events go to Scheme (profane mouse) as strings in frame coordinates (points, top-left origin;
+ * the view is flipped). The shell only asks C for the cursor shape. */
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
+    return YES; /* the click that focuses the window also acts, as in Emacs */
+}
+
+- (NSPoint)framePoint:(NSEvent *)event {
+    return [self convertPoint:event.locationInWindow fromView:nil];
+}
+
+- (void)sendMouse:(const char *)kind event:(NSEvent *)event {
+    NSPoint p = [self framePoint:event];
+    char text[96];
+    snprintf(text, sizeof text, "%s %.2f %.2f %ld", kind, p.x, p.y, (long)event.clickCount);
+    _inputTime = event.timestamp;
+    send_string("pf-mouse", [NSString stringWithUTF8String:text]);
+    [self redisplay];
+}
+
+- (void)mouseDown:(NSEvent *)event {
+    [self.window makeFirstResponder:self];
+    [self sendMouse:"down" event:event];
+}
+
+- (void)mouseDragged:(NSEvent *)event {
+    [self sendMouse:"drag" event:event];
+}
+
+- (void)mouseUp:(NSEvent *)event {
+    [self sendMouse:"up" event:event];
+}
+
+- (void)scrollWheel:(NSEvent *)event {
+    NSPoint p = [self framePoint:event];
+    BOOL precise = event.hasPreciseScrollingDeltas;
+    /* Points for a trackpad; lines for a wheel (Scheme scales them). Momentum is delivered as
+     * more events, so there is nothing to do for it. */
+    double dx = precise ? event.scrollingDeltaX : event.deltaX;
+    double dy = precise ? event.scrollingDeltaY : event.deltaY;
+    char text[128];
+    snprintf(text, sizeof text, "scroll %.2f %.2f %.2f %.2f %d", p.x, p.y, dx, dy, precise ? 1 : 0);
+    send_string("pf-mouse", [NSString stringWithUTF8String:text]);
+    [self redisplay];
+}
+
+- (void)updateCursorFor:(NSEvent *)event {
+    NSPoint p = [self framePoint:event];
+    switch (pf_frame_cursor_at(_frame, (float)p.x, (float)p.y)) {
+    case 1:
+        [[NSCursor pointingHandCursor] set];
+        break;
+    case 2:
+        [[NSCursor IBeamCursor] set];
+        break;
+    default:
+        [[NSCursor arrowCursor] set];
+    }
+}
+
+- (void)mouseMoved:(NSEvent *)event {
+    [self updateCursorFor:event];
+}
+
+- (void)cursorUpdate:(NSEvent *)event {
+    [self updateCursorFor:event];
+}
+
+- (void)updateTrackingAreas {
+    [super updateTrackingAreas];
+    for (NSTrackingArea *area in self.trackingAreas) {
+        [self removeTrackingArea:area];
+    }
+    [self addTrackingArea:[[NSTrackingArea alloc]
+                              initWithRect:NSZeroRect
+                                   options:NSTrackingMouseMoved | NSTrackingCursorUpdate |
+                                           NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect
+                                     owner:self
+                                  userInfo:nil]];
+}
+
 - (void)keyDown:(NSEvent *)event {
     _inputTime = event.timestamp;
     BOOL direct = NO;

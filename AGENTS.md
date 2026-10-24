@@ -25,8 +25,7 @@ milestone (plan §9). Do not start work from a later milestone unless asked; whe
 milestone's area, leave a seam, not an implementation.
 
 **M2 still open** (plan §9, M2 row): file-name reading with
-vertico's directory keys and `find-file`; mouse routing into `ProfaneView` (which also unblocks clickable canvases,
-cursor shapes, mouse selection and window resizing); window extras (`C-v`/`M-v`/recenter, per-window buffer
+vertico's directory keys and `find-file`; window extras (`C-v`/`M-v`/recenter, per-window buffer
 history, header lines); electric-pair. Consult's imenu and xref wait for modes and tree-sitter (M5), ripgrep and
 find for M3.
 

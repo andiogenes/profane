@@ -324,6 +324,16 @@ int pf_win_set_region(pf_handle win, size_t start, size_t end) {
     return 0;
 }
 
+int64_t pf_win_pos_at(pf_handle win, float x, float y) {
+    pf_window *w = window_of(win);
+    return w ? pf_window_pos_at(w, x, y) : INVALID;
+}
+
+int pf_frm_cursor_at(pf_handle frame, float x, float y) {
+    pf_frame *f = frame_of(frame);
+    return f ? pf_frame_cursor_at(f, x, y) : INVALID;
+}
+
 int pf_win_pos_rect(pf_handle win, size_t pos, uint8_t *out) {
     pf_window *w = window_of(win);
     float r[4];

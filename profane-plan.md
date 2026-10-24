@@ -422,6 +422,20 @@ the renderer tags the frame answering each event and records when it was submitt
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
   minibuffer reads input in this window (below).
+- **Mouse** (`(profane mouse)`, M2). `ProfaneView` sends mouse events to Scheme as strings in frame coordinates (`pf-mouse`:
+  `down|drag|up X Y CLICKS`, `scroll X Y DX DY PRECISE`; the first click that focuses the window also acts) and asks C
+  only for the cursor shape (`pf_frame_cursor_at`, from a tracking area: a canvas region's cursor, the I-beam over
+  text, else the arrow). `pf_window_pos_at` maps a window point to a buffer position (the inverse of `pf_window_pos_rect`).
+  Behaviour: a click on a canvas region runs its handler (`canvas-click!`); a click in a text window selects it and
+  moves point (deactivating the region); a drag selects from where the button went down (the active region) and
+  scrolls a line per event above or below the window; double and triple click select the word and the line; dragging a
+  mode line or the divider next to a neighbor resizes (`resize-window!`); the wheel or trackpad scrolls the window
+  under the pointer, keeping fractions of a line, and moves point to the nearest visible line when it would leave the
+  screen (as Emacs does); sideways scrolling sets the horizontal scroll. *Not yet:* the tab bar (clicks, drag to
+  reorder), dragging text, middle-click paste, right-click menus, smooth/momentum scrolling (M4), a text cursor in the
+  echo area only while the minibuffer is active, and double-click-drag extending by words. The NSEvent-to-string
+  path in `ProfaneView` is untested by scripts (the Scheme side is covered by `mouse-test.ss` and by driving `pf-mouse`
+  in the running app).
 - **avy** (`(profane avy)`, M2). `avy-goto-word-1` (the owner's `C-x C-j`), `avy-goto-char`, `avy-goto-line`. The command
   reads a character, collects the matching positions in the visible text of every window of the frame (ordered by
   distance from point, the selected window first) and shows a label over each: a full-frame canvas pop-up on the overlay
@@ -554,8 +568,7 @@ State at the end of the M2 work so far (everything in §8i is on `main`). Delibe
 waits for. Keep this list current: remove an entry when it is done, add one when something is left as a seam.
 
 **M2 items still open** (§9, M2 row): file-name reading with
-vertico's directory keys (`RET`, `DEL`, `M-DEL` on paths) and `find-file`; mouse routing into `ProfaneView`, which
-also unblocks clickable canvases, cursor shapes, mouse selection and window resizing; window extras (`C-v`/`M-v`/
+vertico's directory keys (`RET`, `DEL`, `M-DEL` on paths) and `find-file`; window extras (`C-v`/`M-v`/
 recenter, per-window buffer history, header lines); electric-pair. The owner's port (`scheme/init.ss`) still lacks
 `M-g i` (imenu) and `M-g s` (search), which need modes, tree-sitter and the search core (M5, ripgrep/find M3);
 `M-g t` (neotree) and `C-x C-b` (buffer menu), which need listing and tree views; `C-x 4 C-x C-b`.
@@ -570,9 +583,10 @@ recenter, per-window buffer history, header lines); electric-pair. The owner's p
 - Press-and-hold: held keys repeat; `press-and-hold-keys` re-enables the accent picker per key. The per-key switch
   assumes macOS re-reads the default on each key down, which is unverified.
 - Canvas: paths and bezier curves, images, clip and transform (ops are not clipped to a canvas window), inline
-  canvases (they need display-engine support for reserved space in a line), key and focus events, cursor shapes.
+  canvases (they need display-engine support for reserved space in a line), key and focus events.
 - Native views: only the stub kind; web (M11) and PDF kinds, key/mouse routing into views, focus handoff.
-- Windows: mouse selection and resizing, `C-v`/`M-v`/recenter, header lines, per-window buffer history
+- Mouse: the tab bar, dragging text, middle-click, right-click menus, momentum scrolling (see the Mouse entry in §8i).
+- Windows: `C-v`/`M-v`/recenter, header lines, per-window buffer history
   (`next-buffer` cycles the whole buffer list).
 - Completion: `completion-preselect 'nearest` (the `preselect` option is the seam), corfu (popup completion).
 - Undo restores text but not its text properties (fine once highlighting re-runs); undo history is unbounded.

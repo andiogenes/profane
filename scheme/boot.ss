@@ -8,13 +8,13 @@
 (import (profane repl) (profane buffer) (profane window) (profane var) (profane hook)
         (profane keymap) (profane face) (profane command) (profane mode) (profane command-loop)
         (profane simple) (profane display) (profane theme) (profane themes) (profane tab-bar)
-        (profane transpose-frame) (profane ace-window) (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy))
+        (profane transpose-frame) (profane ace-window) (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy) (profane mouse))
 
 ;;; Chez invokes a library only when one of its variables is first used; libraries whose body
 ;;; registers commands, modes and bindings must be invoked explicitly.
 (for-each invoke-library '((profane simple) (profane window) (profane display) (profane themes)
                            (profane tab-bar) (profane transpose-frame) (profane ace-window)
-                           (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy)))
+                           (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy) (profane mouse)))
 
 ;;; Defaults until the shell reports the macOS appearance: the light theme, the minimal style.
 (load-theme 'profane-light)
@@ -83,6 +83,18 @@
 (define (pf-appearance-changed which) (appearance-changed! (string->symbol which)))
 (define (pf-accent-changed color) (system-accent-changed! color))
 (define (pf-pinch magnification) (pinch-text-scale (string->number magnification)))
+
+;;; Mouse events from the shell, as one string: "down|drag|up X Y CLICKS" (points, top-left
+;;; origin) and "scroll X Y DX DY PRECISE". See (profane mouse).
+(define (pf-mouse text)
+  (let ([parts (let loop ([cs (string->list text)] [cur '()] [out '()])
+                 (cond [(null? cs) (reverse (if (null? cur) out (cons (list->string (reverse cur)) out)))]
+                       [(char=? (car cs) #\space) (loop (cdr cs) '() (if (null? cur) out (cons (list->string (reverse cur)) out)))]
+                       [else (loop (cdr cs) (cons (car cs) cur) out)]))])
+    (let ([kind (string->symbol (car parts))] [nums (map string->number (cdr parts))])
+      (if (eq? kind 'scroll)
+          (handle-scroll (car nums) (cadr nums) (caddr nums) (cadddr nums) (not (zero? (list-ref nums 4))))
+          (handle-mouse kind (car nums) (cadr nums) (caddr nums))))))
 
 ;;; Called by the shell before each redisplay: layout, mode lines, echo area, tab bar.
 (define (pf-redisplay) (redisplay-prepare!))

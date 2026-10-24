@@ -1,0 +1,117 @@
+(import (chezscheme) (srfi :64) (profane native) (profane buffer) (profane var) (profane keymap)
+        (profane command) (profane command-loop) (profane mode) (profane window) (profane display)
+        (profane theme) (profane themes) (profane tab-bar) (profane canvas) (profane mouse)
+        (profane simple))
+
+(for-each invoke-library '((profane simple) (profane window) (profane display) (profane themes)
+                           (profane tab-bar) (profane canvas) (profane mouse)))
+(load-theme 'profane-light)
+
+(test-begin "mouse")
+
+(define (keys . ks) (for-each (lambda (k) (for-each handle-key (kbd k))) ks))
+
+;; Cells are 10 pt wide, lines 20 pt; text starts at x = 1, y = 2 (padding).
+(define f (select-frame (make-headless-frame 800 600)))
+(define fh (%frame-handle f))
+(define w1 (selected-window))
+(define b (get-buffer-create "mouse-text"))
+(switch-to-buffer b)
+(insert "hello world\nsecond line here\nthird\n")
+(goto-char 0)
+(redisplay-prepare!)
+(%frm-redisplay fh)
+(define (at col row) (values (+ 1.0 (* 10 col) 2.0) (+ 2.0 (* 20 row) 5.0)))
+(define (click col row . clicks)
+  (let-values ([(x y) (at col row)])
+    (handle-mouse 'down x y (if (pair? clicks) (car clicks) 1))))
+(define (drag col row) (let-values ([(x y) (at col row)]) (handle-mouse 'drag x y 1)))
+(define (up) (handle-mouse 'up 0 0 1))
+
+;; ---- the mouse cursor ----
+(test-eqv "text cursor over text" 2 (%frm-cursor-at fh 50.0 10.0))
+(test-eqv "arrow over the mode line" 0 (%frm-cursor-at fh 50.0 570.0))
+
+;; ---- clicking moves point ----
+(click 4 0)
+(test-eqv "click on 'o'" 4 (point))
+(click 3 1)
+(test-eqv "second line, column 3" (+ 12 3) (point))
+(click 50 0)
+(test-eqv "past the end of a line: its end" 11 (point))
+(handle-mouse 'down 50.0 300.0 1)
+(test-eqv "below the text: end of the last line" (point-max) (point))
+(up)
+
+;; ---- dragging selects ----
+(click 2 0)
+(drag 8 0)
+(test-eqv "the mark is where the button went down" 2 (mark))
+(test-eqv "point follows the pointer" 8 (point))
+(test-assert "the region is active" (var-ref 'mark-active))
+(drag 0 1)
+(test-eqv "across lines" 12 (point))
+(up)
+(drag 5 1)
+(test-eqv "a drag after release does nothing" 12 (point))
+(click 5 1)
+(test-assert "a click deactivates it" (not (var-ref 'mark-active)))
+
+;; ---- words and lines ----
+(click 14 1 2)
+(test-eqv "double click selects the word (column 14 of 'second line here' is in 'here')" 24 (mark))
+(test-eqv "to its end" 28 (point))
+(test-assert "active" (var-ref 'mark-active))
+(click 2 2 3)
+(test-eqv "triple click selects the line, with its newline" 29 (mark))
+(test-eqv "through its end" 35 (point))
+
+;; ---- windows ----
+(click 0 0)
+(keys "C-x 2")
+(define w2 (cadr (window-list)))
+(redisplay-prepare!)
+(%frm-redisplay fh)
+(test-eq "the first is selected" w1 (selected-window))
+(let* ([e (window-edges w2)] [y (+ (cadr e) 10.0)])
+  (handle-mouse 'down 15.0 y 1)
+  (test-eq "clicking in another window selects it" w2 (selected-window))
+  (test-eqv "and puts point there" 1 (point))
+  (up))
+(test-eqv "the other keeps its point" 0 (window-point w1))
+(test-eq "the minibuffer is not selectable by click" w2
+  (begin (handle-mouse 'down 50.0 598.0 1) (selected-window)))
+
+;; ---- resizing by dragging the mode line ----
+(let* ([e1 (window-edges w1)] [h1 (cadddr e1)] [mlh (%win-mode-line-height (%window-handle w1))]
+       [ml-y (+ (cadr e1) (- h1 (/ mlh 2)))])
+  (handle-mouse 'down 100.0 ml-y 1)
+  (handle-mouse 'drag 100.0 (+ ml-y 40.0) 1)
+  (handle-mouse 'up 100.0 (+ ml-y 40.0) 1)
+  (test-eqv "dragging the mode line grows the window above" (+ h1 40.0) (cadddr (window-edges w1))))
+
+;; ---- scrolling ----
+(delete-other-windows)
+(select-window (car (window-list)))
+(let ([w (selected-window)] [b2 (get-buffer-create "long")])
+  (switch-to-buffer b2)
+  (let loop ([i 0]) (when (< i 100) (insert (format "line ~a\n" i)) (loop (+ i 1))))
+  (goto-char 0)
+  (redisplay-prepare!)
+  (%frm-redisplay fh)
+  (handle-scroll 50.0 100.0 0.0 -60.0 #t)
+  (test-eqv "scrolling down 60 points is 3 lines" 3 (window-start-line w))
+  (test-eqv "point followed it to the first visible line" 21 (window-point w))
+  (handle-scroll 50.0 100.0 0.0 10.0 #t)
+  (test-eqv "half a line is kept, not lost" 3 (window-start-line w))
+  (handle-scroll 50.0 100.0 0.0 10.0 #t)
+  (test-eqv "two halves make a line (back up)" 2 (window-start-line w))
+  (handle-scroll 50.0 100.0 0.0 100000.0 #t)
+  (test-eqv "cannot scroll above the start" 0 (window-start-line w))
+  (handle-scroll 50.0 100.0 0.0 -100000.0 #t)
+  (test-assert "nor far past the end" (<= (window-start-line w) 100))
+  (handle-scroll 50.0 100.0 0.0 100000.0 #t))
+
+(delete-headless-frame! f)
+(test-end "mouse")
+(test-exit)

@@ -473,6 +473,26 @@ int64_t pf_frame_hit_test(const pf_frame *f, float x, float y, pf_canvas **canva
     return pf_frame_hit_test_at(f, x, y, canvas, cursor, NULL, NULL);
 }
 
+int pf_frame_cursor_at(const pf_frame *f, float x, float y) {
+    int cursor = 0;
+    if (pf_frame_hit_test_at(f, x, y, NULL, &cursor, NULL, NULL) >= 0) {
+        return cursor;
+    }
+    for (size_t i = 0; i < f->count; i++) {
+        const entry *e = &f->entries[i];
+        if (!e->shown || pf_window_native(e->w) || pf_window_canvas(e->w)) {
+            continue;
+        }
+        float r[4];
+        pf_window_body_rect(e->w, r);
+        float lx = x - e->x - r[0], ly = y - e->y - r[1];
+        if (lx >= 0 && ly >= 0 && lx < r[2] && ly < r[3]) {
+            return 2;
+        }
+    }
+    return 0;
+}
+
 int pf_frame_set_window_canvas(pf_frame *f, pf_window *w, pf_canvas *c) {
     entry *e = find(f, w);
     if (!e) {

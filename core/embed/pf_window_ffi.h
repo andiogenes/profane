@@ -61,6 +61,11 @@ int pf_win_set_region(pf_handle win, size_t start, size_t end);
  * coordinates. Returns 0, or -1 if it is not visible. */
 int pf_win_pos_rect(pf_handle win, size_t pos, uint8_t *out);
 
+/* The buffer position under window point (X, Y) (pf_window_pos_at), or -1. */
+int64_t pf_win_pos_at(pf_handle win, float x, float y);
+/* The mouse cursor over frame point (X, Y) (pf_frame_cursor_at): 0 arrow, 1 pointer, 2 text. */
+int pf_frm_cursor_at(pf_handle frame, float x, float y);
+
 pf_handle pf_win_selected(void); /* the selected frame's selected window, or 0 */
 int pf_win_set_buffer(pf_handle win, pf_handle buf, uint32_t point_marker);
 int64_t pf_win_top_line(pf_handle win);

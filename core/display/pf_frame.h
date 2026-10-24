@@ -97,6 +97,10 @@ int64_t pf_frame_hit_test(const pf_frame *f, float x, float y, pf_canvas **canva
  * be NULL) get the point in the canvas's own coordinates. */
 int64_t pf_frame_hit_test_at(const pf_frame *f, float x, float y, pf_canvas **canvas, int *cursor,
                              float *lx, float *ly);
+/* The mouse cursor over frame point (X, Y): a canvas region's cursor (pf_canvas_add_hit), else the
+ * text cursor (2) over the text of a text window, else the arrow (0). Pure C, so the shell
+ * can ask on every mouse move. */
+int pf_frame_cursor_at(const pf_frame *f, float x, float y);
 /* Makes window W a canvas window showing C (NULL: a text window). */
 int pf_frame_set_window_canvas(pf_frame *f, pf_window *w, pf_canvas *c);
 /* Detaches C from every window showing it. */
