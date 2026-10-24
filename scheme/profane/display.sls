@@ -95,7 +95,8 @@
 
   ;; pf_face_role order (core/display/pf_face.h).
   (define roles '(default cursor line-number line-number-current-line hl-line
-                  show-paren-match show-paren-mismatch fringe vertical-border region))
+                  show-paren-match show-paren-mismatch fringe vertical-border region
+                  diff-hl-insert diff-hl-change diff-hl-delete))
 
   ;; ---- built-in faces ----
 
@@ -114,6 +115,9 @@
          (line-number ((inherit . shadow)) "Line numbers.")
          (line-number-current-line ((inherit . line-number)) "The current line's number.")
          (hl-line () "The current-line band (its background).")
+         (diff-hl-insert () "Fringe mark of lines added since the index (its foreground).")
+         (diff-hl-change () "Fringe mark of lines changed since the index.")
+         (diff-hl-delete () "Fringe mark where lines were removed.")
          (show-paren-match () "A bracket and its partner.")
          (show-paren-mismatch () "A bracket without a proper partner.")
          (link () "Links.")

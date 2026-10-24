@@ -66,6 +66,9 @@ int pf_text_select_redo_branch(pf_text *text, size_t index); /* -1 if out of ran
  * creation); undoing back to that state makes the text unmodified again. */
 void pf_text_mark_saved(pf_text *text);
 int pf_text_modified(const pf_text *text);
+/* Identifies the current text among the states of its undo history: it differs after every edit,
+ * and returns to an old value when undo returns to that state. Constant while undo is off. */
+uint64_t pf_text_version(const pf_text *text);
 
 /* The text's properties (pf_props.h), kept in step with edits, undo and redo. Undo restores
  * text but not the properties it had: re-highlighting covers that. Main thread. */

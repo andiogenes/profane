@@ -696,6 +696,10 @@ void pf_text_mark_saved(pf_text *text) {
     text->saved_version = text->ucur->version;
 }
 
+uint64_t pf_text_version(const pf_text *text) {
+    return text->ucur->version;
+}
+
 int pf_text_modified(const pf_text *text) {
     return text->ucur != text->saved_state || text->ucur->version != text->saved_version;
 }

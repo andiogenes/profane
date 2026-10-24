@@ -69,6 +69,8 @@ int64_t pf_win_row_start(pf_handle win, size_t pos);
 int64_t pf_win_row_end(pf_handle win, size_t pos);
 double pf_win_row_x(pf_handle win, size_t pos);
 int64_t pf_win_move_rows(pf_handle win, size_t pos, int64_t delta, float goal_x);
+/* The fringe marks of WIN (pf_window_set_line_marks): N triples of uint32 in the bytes TRIPLES. */
+int pf_win_set_line_marks(pf_handle win, const uint32_t *triples, size_t n);
 /* The mouse cursor over frame point (X, Y) (pf_frame_cursor_at): 0 arrow, 1 pointer, 2 text. */
 int pf_frm_cursor_at(pf_handle frame, float x, float y);
 

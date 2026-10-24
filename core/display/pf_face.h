@@ -32,6 +32,9 @@ typedef enum pf_face_role {
     PF_ROLE_FRINGE,          /* background of the fringes */
     PF_ROLE_VERTICAL_BORDER, /* foreground of the divider between side-by-side windows */
     PF_ROLE_REGION,          /* background of the active region */
+    PF_ROLE_GIT_ADDED,       /* foreground of the fringe mark for added lines */
+    PF_ROLE_GIT_MODIFIED,
+    PF_ROLE_GIT_DELETED,
     PF_ROLE_COUNT
 } pf_face_role;
 

@@ -351,6 +351,15 @@ int64_t pf_win_move_rows(pf_handle win, size_t pos, int64_t delta, float goal_x)
     return w ? (int64_t)pf_window_move_rows(w, pos, (long)delta, goal_x) : INVALID;
 }
 
+int pf_win_set_line_marks(pf_handle win, const uint32_t *triples, size_t n) {
+    pf_window *w = window_of(win);
+    if (!w) {
+        return INVALID;
+    }
+    pf_window_set_line_marks(w, triples, n);
+    return 0;
+}
+
 int pf_frm_cursor_at(pf_handle frame, float x, float y) {
     pf_frame *f = frame_of(frame);
     return f ? pf_frame_cursor_at(f, x, y) : INVALID;

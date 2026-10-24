@@ -14,7 +14,7 @@ Scope is shaped by the owner's actual Emacs usage (andiogenes/.emacs.d).
 | Core language | C17 core, Objective-C platform shell, no Swift |
 | Scripting | Chez Scheme 10.x (threaded, `tarm64osx`), R6RS libraries + R7RS shim; vendored as a submodule at `subprojects/chez` (v10.4.1), built via CMake ExternalProject |
 | Elisp compatibility | None. Emacs-familiar names, own Scheme API; owner's config gets ported |
-| Git | libgit2 for reads, `git` CLI for all mutations |
+| Git | libgit2 for reads (vendored submodule `subprojects/libgit2`, v1.9.7, built by `cmake/Libgit2.cmake` as a static library with HTTPS/SSH off; GPLv2 with linking exception), `git` CLI for all mutations and the network (§8l) |
 | Async | Events posted from reader threads and timers to one main-thread queue; Scheme promises and `await` (a command parks its engine); engines for preemption/`C-g`; FSEvents and GCD queues join with the items that need them (§8k) |
 | Terminal | libvterm (neovim's fork, MIT) vendored as a submodule at `subprojects/libvterm` (v0.3.3), built by `cmake/Libvterm.cmake` (needs perl to generate two tables); drawn as a window kind from a cell grid, not as buffer text (§8k) |
 | Org | "Org-lite": notes and outlines on unchanged `.org` files; no agenda/babel/export |
@@ -953,7 +953,7 @@ terminal's mouse and focus handling, listening sockets, a process-level coding s
 ## 8l. Editing surface and motion (M4)
 
 M4 items, one branch each (`m4-<topic>`): 1 soft wrap, 2 fringe git marks, 3 motion system, 4 Git v1 (status, stage,
-diff, commit, push/pull), 5 ediff. Item 1 is done; the rest are not started.
+diff, commit, push/pull), 5 ediff. Items 1 and 2 are done; the rest are not started.
 
 **1. Soft wrap** (`m4-soft-wrap`).
 - `pf_window` has a wrap option (`PF_WINDOW_WRAP`: truncate, break at the last character that fits, break after
@@ -969,6 +969,21 @@ diff, commit, push/pull), 5 ediff. Item 1 is done; the rest are not started.
 - Not done: only the first 4096 characters of a line are shaped, so a longer line wraps only that far; `C-k` and
   other commands still act on logical lines (as in Emacs); no fringe arrows for continuation, a bar is drawn.
 - Verified: C test `test_soft_wrap`, Scheme `wrap-test.ss`. Not verified on screen.
+
+**2. Fringe git marks** (`m4-git-marks`).
+- libgit2 joins the build (`cmake/Libgit2.cmake`; no HTTPS/SSH/auth backends, since the CLI does the network).
+  `core/git/pf_git.c` is the first reader: `pf_git_line_marks` diffs a buffer's text against the file's blob in the
+  index (`git_diff_blob_to_buffer`, no context) and returns added/modified/deleted hunks. Index, not HEAD: staged
+  changes stop showing, as in diff-hl.
+- Windows draw them (`pf_window_set_line_marks`, roles `diff-hl-insert/change/delete`): a bar at the left edge
+  (the fringe's width, at least 2 pt, so the minimal preset's 1 pt fringe still shows it), a tick for a removal.
+- `(profane git marks)`: global `diff-hl-mode` (on at startup), recomputed per window from a pre-redisplay hook
+  when the buffer's undo-state version changes (`pf_text_version`, new). `diff-hl-max-size` (1,000,000 chars) bounds
+  the main-thread cost; `M-x diff-hl-refresh` after staging outside profane.
+- Seams: the diff runs on the main thread (a worker takes `pf_git_line_marks` as is); the index is not watched
+  (FSEvents, §8k); marks are not drawn for untracked files or for a file whose repo is a worktree/submodule (untested).
+- Verified: `test_git` (real repo in /tmp), `test_line_marks`, `git-marks-test.ss`, a clean build and `--self-test`.
+  Not verified on screen, and not measured against the key-to-pixel target on a large file.
 
 ## 9. Milestones
 

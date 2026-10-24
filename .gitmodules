@@ -4,3 +4,6 @@
 [submodule "subprojects/libvterm"]
 	path = subprojects/libvterm
 	url = https://github.com/neovim/libvterm
+[submodule "subprojects/libgit2"]
+	path = subprojects/libgit2
+	url = https://github.com/libgit2/libgit2

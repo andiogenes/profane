@@ -17,7 +17,7 @@
           %frm-set-window-native %frm-native-count %frm-native-field
           %win-selected %win-set-buffer %win-top-line %win-set-top-line %win-body-lines
           %win-set-option %win-option %win-set-edges %win-set-mode-line %win-mode-line-height %win-set-header-line %win-header-line-height
-          %win-hscroll %win-set-min-hscroll %win-set-region %win-pos-rect %win-pos-at %win-row-start %win-row-end %win-row-x %win-move-rows %frm-cursor-at
+          %win-hscroll %win-set-min-hscroll %win-set-region %win-pos-rect %win-pos-at %buf-version %win-set-line-marks %git-buffer-marks %win-row-start %win-row-end %win-row-x %win-move-rows %frm-cursor-at
           %cvs-new %cvs-free %cvs-set-size %cvs-width %cvs-height %cvs-clear %cvs-fill-rect
           %cvs-fill-round-rect %cvs-stroke-round-rect %cvs-shadow %cvs-line %cvs-text %cvs-add-hit
           %cvs-hit-test %cvs-text-width %cvs-text-height %cvs-popup-show %cvs-popup-hide
@@ -115,6 +115,7 @@
   (define-native %buf-set-undo "pf_buf_set_undo" (unsigned-32 boolean) int)
   (define-native %buf-undo "pf_buf_undo" (unsigned-32) integer-64)
   (define-native %buf-redo "pf_buf_redo" (unsigned-32) integer-64)
+  (define-native %buf-version "pf_buf_version" (unsigned-32) integer-64)
   (define-native %buf-modified "pf_buf_modified" (unsigned-32) int)
   (define-native %buf-mark-saved "pf_buf_mark_saved" (unsigned-32) int)
   (define-native %frm-selected "pf_frm_selected" () unsigned-32)
@@ -150,6 +151,8 @@
     (unsigned-32 u8* size_t u8* size_t unsigned-32 boolean) int)
   (define-native %win-mode-line-height "pf_win_mode_line_height" (unsigned-32) double)
   (define-native %win-pos-at "pf_win_pos_at" (unsigned-32 float float) integer-64)
+  (define-native %win-set-line-marks "pf_win_set_line_marks" (unsigned-32 u8* size_t) int)
+  (define-native %git-buffer-marks "pf_git_buffer_marks" (unsigned-32 u8* size_t u8* size_t) integer-64)
   (define-native %win-row-start "pf_win_row_start" (unsigned-32 size_t) integer-64)
   (define-native %win-row-end "pf_win_row_end" (unsigned-32 size_t) integer-64)
   (define-native %win-row-x "pf_win_row_x" (unsigned-32 size_t) double)

@@ -67,6 +67,8 @@ struct pf_window {
     uint32_t term_faces[4];
     uint64_t shown_term_version;
     const pf_term *shown_term;
+    uint32_t *marks;            /* fringe marks: line, count, kind */
+    size_t nmarks;
     int wrap;                   /* PF_WRAP_* */
     size_t *brk;                /* first character of each screen row of the line last wrapped */
     size_t brk_cap;
@@ -105,6 +107,7 @@ void pf_window_free(pf_window *w) {
         free(w->runs);
         free(w->props_buf);
         free(w->brk);
+        free(w->marks);
         pf_strip_free(&w->mode_line);
         pf_strip_free(&w->header);
         free(w);
@@ -783,6 +786,9 @@ static void auto_hscroll(pf_window *w, float cx, float cw, float width) {
     w->hscroll = fmaxf(fmaxf(h, 0), w->min_hscroll);
 }
 
+static void draw_line_marks(pf_window *w, pf_display *d, size_t line, size_t lines, float top,
+                            int first_row, int last_row);
+
 /* The buffer's visible lines: faces, hl-line, brackets, line numbers, text, cursor, and marks in
  * the fringes for lines continuing past the edges. */
 static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_snapshot *s,
@@ -892,6 +898,9 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
                         0, (size_t)-1);
         }
         emit_glyphs(d, lay, xs, baseline, left, right, fg, w->fids, a, b);
+        if (w->nmarks) {
+            draw_line_marks(w, d, line, lines, top, seg == 0, last);
+        }
 
         /* Continuation marks: a short bar in the fringe beside text past either edge, or at the
          * right of a row the line goes on from. */
@@ -940,6 +949,38 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
                 w->cursor_valid = 1;
             }
         }
+        }
+    }
+}
+
+void pf_window_set_line_marks(pf_window *w, const uint32_t *triples, size_t n) {
+    free(w->marks);
+    w->marks = n ? xrealloc(NULL, n * 3 * sizeof *w->marks) : NULL;
+    if (n) {
+        memcpy(w->marks, triples, n * 3 * sizeof *w->marks);
+    }
+    w->nmarks = n;
+    w->dirty = 1;
+}
+
+/* The fringe mark bars for buffer LINE of a row [TOP, TOP + line_height) (BOTTOM: the last line,
+ * for a deletion after it). */
+static void draw_line_marks(pf_window *w, pf_display *d, size_t line, size_t lines, float top,
+                            int first_row, int last_row) {
+    float bar = fmaxf(w->fringe_left, 2.0f), lh = w->style.line_height, px = 1.0f / w->scale;
+    for (size_t i = 0; i < w->nmarks; i++) {
+        uint32_t ml = w->marks[3 * i], count = w->marks[3 * i + 1], kind = w->marks[3 * i + 2];
+        if (kind == 3) {
+            int here = ml == line && first_row, after = ml >= lines && line + 1 == lines && last_row;
+            if (here || after) {
+                float y = here ? top : top + lh - 2 * px;
+                pf_display_rect(d, 0, y, bar * 2, 2 * px,
+                                role_color(PF_ROLE_GIT_DELETED, PF_FACE_HAS_FG, 0));
+            }
+        } else if (line >= ml && line < (size_t)ml + count) {
+            pf_display_rect(d, 0, top, bar, lh,
+                            role_color(kind == 1 ? PF_ROLE_GIT_ADDED : PF_ROLE_GIT_MODIFIED,
+                                       PF_FACE_HAS_FG, 0));
         }
     }
 }

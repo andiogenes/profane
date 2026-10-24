@@ -156,6 +156,11 @@ int pf_buf_modified(pf_handle buf) {
     return pf_text_modified(t);
 }
 
+int64_t pf_buf_version(pf_handle buf) {
+    TEXT_OR(buf, INVALID);
+    return (int64_t)pf_text_version(t);
+}
+
 int pf_buf_mark_saved(pf_handle buf) {
     TEXT_OR(buf, INVALID);
     pf_text_mark_saved(t);

@@ -45,7 +45,7 @@ under "Traps" below.
 Build system is CMake + Ninja. Chez Scheme is a submodule (`subprojects/chez`, pinned to a release tag) built
 once per build tree by `cmake/Chez.cmake` (~90 s); after bumping it, delete `build/chez`. libvterm is a
 submodule too (`subprojects/libvterm`, v0.3.3), built as a static library by `cmake/Libvterm.cmake` (perl
-generates two tables).
+generates two tables), and so is libgit2 (`subprojects/libgit2`, v1.9.7, `cmake/Libgit2.cmake`; read-only, no network).
 
 ```sh
 git submodule update --init --recursive                 # first checkout
@@ -241,6 +241,7 @@ clang-format -i <files>                                 # format C / ObjC (brew 
 | Keychain secrets | `PFMacOS.m`, `(profane secrets)` (§8k) |
 | File system calls, dired | `core/fs/pf_fs.*`, `(profane fs)`, `(profane dired)` (§8k) |
 | Sidebar file tree, buffer menu | `(profane sidebar)`, `(profane buffer-menu)` (§8k) |
+| Git reads (libgit2): line marks vs the index, `diff-hl-mode` | `core/git/pf_git.*`, `core/embed/pf_git_ffi.*`, `(profane git marks)` (§8l) |
 | Terminal emulator (libvterm), vterm, shell-here | `core/term/pf_term.*`, `pf_window_set_terminal`, `(profane vterm)` (§8k) |
 | TCP and TLS connections | `platform/macos/PFNet.*`, `(profane net)` (§8k) |
 | Child processes and ptys | `core/process/pf_process.*`, `(profane process)` (§8k) |

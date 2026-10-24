@@ -156,6 +156,11 @@ float pf_window_row_x(pf_window *w, size_t pos);
  * (past the row's end: the end), stopping at the first and last rows of the buffer. */
 size_t pf_window_move_rows(pf_window *w, size_t pos, long delta, float goal_x);
 
+/* Marks in the left fringe, e.g. changes since the index: N triples of (LINE, COUNT, KIND) in
+ * TRIPLES, sorted by line, KIND 1 added, 2 modified, 3 deleted (a tick at the top of LINE,
+ * after the last line at its bottom). N == 0 clears them. Bars take the git roles' colors. */
+void pf_window_set_line_marks(pf_window *w, const uint32_t *triples, size_t n);
+
 /* Forces the next redisplay to render. */
 void pf_window_invalidate(pf_window *w);
 

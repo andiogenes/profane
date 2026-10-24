@@ -45,6 +45,7 @@ int pf_buf_set_undo(pf_handle buf, int enabled); /* pf_text_set_undo */
 int64_t pf_buf_undo(pf_handle buf); /* where point belongs, or -1 if nothing to undo */
 int64_t pf_buf_redo(pf_handle buf);
 int pf_buf_modified(pf_handle buf); /* 1, 0, or -2 */
+int64_t pf_buf_version(pf_handle buf); /* pf_text_version, or -2 */
 int pf_buf_mark_saved(pf_handle buf);
 
 #endif

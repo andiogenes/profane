@@ -603,12 +603,64 @@ static void test_soft_wrap(void) {
     pf_layout_cache_free(cache);
 }
 
+static int u8_small(float h) {
+    return h > 0 && h < 5;
+}
+
+static void test_line_marks(void) {
+    pf_layout_cache *cache = pf_layout_cache_new(fake, 256, 8);
+    pf_window_style s = style();
+    pf_window *w = pf_window_new(cache, &s);
+    pf_window_set_size(w, 105, 120, 1);
+    set_role(PF_ROLE_GIT_ADDED, 8, PF_FACE_HAS_FG, 0x00AA00FF, 0);
+    set_role(PF_ROLE_GIT_MODIFIED, 9, PF_FACE_HAS_FG, 0x0000AAFF, 0);
+    set_role(PF_ROLE_GIT_DELETED, 10, PF_FACE_HAS_FG, 0xAA0000FF, 0);
+    const char *text = "a\nb\nc\nd\ne";
+    pf_handle buf = pf_buf_new(text, strlen(text));
+    uint32_t point = pf_buf_marker_new(buf, 0, 0);
+    pf_window_set_buffer(w, buf, point);
+
+    const pf_display *d = frame_at(w, buf, point, 0);
+    PF_CHECK(find_rect(d, 0x00AA00FF, 0) == NULL);
+    pf_display_release(d);
+
+    /* line 1 added, lines 2-3 modified, a removal above line 4 */
+    uint32_t marks[] = {1, 1, 1, 2, 2, 2, 4, 0, 3};
+    pf_window_set_line_marks(w, marks, 3);
+    d = pf_window_redisplay(w);
+    PF_CHECK(d != NULL);
+    const pf_display_item *add = find_rect(d, 0x00AA00FF, 0);
+    PF_CHECK(add && NEAR(add->x, 0) && NEAR(add->y, 20) && NEAR(add->u.rect.h, 20));
+    PF_CHECK(find_rect(d, 0x00AA00FF, 1) == NULL);
+    const pf_display_item *m0 = find_rect(d, 0x0000AAFF, 0), *m1 = find_rect(d, 0x0000AAFF, 1);
+    PF_CHECK(m0 && m1 && NEAR(m0->y, 40) && NEAR(m1->y, 60));
+    const pf_display_item *del = find_rect(d, 0xAA0000FF, 0);
+    PF_CHECK(del && NEAR(del->y, 80) && u8_small(del->u.rect.h));
+    pf_display_release(d);
+
+    /* A removal after the last line sits at its bottom; clearing removes every bar. */
+    uint32_t tail[] = {5, 0, 3};
+    pf_window_set_line_marks(w, tail, 1);
+    d = pf_window_redisplay(w);
+    del = find_rect(d, 0xAA0000FF, 0);
+    PF_CHECK(del && del->y > 90 && del->y < 100);
+    pf_display_release(d);
+    pf_window_set_line_marks(w, NULL, 0);
+    d = pf_window_redisplay(w);
+    PF_CHECK(find_rect(d, 0xAA0000FF, 0) == NULL && find_rect(d, 0x0000AAFF, 0) == NULL);
+    pf_display_release(d);
+
+    pf_window_free(w);
+    pf_layout_cache_free(cache);
+}
+
 int main(void) {
     test_terminal_window();
     test_layout();
     test_window();
     test_editing_modes();
     test_soft_wrap();
+    test_line_marks();
     test_faces();
     return PF_TEST_RESULT();
 }

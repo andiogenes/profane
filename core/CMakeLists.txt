@@ -11,11 +11,13 @@ set(PF_NATIVE_SOURCES
   embed/pf_buffer_ffi.c
   embed/pf_canvas_ffi.c
   embed/pf_display_ffi.c
+  embed/pf_git_ffi.c
   embed/pf_handles.c
   embed/pf_input.c
   embed/pf_term_ffi.c
   embed/pf_window_ffi.c
   fs/pf_fs.c
+  git/pf_git.c
   layout/pf_layout.c
   process/pf_process.c
   render/pf_display.c
@@ -34,6 +36,7 @@ target_include_directories(pf_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/display"
   "${CMAKE_CURRENT_SOURCE_DIR}/embed"
   "${CMAKE_CURRENT_SOURCE_DIR}/fs"
+  "${CMAKE_CURRENT_SOURCE_DIR}/git"
   "${CMAKE_CURRENT_SOURCE_DIR}/layout"
   "${CMAKE_CURRENT_SOURCE_DIR}/process"
   "${CMAKE_CURRENT_SOURCE_DIR}/render"
@@ -41,7 +44,8 @@ target_include_directories(pf_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/text")
 target_compile_options(pf_core PRIVATE ${PROFANE_WARNINGS})
 # Public headers stay Chez-free; only pf_scheme.c includes scheme.h.
-target_link_libraries(pf_core PUBLIC chez::kernel vterm)
+target_link_libraries(pf_core PUBLIC chez::kernel vterm libgit2package)
+target_include_directories(pf_core PUBLIC "${PROJECT_SOURCE_DIR}/subprojects/libgit2/include")
 
 # Executables that embed Chez link this so every native entry point is present (the linker
 # would otherwise drop objects nothing in C references) and resolvable by Scheme via dlsym.
@@ -54,10 +58,12 @@ target_include_directories(pf_native PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/display"
   "${CMAKE_CURRENT_SOURCE_DIR}/embed"
   "${CMAKE_CURRENT_SOURCE_DIR}/fs"
+  "${CMAKE_CURRENT_SOURCE_DIR}/git"
   "${CMAKE_CURRENT_SOURCE_DIR}/layout"
   "${CMAKE_CURRENT_SOURCE_DIR}/process"
   "${CMAKE_CURRENT_SOURCE_DIR}/render"
   "${CMAKE_CURRENT_SOURCE_DIR}/term"
   "${CMAKE_CURRENT_SOURCE_DIR}/text")
-target_link_libraries(pf_native PRIVATE vterm)
+target_link_libraries(pf_native PRIVATE vterm libgit2package)
+target_include_directories(pf_native PRIVATE "${PROJECT_SOURCE_DIR}/subprojects/libgit2/include")
 target_compile_options(pf_native PRIVATE ${PROFANE_WARNINGS})

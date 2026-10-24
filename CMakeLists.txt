@@ -30,6 +30,7 @@ set(PROFANE_WARNINGS -Wall -Wextra -Wpedantic -Wno-gnu-zero-variadic-macro-argum
 
 include(cmake/Chez.cmake)
 include(cmake/Libvterm.cmake)
+include(cmake/Libgit2.cmake)
 
 enable_testing()
 
