@@ -1048,6 +1048,12 @@ Steps, one commit each, tested against throwaway repos with the real `git`:
   (`--porcelain=v2 --branch -z`) and diff (unified, parsed into files and hunks) readers, the backend registry.
 - **4b** `(profane section)`: a section tree rendered into a read-only buffer (heading, children, folded flag, `TAB`,
   `n p M-n M-p`); refresh re-renders from the model and restores point and folds by section identity.
+  *Done.* Sections are records (kind, id, heading, body lines, children, folded, value); the buffer is erased and
+  rebuilt from the tree on every change (no `invisible` property), and `section-refresh!` restores folds by id and
+  point by the ids of the section at point and its ancestors plus its line and column (a vanished section falls back
+  to its nearest surviving ancestor). `section-mode` binds `TAB`, `<backtab>`, `n p M-n M-p ^ g q`; `g` calls the
+  buffer-local `section-refresh-function`. Seams: the section at point is not highlighted yet (needs an overlay or a
+  line face); other windows showing the buffer lose their own point on a render; ids that disappear forget their fold.
 - **4c** status buffer on `C-x g`: head/merge/push lines, untracked, unstaged, staged, unpushed/unpulled, hunks with
   diff faces.
 - **4d** staging: `s u k` on a file, a hunk or the region's lines (partial patches through `git apply --cached [-R]`),
