@@ -32,24 +32,35 @@ void pf_motion_set_reduced(int r) {
     reduced = r != 0;
 }
 
-static int cursor_on;
+static int features[PF_MOTION_FEATURES];
+static const int min_level[PF_MOTION_FEATURES] = {PF_MOTION_SUBTLE, PF_MOTION_SUBTLE,
+                                                  PF_MOTION_FULL, PF_MOTION_FULL};
+
+void pf_motion_set_feature(pf_motion_feature feature, int on) {
+    if ((int)feature >= 0 && feature < PF_MOTION_FEATURES) {
+        features[feature] = on != 0;
+    }
+}
+
+int pf_motion_feature_on(pf_motion_feature feature) {
+    return (int)feature >= 0 && feature < PF_MOTION_FEATURES && features[feature] &&
+           pf_motion_level() >= min_level[feature];
+}
 
 void pf_motion_set_cursor(int on) {
-    cursor_on = on != 0;
+    pf_motion_set_feature(PF_MOTION_CURSOR, on);
 }
 
 int pf_motion_cursor(void) {
-    return cursor_on && pf_motion_level() > PF_MOTION_OFF;
+    return pf_motion_feature_on(PF_MOTION_CURSOR);
 }
 
-static int scroll_on;
-
 void pf_motion_set_scroll(int on) {
-    scroll_on = on != 0;
+    pf_motion_set_feature(PF_MOTION_SCROLL, on);
 }
 
 int pf_motion_scroll(void) {
-    return scroll_on && pf_motion_level() > PF_MOTION_OFF;
+    return pf_motion_feature_on(PF_MOTION_SCROLL);
 }
 
 int pf_motion_level(void) {

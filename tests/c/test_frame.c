@@ -5,7 +5,9 @@
 #include <math.h>
 #include <string.h>
 
+#include "pf_anim.h"
 #include "pf_buffer_ffi.h"
+#include "pf_canvas.h"
 #include "pf_face.h"
 #include "pf_frame.h"
 #include "pf_layout.h"
@@ -106,7 +108,177 @@ static void cps_of(const char *s, uint32_t *out, size_t *n) {
     }
 }
 
+static size_t count_of_kind(const pf_display *d, uint32_t kind) {
+    size_t n = 0;
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        n += pf_display_items(d)[i].kind == kind;
+    }
+    return n;
+}
+
+static const pf_display_item *first_of_kind(const pf_display *d, uint32_t kind) {
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        if (pf_display_items(d)[i].kind == kind) {
+            return &pf_display_items(d)[i];
+        }
+    }
+    return NULL;
+}
+
+/* Runs ticks until the frame stops animating; returns how many frames it took. */
+static int settle(pf_frame *f, double *now) {
+    int frames = 0;
+    do {
+        pf_frame_tick(f, *now += 1.0 / 120);
+        const pf_display *d = pf_frame_redisplay(f);
+        pf_display_release(d);
+        pf_display_release(pf_frame_redisplay_overlay(f));
+    } while (pf_frame_animating(f) && ++frames < 300);
+    return frames;
+}
+
+static void test_motion(void) {
+    faces();
+    pf_layout_cache *cache = pf_layout_cache_new(fake, 256, 8);
+    pf_frame *f = pf_frame_new(cache, &fonts, 1);
+    pf_frame_set_size(f, 400, 300, 1);
+    pf_motion_set_level(PF_MOTION_FULL);
+    double now = 100;
+
+    /* Off (the default): placing windows takes effect at once. */
+    pf_handle a = pf_buf_new("aaa", 3), b = pf_buf_new("bbb", 3);
+    uint32_t pa = pf_buf_marker_new(a, 0, 0), pb = pf_buf_marker_new(b, 0, 0);
+    pf_window *w1 = pf_frame_add_window(f, 1);
+    pf_window_set_buffer(w1, a, pa);
+    pf_frame_place_window(f, w1, 0, 0, 400, 280, 1);
+    pf_window *w2 = pf_frame_add_window(f, 2);
+    pf_window_set_buffer(w2, b, pb);
+    pf_frame_place_window(f, w1, 0, 0, 400, 140, 1);
+    pf_frame_place_window(f, w2, 0, 140, 400, 140, 1);
+    PF_CHECK(!pf_frame_animating(f));
+    const pf_display *d = pf_frame_redisplay(f);
+    PF_CHECK(count_of_kind(d, PF_DISPLAY_CLIP) == 0 && NEAR(find_glyph(d, 'b')->y, 140 + 2 + 15));
+    pf_display_release(d);
+
+    /* On: splitting a window slides the old one up and grows the new one out of its top edge. */
+    pf_motion_set_feature(PF_MOTION_WINDOWS, 1);
+    pf_window *w3 = pf_frame_add_window(f, 3);
+    pf_handle c = pf_buf_new("ccc", 3);
+    pf_window_set_buffer(w3, c, pf_buf_marker_new(c, 0, 0));
+    pf_frame_place_window(f, w1, 0, 0, 400, 70, 1);
+    pf_frame_place_window(f, w3, 0, 70, 400, 70, 1);
+    PF_CHECK(pf_frame_animating(f));
+    d = pf_frame_redisplay(f);
+    PF_CHECK(count_of_kind(d, PF_DISPLAY_CLIP) >= 2);
+    const pf_display_item *clip = first_of_kind(d, PF_DISPLAY_CLIP);
+    PF_CHECK(clip && NEAR(clip->u.rect.h, 140)); /* w1 starts at its old height */
+    /* The new window has no height yet: its clip is empty and its text is clipped away. */
+    int empty = 0;
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        const pf_display_item *it = &pf_display_items(d)[i];
+        empty += it->kind == PF_DISPLAY_CLIP && it->u.rect.h == 0;
+    }
+    PF_CHECK(empty >= 1);
+    pf_display_release(d);
+
+    float prev = 140;
+    int frames = 0;
+    while (frames++ < 300) {
+        pf_frame_tick(f, now += 1.0 / 120);
+        d = pf_frame_redisplay(f);
+        clip = d ? first_of_kind(d, PF_DISPLAY_CLIP) : NULL;
+        if (clip) {
+            PF_CHECK(clip->u.rect.h <= prev + 1e-3f && clip->u.rect.h >= 70 - 1e-3f); /* no overshoot */
+            prev = clip->u.rect.h;
+        }
+        pf_display_release(d);
+        if (!pf_frame_animating(f)) {
+            break;
+        }
+    }
+    PF_CHECK(frames > 3 && frames < 60);
+    pf_window_invalidate(w1);
+    d = pf_frame_redisplay(f);
+    PF_CHECK(d && count_of_kind(d, PF_DISPLAY_CLIP) == 0);
+    PF_CHECK(NEAR(find_glyph(d, 'c')->y, 70 + 2 + 15)); /* arrived */
+    pf_display_release(d);
+
+    /* A late tick (the main thread was busy) puts everything in place. */
+    pf_frame_place_window(f, w1, 0, 0, 400, 140, 1);
+    pf_frame_place_window(f, w3, 0, 140, 400, 140, 1);
+    PF_CHECK(pf_frame_animating(f));
+    pf_frame_tick(f, 500);
+    pf_frame_tick(f, 502);
+    PF_CHECK(!pf_frame_animating(f));
+
+    /* Resizing the frame is not animated; neither is reappearing (a tab switch). */
+    pf_frame_set_size(f, 500, 300, 1);
+    pf_frame_place_window(f, w1, 0, 0, 500, 70, 1);
+    pf_frame_place_window(f, w3, 0, 70, 500, 70, 1);
+    PF_CHECK(!pf_frame_animating(f));
+    pf_frame_redisplay(f);
+    pf_frame_place_window(f, w3, 0, 70, 500, 70, 0);
+    pf_frame_place_window(f, w3, 0, 70, 500, 70, 1);
+    PF_CHECK(!pf_frame_animating(f));
+
+    /* Reduce Motion: off wins. */
+    pf_motion_set_reduced(1);
+    pf_frame_place_window(f, w1, 0, 0, 500, 100, 1);
+    PF_CHECK(!pf_frame_animating(f));
+    pf_motion_set_reduced(0);
+    pf_motion_set_feature(PF_MOTION_WINDOWS, 0);
+
+    /* Pop-ups: fade and slide in, and out from a copy, since the canvas may be freed at once. */
+    pf_canvas *cv = pf_canvas_new(50, 20);
+    pf_canvas_fill_rect(cv, 0, 0, 50, 20, 0xFF0000FF);
+    pf_frame_popup_show(f, cv, 10, 10);
+    d = pf_frame_redisplay_overlay(f);
+    PF_CHECK(d && first_of_kind(d, PF_DISPLAY_RECT) && !pf_frame_animating(f)); /* feature off */
+    PF_CHECK(first_of_kind(d, PF_DISPLAY_RECT)->color == 0xFF0000FF);
+    pf_display_release(d);
+    pf_frame_popup_hide(f, cv);
+    pf_display_release(pf_frame_redisplay_overlay(f));
+
+    pf_motion_set_feature(PF_MOTION_POPUPS, 1);
+    pf_frame_popup_show(f, cv, 10, 10);
+    PF_CHECK(pf_frame_animating(f));
+    pf_frame_tick(f, now += 1.0 / 120);
+    pf_frame_tick(f, now += 1.0 / 120);
+    d = pf_frame_redisplay_overlay(f);
+    const pf_display_item *r = d ? first_of_kind(d, PF_DISPLAY_RECT) : NULL;
+    PF_CHECK(r && (r->color & 0xFF) > 0 && (r->color & 0xFF) < 0xFF && r->y > 10 && r->y < 16);
+    pf_display_release(d);
+    settle(f, &now);
+    pf_window_invalidate(w1);
+    pf_frame_popup_show(f, cv, 11, 10); /* a move redraws it */
+    d = pf_frame_redisplay_overlay(f);
+    r = d ? first_of_kind(d, PF_DISPLAY_RECT) : NULL;
+    PF_CHECK(r && r->color == 0xFF0000FF && NEAR(r->y, 10) && NEAR(r->x, 11)); /* arrived */
+    pf_display_release(d);
+
+    PF_CHECK(pf_frame_popup_hide(f, cv) == 0);
+    PF_CHECK(pf_frame_animating(f)); /* the ghost fades */
+    pf_frame_tick(f, now += 1.0 / 120);
+    pf_frame_tick(f, now += 1.0 / 120);
+    d = pf_frame_redisplay_overlay(f);
+    r = d ? first_of_kind(d, PF_DISPLAY_RECT) : NULL;
+    PF_CHECK(r && (r->color & 0xFF) < 0xFF && (r->color & 0xFF) > 0);
+    pf_display_release(d);
+    pf_canvas_free(cv); /* the ghost does not need it */
+    settle(f, &now);
+    d = pf_frame_redisplay_overlay(f);
+    PF_CHECK(d == NULL || pf_display_count(d) == 0);
+    pf_display_release(d);
+    PF_CHECK(!pf_frame_animating(f));
+
+    pf_motion_set_feature(PF_MOTION_POPUPS, 0);
+    pf_motion_set_level(PF_MOTION_OFF);
+    pf_frame_free(f);
+    pf_layout_cache_free(cache);
+}
+
 int main(void) {
+    test_motion();
     faces();
     pf_layout_cache *cache = pf_layout_cache_new(fake, 256, 8);
     pf_frame *f = pf_frame_new(cache, &fonts, 1);

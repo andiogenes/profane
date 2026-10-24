@@ -23,8 +23,21 @@ int pf_spring_settled(const pf_spring *s, float eps);
 enum { PF_MOTION_OFF = 0, PF_MOTION_SUBTLE = 1, PF_MOTION_FULL = 2 };
 void pf_motion_set_level(int level);
 void pf_motion_set_reduced(int reduced);
-/* Per-feature switches, for what the level allows: the animated cursor (pf_window_tick). Off by
- * default; Scheme's `animate-cursor` sets it. */
+/* Per-feature switches, each off by default (Scheme's animate-cursor, animate-scroll,
+ * animate-windows, animate-popups): a feature animates when it is on and the level reaches its
+ * minimum (cursor and scroll: subtle; windows and pop-ups: full). */
+typedef enum pf_motion_feature {
+    PF_MOTION_CURSOR,
+    PF_MOTION_SCROLL,
+    PF_MOTION_WINDOWS, /* splits, resizes, deletions: windows slide to their new rects */
+    PF_MOTION_POPUPS,  /* pop-ups fade and slide in and out */
+    PF_MOTION_FEATURES
+} pf_motion_feature;
+void pf_motion_set_feature(pf_motion_feature feature, int on);
+int pf_motion_feature_on(pf_motion_feature feature);
+
+/* The cursor and scroll switches (pf_motion_set_feature / pf_motion_feature_on). */
+void pf_motion_set_cursor(int on);
 void pf_motion_set_cursor(int on);
 int pf_motion_cursor(void); /* on, and the level is not off */
 

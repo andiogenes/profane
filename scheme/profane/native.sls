@@ -17,7 +17,7 @@
           %frm-set-window-native %frm-native-count %frm-native-field
           %win-selected %win-set-buffer %win-top-line %win-set-top-line %win-body-lines
           %win-set-option %win-option %win-set-edges %win-set-mode-line %win-mode-line-height %win-set-header-line %win-header-line-height
-          %win-hscroll %win-set-min-hscroll %win-set-region %win-pos-rect %win-pos-at %buf-version %motion-set-level %motion-set-cursor %motion-set-scroll %win-set-line-marks %git-buffer-marks %win-row-start %win-row-end %win-row-x %win-move-rows %frm-cursor-at
+          %win-hscroll %win-set-min-hscroll %win-set-region %win-pos-rect %win-pos-at %buf-version %motion-set-level %motion-set-cursor %motion-set-scroll %motion-set-feature %win-set-line-marks %git-buffer-marks %win-row-start %win-row-end %win-row-x %win-move-rows %frm-cursor-at
           %cvs-new %cvs-free %cvs-set-size %cvs-width %cvs-height %cvs-clear %cvs-fill-rect
           %cvs-fill-round-rect %cvs-stroke-round-rect %cvs-shadow %cvs-line %cvs-text %cvs-add-hit
           %cvs-hit-test %cvs-text-width %cvs-text-height %cvs-popup-show %cvs-popup-hide
@@ -151,6 +151,7 @@
     (unsigned-32 u8* size_t u8* size_t unsigned-32 boolean) int)
   (define-native %win-mode-line-height "pf_win_mode_line_height" (unsigned-32) double)
   (define-native %win-pos-at "pf_win_pos_at" (unsigned-32 float float) integer-64)
+  (define-native %motion-set-feature "pf_motion_set_feature_ffi" (int int) int)
   (define-native %motion-set-scroll "pf_motion_set_scroll_ffi" (int) int)
   (define-native %motion-set-cursor "pf_motion_set_cursor_ffi" (int) int)
   (define-native %motion-set-level "pf_motion_set_level_ffi" (int) int)

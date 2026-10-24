@@ -129,6 +129,24 @@ void pf_display_append(pf_display *d, const pf_display *src, float dx, float dy)
     }
 }
 
+void pf_display_append_faded(pf_display *d, const pf_display *src, float dx, float dy, float alpha) {
+    alpha = alpha < 0 ? 0 : alpha > 1 ? 1 : alpha;
+    for (size_t i = 0; i < src->count; i++) {
+        const pf_display_item *s = &src->items[i];
+        uint32_t a = (uint32_t)((float)(s->color & 0xFF) * alpha + 0.5f);
+        if (s->kind != PF_DISPLAY_CLIP && s->kind != PF_DISPLAY_UNCLIP && a == 0) {
+            continue;
+        }
+        pf_display_item *it = push(d);
+        *it = *s;
+        it->x += dx;
+        it->y += dy;
+        if (s->kind != PF_DISPLAY_CLIP && s->kind != PF_DISPLAY_UNCLIP) {
+            it->color = (s->color & 0xFFFFFF00u) | a;
+        }
+    }
+}
+
 const pf_display *pf_display_finish(pf_display *d) {
     d->frozen = 1;
     return d;

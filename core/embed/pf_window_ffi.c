@@ -367,6 +367,11 @@ int pf_motion_set_level_ffi(int level) {
     return pf_motion_level();
 }
 
+int pf_motion_set_feature_ffi(int feature, int on) {
+    pf_motion_set_feature((pf_motion_feature)feature, on);
+    return pf_motion_feature_on((pf_motion_feature)feature);
+}
+
 int pf_motion_set_scroll_ffi(int on) {
     pf_motion_set_scroll(on);
     return pf_motion_scroll();

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "pf_anim.h"
 #include "pf_face.h"
 
 typedef struct entry {
@@ -14,13 +15,27 @@ typedef struct entry {
     int shown;
     float text_scale;
     const pf_display *last; /* the window's newest list */
+    /* The rect drawn, which springs to the placed one (animate-windows); at rest it is equal. */
+    pf_spring ax, ay, aw, ah;
+    int rect_init, fresh; /* drawn rect valid; added and not yet placed */
 } entry;
 
 typedef struct popup {
     pf_canvas *canvas;
     float x, y;
     uint64_t seen; /* canvas version last drawn */
+    const pf_display *list; /* its canvas rendered at (0, 0), kept while pop-ups animate */
+    pf_spring a;            /* opacity, 0..1 (animate-popups) */
 } popup;
+
+/* A pop-up that was hidden, fading out. */
+typedef struct ghost {
+    const pf_display *list;
+    float x, y;
+    pf_spring a;
+} ghost;
+
+enum { RECT_OMEGA = 30, POPUP_OMEGA = 35, POPUP_SLIDE = 6 };
 
 struct pf_frame {
     pf_layout_cache *cache;
@@ -38,6 +53,10 @@ struct pf_frame {
     size_t npopups, cappopups;
     int overlay_dirty;
     uint64_t native_generation;
+    ghost *ghosts;
+    size_t nghosts, capghosts;
+    double anim_time; /* of the last step; 0: the next tick starts an animation */
+    int snap;         /* the frame was resized: placements this round take effect at once */
 };
 
 static void *xrealloc(void *p, size_t size) {
@@ -71,8 +90,15 @@ void pf_frame_free(pf_frame *f) {
         pf_display_release(f->entries[i].last);
         pf_window_free(f->entries[i].w);
     }
+    for (size_t i = 0; i < f->npopups; i++) {
+        pf_display_release(f->popups[i].list);
+    }
+    for (size_t i = 0; i < f->nghosts; i++) {
+        pf_display_release(f->ghosts[i].list);
+    }
     free(f->entries);
     free(f->popups);
+    free(f->ghosts);
     pf_strip_free(&f->tab_bar);
     free(f);
 }
@@ -128,6 +154,7 @@ void pf_frame_set_size(pf_frame *f, float width, float height, float scale) {
         }
         f->dirty = 1;
         f->overlay_dirty = 1;
+        f->snap = 1;
     }
 }
 
@@ -150,6 +177,7 @@ pf_window *pf_frame_add_window(pf_frame *f, uint32_t tag) {
     e->w = pf_window_new(f->cache, &st);
     e->tag = tag;
     e->text_scale = 1;
+    e->fresh = 1;
     pf_window_set_fonts(e->w, fonts_of(f));
     return e->w;
 }
@@ -187,6 +215,64 @@ void pf_frame_set_window_tag(pf_frame *f, pf_window *w, uint32_t tag) {
     }
 }
 
+static void rect_snap(entry *e) {
+    pf_spring_snap(&e->ax, e->x);
+    pf_spring_snap(&e->ay, e->y);
+    pf_spring_snap(&e->aw, e->width);
+    pf_spring_snap(&e->ah, e->height);
+    e->rect_init = 1;
+}
+
+static int rect_moving(const entry *e) {
+    return e->rect_init && e->shown &&
+           (!pf_spring_settled(&e->ax, 0.25f) || !pf_spring_settled(&e->ay, 0.25f) ||
+            !pf_spring_settled(&e->aw, 0.25f) || !pf_spring_settled(&e->ah, 0.25f));
+}
+
+static int near(float a, float b) {
+    return a - b < 1 && b - a < 1;
+}
+
+/* A window just placed at its rect: slide the drawn rect there. A new window grows out of the
+ * one it was split from (stacked: from its top edge; side by side: from its left); resizing the
+ * frame, tab switches and native views take effect at once. */
+static void rect_animate(pf_frame *f, entry *e, int was_shown) {
+    int fresh = e->fresh;
+    if (e->shown) {
+        e->fresh = 0;
+    }
+    if (!e->shown || f->snap || pf_window_native(e->w) || !pf_motion_feature_on(PF_MOTION_WINDOWS)) {
+        rect_snap(e);
+        return;
+    }
+    if (!e->rect_init || !was_shown) {
+        rect_snap(e);
+        if (fresh) {
+            for (size_t i = 0; i < f->count; i++) {
+                const entry *o = &f->entries[i];
+                if (o == e || !o->shown || !o->rect_init) {
+                    continue;
+                }
+                if (near(o->ax.value, e->x) && near(o->aw.value, e->width)) {
+                    pf_spring_snap(&e->ah, 0);
+                    e->ah.target = e->height;
+                    return;
+                }
+                if (near(o->ay.value, e->y) && near(o->ah.value, e->height)) {
+                    pf_spring_snap(&e->aw, 0);
+                    e->aw.target = e->width;
+                    return;
+                }
+            }
+        }
+        return;
+    }
+    e->ax.target = e->x;
+    e->ay.target = e->y;
+    e->aw.target = e->width;
+    e->ah.target = e->height;
+}
+
 int pf_frame_place_window(pf_frame *f, pf_window *w, float x, float y, float width, float height,
                           int shown) {
     entry *e = find(f, w);
@@ -199,12 +285,14 @@ int pf_frame_place_window(pf_frame *f, pf_window *w, float x, float y, float wid
         if (shown && !e->shown) {
             pf_window_invalidate(w); /* its last list may predate changes made while hidden */
         }
+        int was_shown = e->shown;
         e->x = x;
         e->y = y;
         e->width = width;
         e->height = height;
         e->shown = shown;
         pf_window_set_size(w, width, height, f->scale);
+        rect_animate(f, e, was_shown);
         f->dirty = 1;
         if (pf_window_native(w)) {
             f->native_generation++;
@@ -283,15 +371,93 @@ void pf_frame_set_tab_bar(pf_frame *f, const uint32_t *cps, size_t n, const pf_s
     }
 }
 
+static int popups_moving(const pf_frame *f) {
+    for (size_t i = 0; i < f->npopups; i++) {
+        if (!pf_spring_settled(&f->popups[i].a, 0.01f)) {
+            return 1;
+        }
+    }
+    return f->nghosts > 0;
+}
+
+static int rects_moving(const pf_frame *f) {
+    for (size_t i = 0; i < f->count; i++) {
+        if (rect_moving(&f->entries[i])) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void rects_snap_all(pf_frame *f) {
+    for (size_t i = 0; i < f->count; i++) {
+        if (f->entries[i].rect_init) {
+            rect_snap(&f->entries[i]);
+        }
+    }
+}
+
+static void ghost_free_at(pf_frame *f, size_t i) {
+    pf_display_release(f->ghosts[i].list);
+    f->ghosts[i] = f->ghosts[--f->nghosts];
+}
+
 void pf_frame_tick(pf_frame *f, double now) {
     for (size_t i = 0; i < f->count; i++) {
         if (f->entries[i].shown) {
             pf_window_tick(f->entries[i].w, now);
         }
     }
+    if (!rects_moving(f) && !popups_moving(f)) {
+        f->anim_time = 0;
+        return;
+    }
+    double dt = f->anim_time == 0 ? 1.0 / 120 : now - f->anim_time;
+    f->anim_time = now;
+    /* Late frame, or the features were switched off: everything arrives now. */
+    int late = dt > 0.05;
+    if (late || !pf_motion_feature_on(PF_MOTION_WINDOWS)) {
+        rects_snap_all(f);
+    } else {
+        for (size_t i = 0; i < f->count; i++) {
+            entry *e = &f->entries[i];
+            if (rect_moving(e)) {
+                pf_spring_step(&e->ax, RECT_OMEGA, (float)dt);
+                pf_spring_step(&e->ay, RECT_OMEGA, (float)dt);
+                pf_spring_step(&e->aw, RECT_OMEGA, (float)dt);
+                pf_spring_step(&e->ah, RECT_OMEGA, (float)dt);
+                if (!rect_moving(e)) {
+                    rect_snap(e);
+                }
+            }
+        }
+    }
+    int popups = late || !pf_motion_feature_on(PF_MOTION_POPUPS);
+    for (size_t i = 0; i < f->npopups; i++) {
+        popup *p = &f->popups[i];
+        if (popups) {
+            pf_spring_snap(&p->a, p->a.target);
+        } else {
+            pf_spring_step(&p->a, POPUP_OMEGA, (float)dt);
+            if (pf_spring_settled(&p->a, 0.01f)) {
+                pf_spring_snap(&p->a, p->a.target);
+            }
+        }
+    }
+    for (size_t i = f->nghosts; i-- > 0;) {
+        pf_spring_step(&f->ghosts[i].a, POPUP_OMEGA, (float)dt);
+        if (popups || pf_spring_settled(&f->ghosts[i].a, 0.01f)) {
+            ghost_free_at(f, i);
+        }
+    }
+    f->dirty = 1;
+    f->overlay_dirty = 1;
 }
 
 int pf_frame_animating(const pf_frame *f) {
+    if (rects_moving(f) || popups_moving(f)) {
+        return 1;
+    }
     for (size_t i = 0; i < f->count; i++) {
         if (f->entries[i].shown && pf_window_animating(f->entries[i].w)) {
             return 1;
@@ -322,6 +488,7 @@ const pf_display *pf_frame_redisplay(pf_frame *f) {
             changed = 1;
         }
     }
+    f->snap = 0;
     if (!changed) {
         return NULL;
     }
@@ -332,7 +499,14 @@ const pf_display *pf_frame_redisplay(pf_frame *f) {
     for (size_t i = 0; i < f->count; i++) {
         entry *e = &f->entries[i];
         if (e->shown && e->last) {
-            pf_display_append(d, e->last, e->x, e->y);
+            if (rect_moving(e)) {
+                /* Content keeps its placed size and is revealed through the sliding rect. */
+                pf_display_clip(d, e->ax.value, e->ay.value, e->aw.value, e->ah.value);
+                pf_display_append(d, e->last, e->ax.value, e->ay.value);
+                pf_display_unclip(d);
+            } else {
+                pf_display_append(d, e->last, e->x, e->y);
+            }
         }
     }
     if (f->tab_bar.face) {
@@ -376,6 +550,11 @@ void pf_frame_popup_show(pf_frame *f, pf_canvas *c, float x, float y) {
         p->canvas = c;
         p->seen = 0;
         p->x = p->y = 0;
+        p->list = NULL;
+        pf_spring_snap(&p->a, 1);
+        if (!f->snap && pf_motion_feature_on(PF_MOTION_POPUPS)) {
+            p->a.value = 0; /* fades in */
+        }
         f->overlay_dirty = 1;
     }
     if (p->x != x || p->y != y) {
@@ -390,6 +569,21 @@ int pf_frame_popup_hide(pf_frame *f, pf_canvas *c) {
     if (!p) {
         return -1;
     }
+    if (p->list && pf_motion_feature_on(PF_MOTION_POPUPS) && !f->snap) {
+        /* Fades out from the last thing shown, which the canvas may not outlive. */
+        if (f->nghosts == f->capghosts) {
+            f->capghosts = f->capghosts ? f->capghosts * 2 : 4;
+            f->ghosts = xrealloc(f->ghosts, f->capghosts * sizeof *f->ghosts);
+        }
+        ghost *g = &f->ghosts[f->nghosts++];
+        g->list = p->list;
+        p->list = NULL;
+        g->x = p->x;
+        g->y = p->y;
+        g->a = p->a;
+        g->a.target = 0;
+    }
+    pf_display_release(p->list);
     memmove(p, p + 1, (size_t)(f->popups + f->npopups - p - 1) * sizeof *p);
     f->npopups--;
     f->overlay_dirty = 1;
@@ -422,6 +616,7 @@ void pf_frame_text_extent(pf_frame *f, const uint32_t *cps, size_t n, uint32_t f
 
 const pf_display *pf_frame_redisplay_overlay(pf_frame *f) {
     int changed = f->overlay_dirty;
+    int use_lists = pf_motion_feature_on(PF_MOTION_POPUPS);
     for (size_t i = 0; i < f->npopups; i++) {
         changed |= f->popups[i].seen != pf_canvas_version(f->popups[i].canvas);
     }
@@ -433,8 +628,28 @@ const pf_display *pf_frame_redisplay_overlay(pf_frame *f) {
     pf_display *d = pf_display_new(f->width, f->height, f->scale, 0);
     for (size_t i = 0; i < f->npopups; i++) {
         popup *p = &f->popups[i];
-        p->seen = pf_canvas_version(p->canvas);
-        pf_canvas_render(p->canvas, d, &env, p->x, p->y);
+        if (!use_lists && p->a.value >= 1) {
+            pf_display_release(p->list);
+            p->list = NULL;
+            p->seen = pf_canvas_version(p->canvas);
+            pf_canvas_render(p->canvas, d, &env, p->x, p->y);
+            continue;
+        }
+        /* Animating: render the canvas on its own, then draw that faded and slid. */
+        if (!p->list || p->seen != pf_canvas_version(p->canvas)) {
+            pf_display_release(p->list);
+            pf_display *own = pf_display_new(f->width, f->height, f->scale, 0);
+            pf_canvas_render(p->canvas, own, &env, 0, 0);
+            p->list = pf_display_finish(own);
+            p->seen = pf_canvas_version(p->canvas);
+        }
+        pf_display_append_faded(d, p->list, p->x, p->y + (1 - p->a.value) * POPUP_SLIDE,
+                                p->a.value);
+    }
+    for (size_t i = 0; i < f->nghosts; i++) {
+        const ghost *g = &f->ghosts[i];
+        pf_display_append_faded(d, g->list, g->x, g->y + (1 - g->a.value) * POPUP_SLIDE,
+                                g->a.value);
     }
     return pf_display_finish(d);
 }

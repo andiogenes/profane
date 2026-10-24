@@ -1014,8 +1014,25 @@ diff, commit, push/pull), 5 ediff. Items 1 and 2 are done; item 3 is started (it
 - Verified: `test_clip` (macos label: renders a list offscreen through the Metal renderer and reads the PNG: inside,
   each edge pixel, outside, and after the clip ends), `test_clip` in `test_display`, `test_smooth_scroll`. Not
   verified in the app window, nor the feel.
-- Still to do in item 3: window split/resize, pop-up fade/slide and fold/unfold as consumers; `full` adds nothing
-  over `subtle` yet.
+- Part 3, windows and pop-ups (`m4-motion-ui`). Each feature has its own switch, all off by default
+  (`animate-cursor`, `animate-scroll`, `animate-windows`, `animate-popups`); a feature animates when its switch is on
+  and `ui-motion` reaches its level: cursor and scroll need `subtle`, windows and pop-ups `full`. Reduce Motion
+  still forces everything off.
+- Windows: `pf_frame_place_window` retargets four springs per window (x, y, width, height; omega 30); a window keeps
+  rendering at its placed size and is revealed through the sliding rect (clip + offset), so text relayout is not
+  repeated per frame. A new window grows out of the one it was split from (stacked: from its top edge; side by side:
+  from its left; otherwise from nothing). A deleted window disappears at once and its neighbor grows. At once, not
+  animated: resizing the frame (the user is dragging it), re-showing a window (a tab switch), native-view windows,
+  and the first window.
+- Pop-ups: opacity spring (omega 35) and a 6 pt slide up into place. Drawn through `pf_display_append_faded` from a
+  per-pop-up list rendered at the origin and cached while the feature is on; hiding keeps that list as a "ghost"
+  that fades out, so the canvas can be freed right away. Hit-testing uses the final position. With the feature off
+  the old direct path is used, so output is unchanged.
+- Fold/unfold: not done, there is nothing to fold yet (outline/Org-lite, M10). The consumer would be a spring on a
+  region's height with the clip primitive; nothing else is needed from the core.
+- Verified: `test_motion` in `test_frame` (split, slide, no overshoot, late tick, frame resize, tab switch, Reduce
+  Motion, pop-up fade in and out with the canvas freed mid-fade; the window tests fail with the animation disabled),
+  feature thresholds in `test_anim`. Not verified in the app window or for feel.
 
 ## 9. Milestones
 

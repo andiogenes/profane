@@ -51,5 +51,21 @@ int main(void) {
     pf_motion_set_level(-3);
     PF_CHECK(pf_motion_level() == PF_MOTION_OFF && !pf_motion_cursor());
     pf_motion_set_cursor(0);
+    /* Features: each needs its switch and a level that reaches it. */
+    for (int f = 0; f < PF_MOTION_FEATURES; f++) {
+        pf_motion_set_feature((pf_motion_feature)f, 1);
+    }
+    pf_motion_set_level(PF_MOTION_SUBTLE);
+    PF_CHECK(pf_motion_feature_on(PF_MOTION_CURSOR) && pf_motion_feature_on(PF_MOTION_SCROLL));
+    PF_CHECK(!pf_motion_feature_on(PF_MOTION_WINDOWS) && !pf_motion_feature_on(PF_MOTION_POPUPS));
+    pf_motion_set_level(PF_MOTION_FULL);
+    PF_CHECK(pf_motion_feature_on(PF_MOTION_WINDOWS) && pf_motion_feature_on(PF_MOTION_POPUPS));
+    pf_motion_set_feature(PF_MOTION_POPUPS, 0);
+    PF_CHECK(!pf_motion_feature_on(PF_MOTION_POPUPS) && pf_motion_feature_on(PF_MOTION_WINDOWS));
+    PF_CHECK(!pf_motion_feature_on((pf_motion_feature)99));
+    for (int f = 0; f < PF_MOTION_FEATURES; f++) {
+        pf_motion_set_feature((pf_motion_feature)f, 0);
+    }
+    pf_motion_set_level(PF_MOTION_OFF);
     return PF_TEST_RESULT();
 }

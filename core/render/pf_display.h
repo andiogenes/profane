@@ -65,6 +65,9 @@ void pf_display_glyph(pf_display *d, uint32_t font, uint32_t glyph, float x, flo
  * compose windows rendered on their own into one frame. */
 void pf_display_append(pf_display *d, const pf_display *src, float dx, float dy);
 
+/* Like pf_display_append, with every color's alpha multiplied by ALPHA (0..1): fades a whole list. */
+void pf_display_append_faded(pf_display *d, const pf_display *src, float dx, float dy, float alpha);
+
 /* Freezes the list; no further items may be added. Returns it with one reference. */
 const pf_display *pf_display_finish(pf_display *d);
 

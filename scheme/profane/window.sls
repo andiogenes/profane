@@ -926,6 +926,14 @@ ui-motion subtle or full, and macOS Reduce Motion off.")
     "Glide the text when a window scrolls (C-v, M-v, point leaving the window) instead of jumping.
 Edits and long jumps still scroll at once. Needs ui-motion subtle or full, and macOS Reduce Motion off.")
 
+  (defvar animate-windows #f
+    "Slide windows to their new place when they are split, resized or deleted. Needs ui-motion full,
+and macOS Reduce Motion off.")
+
+  (defvar animate-popups #f
+    "Fade and slide pop-ups (completions, transients, menus) in and out. Needs ui-motion full, and
+macOS Reduce Motion off.")
+
   ;; ui-motion: off (or #f), subtle, full (pf_anim.h). macOS Reduce Motion overrides it in C.
   (define (apply-motion! v)
     (%motion-set-level (case v [(full) 2] [(subtle) 1] [else 0])))
@@ -1143,6 +1151,10 @@ screen rows."
       (%motion-set-cursor (if (var-ref 'animate-cursor) 1 0))
       (add-var-watcher! 'animate-scroll (lambda (name value where) (%motion-set-scroll (if value 1 0))))
       (%motion-set-scroll (if (var-ref 'animate-scroll) 1 0))
+      (for-each (lambda (v id)
+                  (add-var-watcher! v (lambda (name value where) (%motion-set-feature id (if value 1 0))))
+                  (%motion-set-feature id (if (var-ref v) 1 0)))
+                '(animate-windows animate-popups) '(2 3))
       (add-var-watcher! 'truncate-lines (lambda (name value where) (apply-options!)))
       (add-var-watcher! 'word-wrap (lambda (name value where) (apply-options!)))
       #t))
