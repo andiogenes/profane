@@ -21,7 +21,7 @@
           git-diff-file-hunks git-diff-file-binary?
           git-diff-hunk? git-diff-hunk-header git-diff-hunk-old-start git-diff-hunk-old-len
           git-diff-hunk-new-start git-diff-hunk-new-len git-diff-hunk-lines
-          git-status git-diff git-log define-git-backend! git-backend-names
+          git-status git-diff git-diff-with git-log define-git-backend! git-backend-names
           git-hunk-patch git-hunk-region-patch git-apply-patch git-write-temp-file
           git-commit? git-commit-hash git-commit-short git-commit-subject git-commit-author
           git-commit-date git-commit-refs
@@ -379,12 +379,18 @@
     (let* ([name (var-ref 'git-read-backend)]
            [b (hashtable-ref backends name #f)])
       (unless b (error 'git "no such git read backend" name))
-      (cdr (assq which b))))
+      (let ([p (assq which b)])
+        (unless p (error 'git "the git read backend does not provide" name which))
+        (cdr p))))
 
   (define (git-status root) ((backend-proc 'status) root))
   ;; The commits of RANGE (a revision or "a..b"; #f: HEAD), newest first, at most LIMIT. A
   ;; repository without commits, or a bad range, gives ().
   (define (git-log root range limit) ((backend-proc 'log) root range limit))
+
+  ;; The diff `git ARGS...` prints, parsed: ARGS start with the command, diff or show, e.g.
+  ;; ("diff" "HEAD") or ("show" "--format=" "abc123"). A fifth backend procedure, diff-args.
+  (define (git-diff-with root args) ((backend-proc 'diff-args) root args))
 
   (define (git-diff root staged? . rest) ((backend-proc 'diff) root staged? (if (null? rest) '() (car rest))))
 
@@ -400,6 +406,12 @@
       (unless (zero? (car r)) (error 'git-diff (caddr r)))
       (parse-git-diff (cadr r))))
 
+  (define (cli-diff-args root args)
+    (let ([r (await (run-git root (append (list (car args)) '("--no-color" "--no-ext-diff" "--src-prefix=a/" "--dst-prefix=b/")
+                                          (cdr args))))])
+      (unless (zero? (car r)) (error 'git-diff (caddr r)))
+      (parse-git-diff (cadr r))))
+
   (define (cli-log root range limit)
     (let ([r (await (run-git root (list "log" (format "-n~a" limit) log-format "--no-show-signature"
                                         (or range "HEAD") "--")))])
@@ -407,5 +419,5 @@
 
   (define cli-backend
     (begin (define-git-backend! 'cli (list (cons 'status cli-status) (cons 'diff cli-diff)
-                                           (cons 'log cli-log)))
+                                           (cons 'log cli-log) (cons 'diff-args cli-diff-args)))
            #t)))

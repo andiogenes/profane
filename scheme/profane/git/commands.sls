@@ -28,7 +28,7 @@
   (defvar git-commit-diff-buffer #f "The buffer showing the changes being committed." '(local))
 
   (define-major-mode git-commit-mode fundamental-mode "Commit" "Major mode for writing a commit message.")
-  (define-major-mode git-diff-mode fundamental-mode "Diff" "Major mode of buffers showing a diff.")
+  (define-major-mode git-commit-diff-mode fundamental-mode "Diff" "Major mode of the changes shown beside a commit message.")
 
   ;; ---- helpers ----
 
@@ -124,7 +124,7 @@
            [mb (get-buffer-create "*git-commit*")]
            [db (get-buffer-create "*git-commit-diff*")])
       (with-current-buffer db
-        (set-major-mode! 'git-diff-mode)
+        (set-major-mode! 'git-commit-diff-mode)
         (set-buffer-read-only! #f)
         (erase-buffer)
         (git-diff-text-insert! diff)

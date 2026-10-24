@@ -10,7 +10,8 @@
 
 (library (profane git status)
   (export git-item? git-item-kind git-item-area git-item-path git-item-change git-item-file
-          git-item-hunk git-item-commit git-status-buffer-refresh! git-refresh-status-buffers!)
+          git-item-hunk git-item-commit git-status-buffer-refresh! git-refresh-status-buffers!
+          make-git-item git-diff-line-segments)
   (import (chezscheme) (profane buffer) (profane window) (profane command) (profane command-loop)
           (profane keymap) (profane mode) (profane var) (profane face) (profane display)
           (profane files) (profane minibuffer) (profane async) (profane git) (profane section)
@@ -50,6 +51,8 @@
     (case ch
       [(#\M) "modified"] [(#\A) "new file"] [(#\D) "deleted"] [(#\R) "renamed"] [(#\C) "copied"]
       [(#\T) "typechange"] [(#\U) "unmerged"] [else "changed"]))
+
+  (define (git-diff-line-segments line) (diff-line-segments line))
 
   (define (diff-line-segments line)
     (let ([c (if (string=? line "") #\space (string-ref line 0))])
@@ -242,6 +245,9 @@
           (when line
             (goto-char (point-min))
             (forward-line (- line 1))))]
+       [(and item (eq? (git-item-kind item) 'commit))
+        (let ([show (command-procedure 'magit-show-commit)])
+          (if show (show) (message "Cannot show commits here")))]
        [else (message "Nothing to visit here")])))
 
 ;; ---- staging, unstaging and discarding ----

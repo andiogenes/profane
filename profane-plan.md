@@ -1098,6 +1098,15 @@ Steps, one commit each, tested against throwaway repos with the real `git`:
   prompts, `commit --fixup`, merge/rebase/stash/tag, remote and upstream management beyond the first push, pushing
   tags. Tested end to end against a bare remote and a second clone.
 - **4f** `d` diff, `RET` on a commit shows it, a plain `l` log list (the graph is v2).
+  *Done.* `(profane git views)`: `d` diff menu (`d` what point is on, `u` unstaged, `s` staged, `w` work tree vs HEAD,
+  `r` a range, `c` the commit at point or one you name; `-w`, `-U`), `l` log menu (`l` current branch, `o` another,
+  `a` all; `-n`). A diff, a commit (header with author, date and message, then its changes; merges against the
+  first parent) and the log are section buffers (`git-diff-mode`, `git-log-mode` on `section-mode`): folds, `n p`,
+  `g` refresh, `RET` on a file or hunk visits the work-tree file at that line (for an old commit that is the
+  current file, so the line can be off), `RET` on a commit shows it (also from the status buffer), `+` doubles the
+  log. A view reads git before its buffer exists, so a bad revision leaves nothing behind. `git-diff-with` is a
+  fifth backend procedure (any `git diff`/`git show` parsed into files and hunks). The items of a diff have area
+  `diff`, so `s u k` refuse them. The log has no graph (v2).
 - **4g** word-level diff refinement (first to cut).
 Refresh is manual (`g`) and after every git command profane runs; FSEvents (§8k) would make it automatic.
 
