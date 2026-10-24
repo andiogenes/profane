@@ -1,7 +1,7 @@
 (import (chezscheme) (srfi :64) (profane native) (profane buffer) (profane var) (profane keymap)
         (profane command) (profane command-loop) (profane mode) (profane window) (profane display)
         (profane theme) (profane themes) (profane tab-bar) (profane ace-window) (profane canvas)
-        (profane minibuffer) (profane complete) (profane simple))
+        (profane minibuffer) (profane complete) (profane simple) (profane transient))
 
 (for-each invoke-library '((profane simple) (profane window) (profane display) (profane themes)
                            (profane tab-bar) (profane ace-window) (profane canvas)
@@ -26,7 +26,7 @@
 (for-each (lambda (b) (test-eq (car b) (cdr b) (lookup-key (global-map) (kbd (car b)))))
           '(("M-[" . previous-buffer) ("M-]" . next-buffer) ("M-o" . ace-window)
             ("C-M-v" . edge-of-buffer) ("M-g b" . consult-buffer)
-            ("M-g y" . consult-yank-from-kill-ring)))
+            ("M-g y" . consult-yank-from-kill-ring) ("M-g s" . consult-search-transient)))
 
 ;; edge-of-buffer: the end, or the beginning with C--.
 (define b (get-buffer-create "edge"))

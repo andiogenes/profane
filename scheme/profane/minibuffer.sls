@@ -27,6 +27,9 @@
 ;;;   history SYMBOL      history list, shared by name (M-p / M-n)
 ;;;   display PROC        candidate -> the string shown for it (the value stays the candidate)
 ;;;   raw #t              the collection's candidates are final: no filtering or sorting here
+;;;                       (with a procedure that answers from results still coming in, call
+;;;                       minibuffer-update! when more arrive: the candidates are recomputed,
+;;;                       keeping the selected row)
 ;;;   files #t            file-name input: RET on a directory enters it, DEL and M-DEL delete
 ;;;                       a path component (vertico-directory); see (profane files)
 ;;;
@@ -36,7 +39,7 @@
 (library (profane minibuffer)
   (export read-from-minibuffer completing-read read-string minibuffer-active?
           minibuffer-contents minibuffer-history completion-candidates completion-match?
-          abort-minibuffer)
+          abort-minibuffer minibuffer-update!)
   (import (chezscheme) (profane buffer) (profane window) (profane mode) (profane keymap)
           (profane command) (profane command-loop) (profane var) (profane hook)
           (profane display))
@@ -143,8 +146,8 @@
   (define (completing? s) (and (session-collection s) #t))
 
   ;; Rewrites the candidate lines below the input line when the input or selection changed.
-  (define (refresh!)
-    (let* ([s current] [input (minibuffer-contents)])
+  (define (refresh! . keep-selection)
+    (let* ([s current] [input (minibuffer-contents)] [old-selected (session-selected current)])
       (when (completing? s)
         (unless (equal? input (session-last-input s))
           (let ([cands (if (session-raw s)
@@ -154,6 +157,7 @@
             (session-last-input-set! s input)
             (session-selected-set!
              s (cond [(null? cands) #f]
+                     [(and (pair? keep-selection) old-selected) (min old-selected (- (length cands) 1))]
                      [(and (string=? input "") (session-default s)
                            (list-index (lambda (c) (string=? c (session-default s))) cands))]
                      [(session-preselect s) ((session-preselect s) cands)]
@@ -166,6 +170,14 @@
             (guard (c [else (void)])
               ((session-preview s) (list-ref (session-candidates s) sel))))))
       (%minibuffer-sync!)))
+
+  ;; The collection's answer changed without the input changing (an async source got more
+  ;; results): recompute the candidates, keeping the selected row, and redraw.
+  (define (minibuffer-update!)
+    (when (and current (completing? current))
+      (let ([s current])
+        (session-last-input-set! s #f)
+        (with-current-buffer (session-buffer s) (refresh! #t)))))
 
   (define (list-index pred l)
     (let loop ([l l] [i 0]) (cond [(null? l) #f] [(pred (car l)) i] [else (loop (cdr l) (+ i 1))])))

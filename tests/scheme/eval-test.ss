@@ -86,6 +86,26 @@
 (keys "RET")
 (test-equal "eval-region: the define alone" "Evaluated" (current-message))
 
+;; ---- load-file ----
+(define script (format "/tmp/pf-load-~a.ss" (time-nanosecond (current-time))))
+(call-with-output-file script (lambda (p) (put-string p "(define eval-test-loaded (+ 20 22))\n(display \"loading\")")) 'replace)
+(keys "M-x")
+(type "load-file")
+(keys "RET")
+(test-assert "asks for a file" (minibuffer-active?))
+(keys "C-a" "C-k") ; drop the proposed directory
+(type script)
+(keys "RET")
+(test-equal "the file was evaluated" "42" (eval-string "eval-test-loaded"))
+(test-equal "and said what it printed" "loading" (current-message))
+(delete-file script)
+(keys "M-x")
+(type "load-file")
+(keys "RET")
+(type "/tmp/pf-no-such-file-xyz.ss")
+(keys "RET")
+(test-equal "a missing file is reported" "/tmp/pf-no-such-file-xyz.ss does not exist" (current-message))
+
 (delete-headless-frame! f)
 (test-end "eval")
 (test-exit)

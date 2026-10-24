@@ -508,8 +508,8 @@ the renderer tags the frame answering each event and records when it was submitt
   `eval-expression`), `C-x C-e` `eval-last-sexp` (the expression before point, found by a small tokenizer that skips
   comments and knows strings, character literals and quote prefixes; inside a list it takes the inner form), `eval-region`
   and `eval-buffer` (by `M-x`). Code runs in the interaction environment, as for the socket REPL; results and printed
-  output go to the echo area and *Messages*, an error shows its message. *Deferred:* `load-file` (needs file-name
-  reading, M3), `C-u C-x C-e`
+  output go to the echo area and *Messages*, an error shows its message. `load-file` (M3 item 4) reads a file name and
+  evaluates the file. *Deferred:* `C-u C-x C-e`
   inserting the value, `eval-print-last-sexp`, `eval-defun` (`C-M-x`, needs defun motion), a REPL buffer (comint-style,
   with history and completion: with the REPL modes in M10). A looping evaluation can be interrupted with `C-g` (engines, above).
 - **Press-and-hold** (fix after M2 item 8). macOS shows its accent picker for a held letter in any view that is an
@@ -608,7 +608,7 @@ State at the end of the M2 work so far (everything in §8i is on `main`). Delibe
 waits for. Keep this list current: remove an entry when it is done, add one when something is left as a seam.
 
 **M2 items still open** (§9, M2 row): none that was planned; the rest is deferred below. The owner's port (`scheme/init.ss`) still lacks
-`M-g i` (imenu) and `M-g s` (search), which need modes, tree-sitter and the search core (M5, ripgrep/find M3);
+`M-g i` (imenu), which needs modes and tree-sitter (M5); `M-g s` (ripgrep and find) arrived with M3 item 4;
 `M-g t` (neotree) and `C-x C-b` (buffer menu), which need listing and tree views; `C-x 4 C-x C-b`.
 
 **Deferred, by area:**
@@ -618,7 +618,7 @@ waits for. Keep this list current: remove an entry when it is done, add one when
   command, timers and callbacks from C. Nothing can interrupt a single long foreign call. Aborting drops a suspended
   command without running its cleanup other than the `dynamic-wind` exits already run at suspension; user `guard`s cannot
   catch the abort.
-- Evaluating: `load-file` (file-name reading, M3), `eval-defun`/`C-M-x` (defun motion, M5), `C-u C-x C-e`
+- Evaluating: `eval-defun`/`C-M-x` (defun motion, M5), `C-u C-x C-e`
   inserting the value, a REPL buffer with history and completion (M10).
 - Region: `delete-selection-mode`, `shift-select-mode`, a mark ring, `C-SPC C-SPC`, showing it in non-selected windows.
 - Press-and-hold: held keys repeat; `press-and-hold-keys` re-enables the accent picker per key. The per-key switch
@@ -721,6 +721,36 @@ languages.
   result and error, bounds), and by hand: bounds for Finder and Safari by name and Finder by pid. **Not verified**:
   actually opening a URL or file (it would launch an app and take focus; only the refusal of non-URLs is tested) and the
   automation permission prompt.
+
+**Item 4: ripgrep and find** (`scheme/profane/search.sls`; `executable-find` in `(profane process)`; `minibuffer-update!`).
+Decisions:
+
+- **Tools**: `rg` is required (a clear error if missing; no grep fallback); `consult-find` uses `fd` when installed, else the
+  system `find` (`search-use-fd`). This differs from the owner's Emacs, where `consult-find` runs plain `find` and lists
+  ignored and hidden files; fd skips what `.gitignore` skips and hidden files. The owner chose this (2026-10-24). Arguments
+  are variables (`ripgrep-args` = consult's defaults plus `--column`, `fd-args`).
+- **Programs are found in `exec-path`**, PATH plus `/opt/homebrew/bin` and `/usr/local/bin`: an app started from the Dock
+  has a minimal PATH. Importing the login-shell PATH is a seam.
+- **Live results**: the collection is a `raw` procedure over a source object. Each change of the query kills the running
+  process and starts a new one after `search-debounce-ms` (150), not below `search-min-input` (3) characters; output
+  lines are collected and the minibuffer is refreshed at most every 30 ms through the new `minibuffer-update!` (recompute
+  candidates, keep the selected row). At most `search-max-results` (5000) are kept, then the process is stopped. Input is
+  `query` or `#query#filter` (consult's split): the filter narrows locally, orderless, without searching again.
+- **ripgrep**: results are `file:line:text` (`--null` separates the path, so a `:` in a name is safe; rg gets a `.` path
+  and stdin closed, as it reads stdin when it is not a terminal). The preview shows the match in the window; `C-g` puts
+  the window and its point back and kills the buffers opened for previews; `RET` leaves the mark at the old point and goes to
+  the match (the rg column is in bytes: converted to characters). An rg failure (a bad regex) shows as one candidate.
+- **Directory**: the project root (nearest `.git`, else the buffer's directory); a prefix argument asks for one.
+- `M-g s` is the owner's transient (`r` ripgrep, `f` find), in `scheme/init.ss`. `load-file` (was waiting for file-name
+  reading) evaluates a file chosen in the minibuffer.
+- **Seams / not done**: find on a directory says dired is not there yet (item 6); no grouping of ripgrep results by file
+  and no `consult-grep`/`git-grep`; no highlighting of the match in the preview; results are in arrival order (rg and fd
+  are parallel), not sorted.
+- **Verified**: `search-test.ss` (40 checks on a throwaway repo: results, non-ASCII names and text, `.gitignore`, `#filter`,
+  RET position and mark, byte-to-character column, `C-g` restore, bad regex, debounce, fd and the find fallback, no process
+  left behind), `eval-test.ss` (`load-file`), and the running app (a real window, the wake path: results, preview of a
+  file, `C-g` back to `*scratch*`, `consult-find` opening a file). Not verified: a very large tree (the 5000 cap and the
+  stop of a flooding process were not exercised), and the visual look of the candidates.
 
 ## 9. Milestones
 

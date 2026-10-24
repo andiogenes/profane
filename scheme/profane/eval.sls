@@ -1,5 +1,5 @@
 ;;; (profane eval) — evaluating Scheme from the editor: M-: (eval-expression), C-x C-e
-;;; (eval-last-sexp), eval-region and eval-buffer. Unstable API (plan §10).
+;;; (eval-last-sexp), eval-region, eval-buffer and load-file. Unstable API (plan §10).
 ;;;
 ;;; Code runs in the interaction environment, the one the socket REPL uses, so it sees the same
 ;;; libraries. Results are written, one per line, with whatever the code printed, into the echo
@@ -9,7 +9,7 @@
 (library (profane eval)
   (export eval-string last-sexp-bounds)
   (import (chezscheme) (profane buffer) (profane command) (profane keymap) (profane minibuffer)
-          (profane repl))
+          (profane files) (profane repl))
 
   ;; Evaluates every datum in TEXT; returns what they printed and returned (or the error) as
   ;; one string without the final newline.
@@ -115,6 +115,18 @@
   (define-command (eval-buffer)
     "Evaluate the whole buffer."
     (show-result (eval-string (buffer-string))))
+
+  (define (read-text-file path)
+    (call-with-port (open-file-input-port path)
+      (lambda (p) (utf8->string (get-bytevector-all p)))))
+
+  (define-command (load-file)
+    "Evaluate a file chosen in the minibuffer, like load."
+    (read-file-name "Load file: "
+                    (lambda (path)
+                      (if (file-exists? path)
+                          (show-result (eval-string (read-text-file path)))
+                          (message "~a does not exist" path)))))
 
   (define bindings
     (for-each (lambda (b) (define-key! (global-map) (car b) (cdr b)))

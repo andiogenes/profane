@@ -16,10 +16,16 @@
 ;;; avy: jump to a visible word by label.
 (define-key! (global-map) "C-x C-j" 'avy-goto-word-1)
 
-;;; consult: buffers with preview, the kill ring. (imenu, ripgrep search and xref wait for
-;;; modes and tree-sitter; M-g t neotree for its package.)
+;;; consult: buffers with preview, the kill ring, and search (M-g s: ripgrep, find). (imenu and
+;;; xref wait for modes and tree-sitter; M-g t neotree for its package.)
 (define-key! (global-map) "M-g b" 'consult-buffer)
 (define-key! (global-map) "M-g y" 'consult-yank-from-kill-ring)
+(define-transient (consult-search-transient)
+  "Consult search commands"
+  ("Search"
+   (action "r" "ripgrep" consult-ripgrep)
+   (action "f" "find" consult-find)))
+(define-key! (global-map) "M-g s" 'consult-search-transient)
 
 ;;; vertico-count 5 is the default already; show-paren-delay 0 is how show-paren works here.
 (var-set! 'vertico-count 5)

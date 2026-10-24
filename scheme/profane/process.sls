@@ -19,14 +19,42 @@
           process-exit-status process-buffer process-list process-promise
           process-send-string process-send-bytes process-send-eof
           signal-process kill-process interrupt-process process-resize!
-          run-process)
-  (import (except (chezscheme) process) (profane native) (profane buffer) (profane command) (profane async))
+          run-process executable-find)
+  (import (except (chezscheme) process) (profane native) (profane buffer) (profane command) (profane async)
+          (profane var))
 
   (define-record-type process
     (fields name handle pid (mutable state) (mutable code) (mutable signal) buffer
             (mutable filter) (mutable stderr-filter) (mutable sentinel) (mutable token)
             promise (mutable out-tail) (mutable err-tail))
     (nongenerative profane-process))
+
+  ;; Where programs are looked for by executable-find. An app started from the Dock gets a minimal
+  ;; PATH (no Homebrew), so the usual Homebrew directories are always added; (a login-shell PATH
+  ;; import is a later seam).
+  (define (default-exec-path)
+    (let* ([path (or (getenv "PATH") "")]
+           [dirs (let loop ([cs (string->list path)] [cur '()] [out '()])
+                   (define (flush) (if (null? cur) out (cons (list->string (reverse cur)) out)))
+                   (cond [(null? cs) (reverse (flush))]
+                         [(char=? (car cs) #\:) (loop (cdr cs) '() (flush))]
+                         [else (loop (cdr cs) (cons (car cs) cur) out)]))])
+      (append dirs (filter (lambda (d) (not (member d dirs))) '("/opt/homebrew/bin" "/usr/local/bin")))))
+
+  (defvar exec-path (default-exec-path) "Directories searched for programs by executable-find.")
+
+  (define access (foreign-procedure "access" (string int) int))
+
+  ;; The full path of the executable PROGRAM in exec-path (a name with a slash is taken as it is),
+  ;; or #f.
+  (define (executable-find program)
+    (define (executable? f) (and (file-exists? f) (not (file-directory? f)) (= 0 (access f 1))))
+    (if (memv #\/ (string->list program))
+        (and (executable? program) program)
+        (let loop ([dirs (var-ref 'exec-path)])
+          (cond [(null? dirs) #f]
+                [(let ([f (string-append (car dirs) "/" program)]) (and (executable? f) f)) => values]
+                [else (loop (cdr dirs))]))))
 
   (define processes (make-eqv-hashtable)) ; token -> live process
 
