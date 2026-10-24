@@ -22,6 +22,7 @@
           git-diff-hunk? git-diff-hunk-header git-diff-hunk-old-start git-diff-hunk-old-len
           git-diff-hunk-new-start git-diff-hunk-new-len git-diff-hunk-lines
           git-status git-diff git-log define-git-backend! git-backend-names
+          git-hunk-patch git-hunk-region-patch git-apply-patch
           git-commit? git-commit-hash git-commit-short git-commit-subject git-commit-author
           git-commit-date git-commit-refs
           parse-git-status parse-git-diff parse-git-log)
@@ -262,6 +263,82 @@
           (loop (cdr ls) files dl header (close-hunk) (car ls) '())]
          [hh (loop (cdr ls) files dl header hunks hh (cons (car ls) hl))]
          [else (loop (cdr ls) files dl (cons (car ls) header) hunks hh hl)]))))
+
+  ;; ---- patches ----
+  ;; What staging, unstaging and discarding hunks and lines feed to `git apply`.
+
+  (define (join-lines lines)
+    (apply string-append (map (lambda (l) (string-append l "\n")) lines)))
+
+  ;; The patch for the whole of HUNK of FILE (a git-diff-file): the file's header lines, then the
+  ;; hunk.
+  (define (git-hunk-patch file hunk)
+    (string-append (join-lines (git-diff-file-header file))
+                   (git-diff-hunk-header hunk) "\n"
+                   (join-lines (git-diff-hunk-lines hunk))))
+
+  ;; The patch for only the changed lines FROM (inclusive) to TO (exclusive) of the hunk's lines,
+  ;; or #f if none of those lines is a change. The unselected changes are left out as `git add -p`
+  ;; does: REVERSE? #f, for applying the patch forward (stage), turns unselected removals into
+  ;; context and drops unselected additions; REVERSE? #t, for applying it with -R (unstage,
+  ;; discard), keeps unselected additions as context and drops unselected removals.
+  (define (git-hunk-region-patch file hunk from to reverse?)
+    (let loop ([ls (git-diff-hunk-lines hunk)] [i 0] [out '()] [kept-last #f] [changed #f]
+               [old 0] [new 0])
+      (if (null? ls)
+          (and changed
+               (string-append
+                (join-lines (git-diff-file-header file))
+                (format "@@ -~a,~a +~a,~a @@\n" (git-diff-hunk-old-start hunk) old
+                        (git-diff-hunk-new-start hunk) new)
+                (join-lines (reverse out))))
+          (let* ([l (car ls)]
+                 [c (if (string=? l "") #\space (string-ref l 0))]
+                 [selected (and (>= i from) (< i to))]
+                 [rest (substring l 1 (string-length l))]
+                 [next (lambda (line kept? ch old+ new+)
+                         (loop (cdr ls) (+ i 1) (if line (cons line out) out) kept?
+                               (or changed ch) (+ old old+) (+ new new+)))])
+            (case c
+              [(#\space) (next l #t #f 1 1)]
+              [(#\+) (cond [selected (next l #t #t 0 1)]
+                           [reverse? (next (string-append " " rest) #t #f 1 1)]
+                           [else (next #f #f #f 0 0)])]
+              [(#\-) (cond [selected (next l #t #t 1 0)]
+                           [reverse? (next #f #f #f 0 0)]
+                           [else (next (string-append " " rest) #t #f 1 1)])]
+              [else (if kept-last (next l #t #f 0 0) (next #f #f #f 0 0))])))))
+
+  (define (trim-slash t)
+    (if (and (> (string-length t) 1) (char=? (string-ref t (- (string-length t) 1)) #\/))
+        (substring t 0 (- (string-length t) 1))
+        t))
+
+  ;; Writes TEXT (UTF-8) to a new temporary file and returns its name; $TMPDIR if it can be
+  ;; written, else /tmp.
+  (define (write-temp-file text)
+    (let try ([dirs (append (let ([t (getenv "TMPDIR")]) (if t (list (trim-slash t)) '())) '("/tmp"))])
+      (when (null? dirs) (error 'git-apply-patch "no writable temporary directory"))
+      (let ([path (format "~a/profane-patch-~a-~a.patch" (car dirs) (now-ms) (random 1000000))])
+        (if (guard (e [#t #f])
+              (let ([port (open-file-output-port path (file-options no-fail) (buffer-mode block)
+                                                 (make-transcoder (utf-8-codec)))])
+                (put-string port text)
+                (close-port port)
+                #t))
+            path
+            (try (cdr dirs))))))
+
+  ;; Applies PATCH (a string) in ROOT with `git apply --recount` and FLAGS (e.g. ("--cached") or
+  ;; ("-R" "--index")); returns a promise of (code stdout stderr) as run-git does. The patch goes
+  ;; through a temporary file, removed afterwards.
+  (define (git-apply-patch root patch flags)
+    (let ([path (write-temp-file patch)] [result (make-promise)])
+      (promise-then (run-git root (append '("apply" "--recount") flags (list path)))
+                    (lambda (done)
+                      (guard (e [#t #t]) (delete-file path))
+                      (promise-resolve! result (promise-value done))))
+      result))
 
   ;; ---- log ----
 

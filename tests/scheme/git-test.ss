@@ -111,16 +111,72 @@
 (let* ([f (car (git-diff dir #f))] [h (car (git-diff-file-hunks f))])
   (test-assert "\"\\ No newline\" lines are kept" (member "\\ No newline at end of file" (git-diff-hunk-lines h))))
 
+;; ---- patches: stage and unstage hunks and lines ----
+(sh "cd ~a && git reset -q --hard && printf 'a\\nb\\nc\\nd\\ne\\nf\\ng\\nh\\ni\\nj\\nk\\nl\\n' > p.txt && git add p.txt && git -c user.email=t@t -c user.name=t commit -q -m p && sed -i '' 's/^b$/B/; s/^c$/C/; s/^l$/L/' p.txt" dir)
+(define (staged-diff) (cadr (await (run-git dir '("diff" "--cached" "-U0")))))
+(define (unstaged-diff) (cadr (await (run-git dir '("diff" "-U0")))))
+(let* ([f (car (git-diff dir #f))] [hunks (git-diff-file-hunks f)])
+  (test-eqv "two hunks in p.txt" 2 (length hunks))
+  ;; the first hunk is a,B,C,d..: lines: " a" "-b" "-c" "+B" "+C" " d" ...
+  (let ([first (car hunks)])
+    (test-assert "the whole-hunk patch applies to the index"
+                 (zero? (car (await (git-apply-patch dir (git-hunk-patch f first) '("--cached"))))))
+    (test-assert "that hunk is staged and the other is not"
+                 (and (contains? (staged-diff) "+B") (not (contains? (staged-diff) "+L"))
+                      (contains? (unstaged-diff) "+L") (not (contains? (unstaged-diff) "+B"))))
+    ;; unstage it again, as a whole hunk
+    (let* ([sf (car (git-diff dir #t))] [sh1 (car (git-diff-file-hunks sf))])
+      (test-assert "reverse-applying the staged hunk unstages it"
+                   (zero? (car (await (git-apply-patch dir (git-hunk-patch sf sh1) '("--cached" "-R"))))))
+      (test-equal "nothing staged" "" (staged-diff))))
+  ;; one line of a hunk: stage only "-b"/"+B"
+  (let* ([first (car (git-diff-file-hunks f))]
+         [lines (git-diff-hunk-lines first)]
+         [idx (lambda (s) (let loop ([l lines] [i 0]) (cond [(null? l) #f] [(string=? (car l) s) i] [else (loop (cdr l) (+ i 1))])))])
+    (test-eq "no change in the range: no patch" #f (git-hunk-region-patch f first 0 1 #f))
+    (let ([patch (git-hunk-region-patch f first (idx "-b") (+ (idx "-b") 1) #f)])
+      (test-assert "the partial patch keeps the selected -b, turns -c into context, drops +B and +C"
+                   (and (contains? patch "-b\n") (contains? patch " c\n")
+                        (not (contains? patch "+B")) (not (contains? patch "+C")) (not (contains? patch "-c\n"))))
+      (test-assert "its counts add up" (contains? patch "@@ -1,6 +1,5 @@"))
+      (test-assert "it applies" (zero? (car (await (git-apply-patch dir patch '("--cached"))))))
+      (test-assert "only that removal is staged" (and (contains? (staged-diff) "-b") (not (contains? (staged-diff) "-c"))
+                                                       (not (contains? (staged-diff) "+B")))))
+    ;; additions: stage "+C" alone (an addition whose removal is not staged)
+    (let ([patch (git-hunk-region-patch f first (idx "+C") (+ (idx "+C") 1) #f)])
+      (test-assert "a lone addition: removals become context, other additions drop"
+                   (and (contains? patch "+C\n") (contains? patch " b\n") (contains? patch " c\n")
+                        (not (contains? patch "+B")) (not (contains? patch "-b")))))
+    ;; unstage just "+B/-b" again from the staged diff, as a region
+    (let* ([sf (car (git-diff dir #t))] [sh1 (car (git-diff-file-hunks sf))]
+           [patch (git-hunk-region-patch sf sh1 0 (length (git-diff-hunk-lines sh1)) #t)])
+      (test-assert "the whole staged hunk as a region, reversed, unstages it"
+                   (zero? (car (await (git-apply-patch dir patch '("--cached" "-R"))))))
+      (test-equal "index is clean again" "" (staged-diff))))
+  ;; discard one line in the worktree: reverse-apply "+C" only
+  (let* ([f2 (car (git-diff dir #f))] [h (car (git-diff-file-hunks f2))]
+         [lines (git-diff-hunk-lines h)]
+         [i (let loop ([l lines] [i 0]) (if (string=? (car l) "+C") i (loop (cdr l) (+ i 1))))]
+         [patch (git-hunk-region-patch f2 h i (+ i 1) #t)])
+    (test-assert "a worktree line is discarded with -R"
+                 (zero? (car (await (git-apply-patch dir patch '("-R"))))))
+    (test-assert "+C is gone, +B stays" (and (not (contains? (unstaged-diff) "+C")) (contains? (unstaged-diff) "+B")))))
+(let ([f (car (git-diff dir #f))])
+  (test-equal "a bad patch fails with git's message" #t
+              (let ([r (await (git-apply-patch dir "diff --git a/zzz b/zzz\n--- a/zzz\n+++ b/zzz\n@@ -1 +1 @@\n-x\n+y\n" '("--cached")))])
+                (and (not (zero? (car r))) (> (string-length (caddr r)) 0)))))
+(sh "cd ~a && git checkout -q -- ." dir)
+
 ;; ---- log ----
 (let ([commits (git-log dir #f 3)])
   (test-eqv "log: newest first, limited" 3 (length commits))
-  (test-equal "log: subject of the newest" "x" (git-commit-subject (car commits)))
+  (test-equal "log: subject of the newest" "p" (git-commit-subject (car commits)))
   (test-assert "log: hashes" (and (= 40 (string-length (git-commit-hash (car commits))))
                                   (< (string-length (git-commit-short (car commits))) 40)))
   (test-assert "log: refs on the head commit" (contains? (git-commit-refs (car commits)) "main"))
   (test-assert "log: author and date" (and (> (string-length (git-commit-author (car commits))) 0)
                                            (> (string-length (git-commit-date (car commits))) 0))))
-(test-equal "log: a range" '("x" "third" "rename" "second") (map git-commit-subject (git-log dir "origin/main..HEAD" 10)))
+(test-equal "log: a range" '("p" "x" "third" "rename" "second") (map git-commit-subject (git-log dir "origin/main..HEAD" 10)))
 (test-equal "log: a bad range is empty" '() (git-log dir "no-such-ref..HEAD" 10))
 
 ;; ---- backends ----

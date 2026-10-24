@@ -1068,6 +1068,18 @@ Steps, one commit each, tested against throwaway repos with the real `git`:
   turn; parallelizing them is a seam. A refresh happens on open and on `g`, not after external changes.
 - **4d** staging: `s u k` on a file, a hunk or the region's lines (partial patches through `git apply --cached [-R]`),
   `S U` for all, confirmation before discarding.
+  *Done.* In the status buffer `s` stages, `u` unstages, `k` discards (after a y/n prompt), `S` stages every tracked
+  change, `U` unstages all. They act on the file, hunk or untracked file at point; on the Unstaged, Staged or
+  Untracked heading (`s` / `u`); and with an active region on the lines it covers: the hunks it touches in part
+  (`git-hunk-region-patch`: forward patches drop unselected additions and turn unselected removals into context;
+  reversed ones do the opposite, as `git add -p` does) or, with no hunk in it, the files it covers. Hunks of a
+  region are applied last first; every patch goes through `git apply --recount` from a temporary file ($TMPDIR, else
+  /tmp). After each command the buffer is redrawn, errors are shown in the echo area (the first line of git's stderr)
+  and the full output is in `*git-process*`. Discard: unstaged file `checkout`, untracked `clean -fd`, staged file
+  `checkout HEAD` (a new file `rm -f`), hunks and lines by reverse patches (`-R`, `--index` for staged).
+  Not done: discarding a staged rename (asks to unstage first), discarding a whole section, a region across a heading
+  of two different areas. Patches are built from decoded text, so a hunk with invalid UTF-8 will not apply
+  byte-exactly. After staging a file, point falls back to its section's heading (the file is gone from that area).
 - **4e** commit transient and message buffer (`C-c C-c`, `C-c C-k`; amend prefills; staged diff shown beside);
   branch, push, pull and fetch transients. Credentials: git's own helper (osxkeychain) and ssh-agent; an askpass
   through `profane-client` is a seam.

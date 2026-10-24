@@ -13,7 +13,8 @@
           git-item-hunk git-item-commit git-status-buffer-refresh!)
   (import (chezscheme) (profane buffer) (profane window) (profane command) (profane command-loop)
           (profane keymap) (profane mode) (profane var) (profane face) (profane display)
-          (profane files) (profane git) (profane section) (profane simple))
+          (profane files) (profane minibuffer) (profane async) (profane git) (profane section)
+          (profane simple))
 
   (defvar git-repo-root #f "The top directory of the repository a git buffer shows." '(local))
   (defvar git-status-recent-commits 10 "How many recent commits the status buffer lists.")
@@ -237,8 +238,177 @@
             (forward-line (- line 1))))]
        [else (message "Nothing to visit here")])))
 
+;; ---- staging, unstaging and discarding ----
+  ;;
+  ;; s, u and k act on what point is on: a file, a hunk, a whole section (S and U on all changes),
+  ;; or, when the region is active, on the lines it covers: the hunks it touches, in part, or the
+  ;; files it covers. Everything is a git command or a patch for `git apply` (core/git builds the
+  ;; patches); the buffer is refreshed afterwards, whether or not git complained.
+
+  (define (active-region)
+    (and (var-ref 'mark-active) (mark) (not (= (mark) (point)))
+         (cons (min (mark) (point)) (max (mark) (point)))))
+
+  (define (sections-where pred)
+    (let ([out '()])
+      (section-walk (sections) (lambda (s) (when (pred s) (set! out (cons s out)))))
+      (reverse out)))
+
+  (define (overlaps? s region) (and (< (section-start s) (cdr region)) (> (section-end s) (car region))))
+
+  (define (kind-of s) (let ([v (section-value s)]) (and v (git-item? v) (git-item-kind v))))
+
+  (define (area-ok? op area)
+    (case op
+      [(stage) (memq area '(unstaged untracked unmerged))]
+      [(unstage) (eq? area 'staged)]
+      [else (memq area '(unstaged untracked staged))]))
+
+  (define (check-area! op area)
+    (unless (area-ok? op area)
+      (error (case op [(stage) 'magit-stage] [(unstage) 'magit-unstage] [else 'magit-discard])
+             (case op
+               [(stage) "already staged"]
+               [(unstage) "not staged"]
+               [else "nothing to discard here"]))))
+
+  (define (git-action root . args) (lambda () (await (run-git root args))))
+
+  ;; A hunk section's patch and the flags to apply it with, for OP (and REGION: the lines of the
+  ;; hunk the region covers; #f for the whole hunk). #f if the region has no change in it.
+  (define (hunk-patch-for op s region)
+    (let* ([item (section-value s)] [file (git-item-file item)] [hunk (git-item-hunk item)])
+      (if region
+          (let* ([hl (line-number-at-pos (section-start s))]
+                 [n (length (git-diff-hunk-lines hunk))]
+                 [beg (car region)] [end (cdr region)]
+                 [last-pos (if (and (> end beg) (string=? (buffer-substring (- end 1) end) "\n")) (- end 1) end)]
+                 [from (max 0 (- (line-number-at-pos beg) hl 1))]
+                 [to (min n (- (line-number-at-pos last-pos) hl))])
+            (and (< from to) (git-hunk-region-patch file hunk from to (not (eq? op 'stage)))))
+          (git-hunk-patch file hunk))))
+
+  (define (apply-flags op area)
+    (case op
+      [(stage) '("--cached")]
+      [(unstage) '("--cached" "-R")]
+      [else (if (eq? area 'staged) '("--index" "-R") '("-R"))]))
+
+  (define (hunk-plan root op hunks region)
+    ;; Last hunk first, so the line numbers of the ones before it stay right.
+    (let loop ([hs (reverse hunks)] [actions '()] [count 0])
+      (if (null? hs)
+          (begin
+            (when (null? actions) (error 'magit-stage "no changes selected"))
+            (cons (cond [region (format "~a selected change~a" count (if (= count 1) "" "s"))]
+                        [else "this hunk"])
+                  (reverse actions)))
+          (let* ([s (car hs)] [item (section-value s)] [area (git-item-area item)])
+            (check-area! op area)
+            (let ([patch (hunk-patch-for op s region)])
+              (if patch
+                  (loop (cdr hs)
+                        (cons (let ([flags (apply-flags op area)])
+                                (lambda () (await (git-apply-patch root patch flags))))
+                              actions)
+                        (+ count 1))
+                  (loop (cdr hs) actions count)))))))
+
+  (define (file-action root op item)
+    (let ([path (git-item-path item)] [area (git-item-area item)]
+          [orig (and (git-item-change item) (git-change-orig (git-item-change item)))])
+      (check-area! op area)
+      (case op
+        [(stage) (apply git-action root "add" "--" path (if orig (list orig) '()))]
+        [(unstage) (apply git-action root "reset" "-q" "--" path (if orig (list orig) '()))]
+        [else
+         (cond
+          [(eq? area 'untracked) (git-action root "clean" "-fdq" "--" path)]
+          [(eq? area 'unstaged) (git-action root "checkout" "--" path)]
+          [orig (error 'magit-discard "discarding a staged rename is not supported: unstage it first")]
+          [(char=? (git-change-index (git-item-change item)) #\A) (git-action root "rm" "-f" "-q" "--" path)]
+          [else (git-action root "checkout" "HEAD" "--" path)])])))
+
+  (define (file-plan root op files)
+    (when (null? files) (error 'magit-stage "nothing here to act on"))
+    (let ([items (map section-value files)])
+      (cons (if (= (length items) 1)
+                (let ([i (car items)])
+                  (if (eq? (git-item-area i) 'untracked)
+                      (format "untracked file ~a" (git-item-path i))
+                      (format "changes in ~a" (git-item-path i))))
+                (format "~a files" (length items)))
+            (map (lambda (i) (file-action root op i)) items))))
+
+  (define (area-plan root op s)
+    (case (section-kind s)
+      [(unstaged) (if (eq? op 'stage)
+                      (cons "all unstaged changes" (list (git-action root "add" "-u")))
+                      (error 'magit-discard "discard files one at a time"))]
+      [(staged) (if (eq? op 'unstage)
+                    (cons "all staged changes" (list (git-action root "reset" "-q")))
+                    (error 'magit-discard "discard files one at a time"))]
+      [(untracked) (if (eq? op 'stage)
+                       (file-plan root op (section-children s))
+                       (error 'magit-discard "discard files one at a time"))]
+      [else (error 'magit-stage "nothing here to act on")]))
+
+  (define (make-plan root op)
+    (let* ([region (active-region)]
+           [here (section-at-point)]
+           [item (and here (section-value here))]
+           [hunks (if region (sections-where (lambda (s) (and (eq? (kind-of s) 'hunk) (overlaps? s region)))) '())])
+      (cond
+       [(pair? hunks) (hunk-plan root op hunks region)]
+       [region (file-plan root op (sections-where (lambda (s) (and (memq (kind-of s) '(file untracked unmerged)) (overlaps? s region)))))]
+       [(and item (eq? (git-item-kind item) 'hunk)) (hunk-plan root op (list here) #f)]
+       [(and item (memq (git-item-kind item) '(file untracked unmerged))) (file-plan root op (list here))]
+       [(and here (memq (section-kind here) '(unstaged staged untracked))) (area-plan root op here)]
+       [else (error (if (eq? op 'stage) 'magit-stage (if (eq? op 'unstage) 'magit-unstage 'magit-discard))
+                    "nothing here to act on")])))
+
+  ;; Runs the plan's actions in order, then redraws B. Failures are reported together.
+  (define (run-plan! b plan)
+    (let loop ([as (cdr plan)] [errors '()])
+      (cond
+       [(pair? as)
+        (let ([r ((car as))])
+          (loop (cdr as) (if (zero? (car r)) errors (cons (caddr r) errors))))]
+       [else
+        (git-status-buffer-refresh! b)
+        (when (pair? errors)
+          (message "git: ~a" (let ([e (car (reverse errors))])
+                               (let ([nl (let find ([i 0]) (cond [(= i (string-length e)) i] [(char=? (string-ref e i) #\newline) i] [else (find (+ i 1))]))])
+                                 (substring e 0 nl)))))])))
+
+  (define (stage-command op)
+    (let* ([b (current-buffer)] [plan (make-plan (var-ref 'git-repo-root) op)])
+      (if (eq? op 'discard)
+          (read-from-minibuffer (format "Discard ~a? (y or n) " (car plan))
+                                (lambda (answer)
+                                  (if (member answer '("y" "yes"))
+                                      (with-current-buffer b (run-plan! b plan))
+                                      (message "Cancelled"))))
+          (run-plan! b plan))))
+
+  (define-command (magit-stage) "Stage the file, hunk or selected lines at point." (stage-command 'stage))
+  (define-command (magit-unstage) "Unstage the file, hunk or selected lines at point." (stage-command 'unstage))
+  (define-command (magit-discard)
+    "Discard the changes of the file, hunk or selected lines at point, after asking."
+    (stage-command 'discard))
+
+  (define-command (magit-stage-modified) "Stage every change to tracked files."
+    (let ([b (current-buffer)])
+      (run-plan! b (cons "all" (list (git-action (var-ref 'git-repo-root) "add" "-u"))))))
+
+  (define-command (magit-unstage-all) "Unstage everything."
+    (let ([b (current-buffer)])
+      (run-plan! b (cons "all" (list (git-action (var-ref 'git-repo-root) "reset" "-q"))))))
+
   (define bindings
     (begin
       (define-key! (global-map) "C-x g" 'magit-status)
-      (define-key! (mode-keymap 'git-status-mode) "RET" 'git-visit-thing)
+      (for-each (lambda (b) (define-key! (mode-keymap 'git-status-mode) (car b) (cdr b)))
+                '(("RET" . git-visit-thing) ("s" . magit-stage) ("u" . magit-unstage)
+                  ("k" . magit-discard) ("S" . magit-stage-modified) ("U" . magit-unstage-all)))
       #t)))
