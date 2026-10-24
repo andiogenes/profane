@@ -71,6 +71,8 @@ struct pf_window {
     /* The animated cursor: where the box is drawn (springs toward the cursor's cell), and what the
      * target was relative to. cur_time 0: the animation starts at the next tick. */
     pf_spring cur_x, cur_y;
+    pf_spring scroll; /* smooth scrolling: how far below its place the text is drawn, points */
+    float scroll_key[2]; /* width, height at the last frame */
     int cur_init;
     size_t cur_top;
     float cur_key[3]; /* hscroll, width, height at the last frame */
@@ -826,8 +828,55 @@ static void cursor_animate(pf_window *w, float x, float y, float *dx, float *dy)
     *dy = w->cur_y.value;
 }
 
-int pf_window_animating(const pf_window *w) {
+static int cursor_moving(const pf_window *w) {
     return w->cur_init && (!pf_spring_settled(&w->cur_x, 0.25f) || !pf_spring_settled(&w->cur_y, 0.25f));
+}
+
+static int scroll_moving(const pf_window *w) {
+    return !pf_spring_settled(&w->scroll, 0.25f);
+}
+
+int pf_window_animating(const pf_window *w) {
+    return cursor_moving(w) || scroll_moving(w);
+}
+
+enum { SCROLL_OMEGA = 30 }; /* about 150 ms to settle */
+
+/* Called as the window is about to render with its top line changed from OLD_TOP: starts the text
+ * gliding from where it was. Edits, big jumps, resizes and a new buffer scroll at once. */
+static void scroll_animate(pf_window *w, pf_text *text, const pf_text_snapshot *s, size_t old_top,
+                           int text_changed) {
+    float key[2] = {w->width, w->height};
+    int resized = memcmp(key, w->scroll_key, sizeof key) != 0;
+    memcpy(w->scroll_key, key, sizeof key);
+    size_t span = w->top > old_top ? w->top - old_top : old_top - w->top;
+    if (!text || !pf_motion_scroll() || w->top == old_top) {
+        if (!pf_motion_scroll() || resized) {
+            pf_spring_snap(&w->scroll, 0);
+        }
+        return;
+    }
+    float body_h = w->height - w->mode_line_h - top_inset(w);
+    if (resized || text_changed || span > pf_window_body_lines(w)) {
+        pf_spring_snap(&w->scroll, 0);
+        return;
+    }
+    long rows = 0;
+    size_t lo = w->top < old_top ? w->top : old_top, hi = w->top < old_top ? old_top : w->top;
+    for (size_t l = lo; l < hi; l++) {
+        rows += w->wrap ? (long)line_rows(w, text, s, l) : 1;
+    }
+    if (w->top < old_top) {
+        rows = -rows;
+    }
+    float off = w->scroll.value + (float)rows * w->style.line_height;
+    if (fabsf(off) > body_h) {
+        pf_spring_snap(&w->scroll, 0);
+        return;
+    }
+    w->scroll.value = off;
+    w->scroll.target = 0;
+    w->cur_time = 0;
 }
 
 int pf_window_tick(pf_window *w, double now) {
@@ -837,17 +886,26 @@ int pf_window_tick(pf_window *w, double now) {
     double dt = w->cur_time == 0 ? 1.0 / 120 : now - w->cur_time;
     w->cur_time = now;
     w->dirty = 1;
-    if (dt > 0.05 || !pf_motion_cursor()) {
-        /* A late frame (the main thread was busy) or motion switched off: arrive now. */
+    /* A late frame (the main thread was busy) or motion switched off: arrive now. */
+    int late = dt > 0.05;
+    if (late || !pf_motion_cursor()) {
         pf_spring_snap(&w->cur_x, w->cur_x.target);
         pf_spring_snap(&w->cur_y, w->cur_y.target);
-        return 0;
+    } else {
+        pf_spring_step(&w->cur_x, CURSOR_OMEGA, (float)dt);
+        pf_spring_step(&w->cur_y, CURSOR_OMEGA, (float)dt);
     }
-    pf_spring_step(&w->cur_x, CURSOR_OMEGA, (float)dt);
-    pf_spring_step(&w->cur_y, CURSOR_OMEGA, (float)dt);
-    if (!pf_window_animating(w)) {
+    if (late || !pf_motion_scroll()) {
+        pf_spring_snap(&w->scroll, 0);
+    } else {
+        pf_spring_step(&w->scroll, SCROLL_OMEGA, (float)dt);
+    }
+    if (!cursor_moving(w)) {
         pf_spring_snap(&w->cur_x, w->cur_x.target);
         pf_spring_snap(&w->cur_y, w->cur_y.target);
+    }
+    if (!scroll_moving(w)) {
+        pf_spring_snap(&w->scroll, 0);
     }
     return pf_window_animating(w);
 }
@@ -884,16 +942,30 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
     uint32_t mark = role_color(PF_ROLE_FRINGE, PF_FACE_HAS_FG,
                                role_color(PF_ROLE_LINE_NUMBER, PF_FACE_HAS_FG, fg));
 
-    size_t srow = 0; /* screen rows drawn */
-    for (size_t line = w->top; srow < visible && line < lines; line++) {
+    /* Smooth scrolling: rows are drawn off points lower (higher, if negative) than their place,
+     * clipped to the body, with the row just above the window shown when they are lower. */
+    float off = w->scroll.value;
+    long srow = 0, limit = (long)visible + (off < 0 ? 1 : 0); /* screen rows drawn; rows to draw */
+    if (off != 0) {
+        pf_display_clip(d, 0, w->header_h, w->width - w->divider,
+                        w->height - w->mode_line_h - w->header_h);
+    }
+    for (size_t line = off > 0 && w->top > 0 ? w->top - 1 : w->top; srow < limit && line < lines;
+         line++) {
         row r = layout_row(w, text, s, line, point, default_font);
         const pf_line_layout *lay = r.lay;
         size_t nsegs = wrap_line(w, &r, right - left);
-        for (size_t seg = 0; seg < nsegs && srow < visible; seg++, srow++) {
+        if (line < w->top) {
+            srow = -(long)nsegs;
+        }
+        for (size_t seg = 0; seg < nsegs && srow < limit; seg++, srow++) {
+        if (srow < -1) {
+            continue;
+        }
         size_t a = w->brk[seg], b = seg + 1 < nsegs ? w->brk[seg + 1] : lay->nchars;
         int last = seg + 1 == nsegs;
         float xs = w->wrap ? left - lay->caret_x[a] : x0; /* where this row's line start would be */
-        float top = top_inset(w) + (float)srow * st->line_height;
+        float top = top_inset(w) + off + (float)srow * st->line_height;
         float baseline = top + st->ascent;
 
         /* Backgrounds first: faces, the hl-line band (an overlay in Emacs, so above them), then
@@ -993,7 +1065,7 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
             uint32_t cc = role_color(PF_ROLE_CURSOR, PF_FACE_HAS_BG, fg);
             float lh = st->line_height, px = 1.0f / w->scale;
             float ax = cx, ay = top; /* where the box is drawn */
-            if (shown && w->cursor_kind == PF_CURSOR_BOX && pf_motion_cursor()) {
+            if (shown && w->cursor_kind == PF_CURSOR_BOX && pf_motion_cursor() && off == 0) {
                 cursor_animate(w, cx, top, &ax, &ay);
             } else {
                 w->cur_init = 0;
@@ -1013,13 +1085,16 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
             }
             if (shown) {
                 w->cursor[0] = cx;
-                w->cursor[1] = top;
+                w->cursor[1] = top - off;
                 w->cursor[2] = cw;
                 w->cursor[3] = lh;
                 w->cursor_valid = 1;
             }
         }
         }
+    }
+    if (off != 0) {
+        pf_display_unclip(d);
     }
 }
 
@@ -1351,6 +1426,7 @@ const pf_display *pf_window_redisplay(pf_window *w) {
         return NULL;
     }
     w->dirty = 0;
+    scroll_animate(w, text, s, w->shown_top, s != w->shown);
     pf_text_snapshot_release(w->shown);
     w->shown = s ? pf_text_snapshot_retain(s) : NULL;
     w->shown_point = point;

@@ -28,6 +28,11 @@ void pf_motion_set_reduced(int reduced);
 void pf_motion_set_cursor(int on);
 int pf_motion_cursor(void); /* on, and the level is not off */
 
+/* Smooth scrolling (the text glides when its top line changes). Off by default; Scheme's
+ * `animate-scroll` sets it. */
+void pf_motion_set_scroll(int on);
+int pf_motion_scroll(void); /* on, and the level is not off */
+
 /* The level in effect: OFF while Reduce Motion is on. */
 int pf_motion_level(void);
 

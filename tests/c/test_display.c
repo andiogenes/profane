@@ -10,7 +10,31 @@ static void *release_elsewhere(void *arg) {
     return NULL;
 }
 
+static void test_clip(void) {
+    pf_display *a = pf_display_new(50, 50, 1, 0);
+    pf_display_clip(a, 5, 6, 20, -3); /* a negative size is an empty clip */
+    pf_display_rect(a, 0, 0, 40, 40, 0xFF0000FF);
+    pf_display_unclip(a);
+    const pf_display *src = pf_display_finish(a);
+    PF_CHECK_EQ_SIZE(pf_display_count(src), 3);
+    const pf_display_item *it = pf_display_items(src);
+    PF_CHECK(it[0].kind == PF_DISPLAY_CLIP && it[0].x == 5 && it[0].y == 6);
+    PF_CHECK(it[0].u.rect.w == 20 && it[0].u.rect.h == 0);
+    PF_CHECK(it[2].kind == PF_DISPLAY_UNCLIP);
+
+    /* Composing a window into a frame moves its clip with it. */
+    pf_display *f = pf_display_new(200, 200, 1, 0);
+    pf_display_append(f, src, 100, 50);
+    const pf_display *frame = pf_display_finish(f);
+    it = pf_display_items(frame);
+    PF_CHECK(it[0].kind == PF_DISPLAY_CLIP && it[0].x == 105 && it[0].y == 56);
+    PF_CHECK(it[1].kind == PF_DISPLAY_RECT && it[1].x == 100 && it[1].y == 50);
+    pf_display_release(frame);
+    pf_display_release(src);
+}
+
 int main(void) {
+    test_clip();
     pf_display *d = pf_display_new(800, 600, 2, 0xFFFFFFFF);
     pf_display_rect(d, 0, 20, 800, 18, 0xF0F0F0FF);
     pf_display_rect(d, 0, 0, 0, 10, 0x000000FF);  /* empty: dropped */

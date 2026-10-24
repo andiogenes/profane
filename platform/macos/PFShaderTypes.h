@@ -26,6 +26,7 @@ typedef struct PFQuadInstance {
     pf_uint color;  /* sRGB 0xRRGGBBAA, straight alpha */
     pf_uint mode;
     pf_uint pad[2];
+    pf_float4 clip; /* x, y, w, h in pixels: fragments outside are dropped */
 } PFQuadInstance;
 
 #endif

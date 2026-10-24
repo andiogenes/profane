@@ -746,6 +746,85 @@ static void test_cursor_animation(void) {
     pf_layout_cache_free(cache);
 }
 
+static void test_smooth_scroll(void) {
+    pf_layout_cache *cache = pf_layout_cache_new(fake, 256, 8);
+    pf_window_style s = style();
+    pf_window *w = pf_window_new(cache, &s);
+    pf_window_set_size(w, 105, 60, 1); /* three rows */
+    const char *text = "A\nB\nC\nD\nE\nF\nG\nH";
+    pf_handle buf = pf_buf_new(text, strlen(text));
+    uint32_t point = pf_buf_marker_new(buf, 0, 0);
+    pf_window_set_buffer(w, buf, point);
+    pf_motion_set_level(PF_MOTION_SUBTLE);
+
+    /* Switch off: scrolling is at once, with no clip in the list. */
+    const pf_display *d = frame_at(w, buf, point, 0);
+    pf_display_release(d);
+    d = frame_at(w, buf, point, 6); /* line 3: the top becomes 1 */
+    PF_CHECK_EQ_SIZE(pf_window_top_line(w), 1);
+    PF_CHECK(NEAR(find_glyph(d, 'B')->y, 12) && count_kind(d, PF_DISPLAY_CLIP) == 0);
+    PF_CHECK(!pf_window_animating(w));
+    pf_display_release(d);
+
+    /* On: the text starts where it was, one row lower, with the row above it showing. */
+    pf_motion_set_scroll(1);
+    d = frame_at(w, buf, point, 0); /* back up: the top becomes 0, gliding the other way */
+    PF_CHECK_EQ_SIZE(pf_window_top_line(w), 0);
+    PF_CHECK(pf_window_animating(w) && count_kind(d, PF_DISPLAY_CLIP) == 1);
+    PF_CHECK(count_kind(d, PF_DISPLAY_UNCLIP) == 1);
+    PF_CHECK(NEAR(find_glyph(d, 'A')->y, 12 - 20)); /* above the window: the clip hides it */
+    PF_CHECK(NEAR(find_glyph(d, 'B')->y, 12)); /* where it was */
+    pf_display_release(d);
+    double now = 10;
+    float prev = 12;
+    int frames = 0;
+    while (pf_window_tick(w, now += 1.0 / 120) && frames++ < 200) {
+        d = pf_window_redisplay(w);
+        PF_CHECK(d != NULL);
+        float y = find_glyph(d, 'B')->y;
+        PF_CHECK(y >= prev - 1e-3f && y <= 32.0f + 1e-3f); /* B sinks to its place, no overshoot */
+        prev = y;
+        pf_display_release(d);
+    }
+    PF_CHECK(frames > 3 && frames < 60);
+    d = pf_window_redisplay(w);
+    PF_CHECK(NEAR(find_glyph(d, 'B')->y, 32) && count_kind(d, PF_DISPLAY_CLIP) == 0);
+    pf_display_release(d);
+
+    /* Scrolling down shows the row below as the text rises; the clip cuts it at the body. */
+    d = frame_at(w, buf, point, 6);
+    PF_CHECK(pf_window_animating(w) && NEAR(find_glyph(d, 'A')->y, 12));
+    pf_display_release(d);
+    pf_window_tick(w, 50);
+    pf_window_tick(w, 52); /* late */
+    PF_CHECK(!pf_window_animating(w));
+    d = pf_window_redisplay(w);
+    PF_CHECK(NEAR(find_glyph(d, 'B')->y, 12) && count_kind(d, PF_DISPLAY_CLIP) == 0);
+    pf_display_release(d);
+
+    /* A jump of more than a window, and Reduce Motion, scroll at once. */
+    d = frame_at(w, buf, point, 14);
+    PF_CHECK_EQ_SIZE(pf_window_top_line(w), 5);
+    PF_CHECK(!pf_window_animating(w));
+    pf_display_release(d);
+    pf_motion_set_reduced(1);
+    d = frame_at(w, buf, point, 0);
+    PF_CHECK(!pf_window_animating(w) && count_kind(d, PF_DISPLAY_CLIP) == 0);
+    pf_display_release(d);
+    pf_motion_set_reduced(0);
+
+    /* The cursor rect is where point will be, not where the glide has it. */
+    d = frame_at(w, buf, point, 6);
+    float rect[4];
+    PF_CHECK(pf_window_cursor_rect(w, rect) == 0 && NEAR(rect[1], 40));
+    pf_display_release(d);
+
+    pf_motion_set_scroll(0);
+    pf_motion_set_level(PF_MOTION_OFF);
+    pf_window_free(w);
+    pf_layout_cache_free(cache);
+}
+
 int main(void) {
     test_terminal_window();
     test_layout();
@@ -754,6 +833,7 @@ int main(void) {
     test_soft_wrap();
     test_line_marks();
     test_cursor_animation();
+    test_smooth_scroll();
     test_faces();
     return PF_TEST_RESULT();
 }

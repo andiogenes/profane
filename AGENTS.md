@@ -193,7 +193,8 @@ clang-format -i <files>                                 # format C / ObjC (brew 
 - Platform-only entry points (fonts, beep, latency) are looked up with `(foreign-entry? "name")` first, so Scheme
   tests in the standalone Chez still work.
 - Display items are plain data (`pf_display_item`): new item kinds need the renderer (`PFMetalRenderer.m`,
-  `Shaders.metal`) and the display-list builders updated together.
+  `Shaders.metal`) and the display-list builders updated together. A list that clips must end its clip
+  (`pf_display_unclip`); `tests/macos/test_clip.m` renders a list offscreen and reads pixels, with no window.
 
 **macOS app, testing and screenshots**
 

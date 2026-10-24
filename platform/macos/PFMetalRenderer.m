@@ -463,10 +463,23 @@ static MTLClearColor premultiplied(uint32_t c) {
     out.length = 0;
     float gw = (float)_atlas.grayTexture.width, gh = (float)_atlas.grayTexture.height;
     float cw = (float)_atlas.colorTexture.width, ch = (float)_atlas.colorTexture.height;
+    simd_float4 none = simd_make_float4(0, 0, 1e9f, 1e9f), clip = none;
     for (size_t i = 0; i < n; i++) {
         const pf_display_item *it = &items[i];
+        if (it->kind == PF_DISPLAY_CLIP) {
+            /* Whole device pixels: the edge is where rows of pixels start. */
+            float x0 = roundf(it->x * s), y0 = roundf(it->y * s);
+            clip = simd_make_float4(x0, y0, roundf((it->x + it->u.rect.w) * s) - x0,
+                                    roundf((it->y + it->u.rect.h) * s) - y0);
+            continue;
+        }
+        if (it->kind == PF_DISPLAY_UNCLIP) {
+            clip = none;
+            continue;
+        }
         PFQuadInstance q = {0};
         q.color = it->color;
+        q.clip = clip;
         if (it->kind == PF_DISPLAY_RECT) {
             q.rect = simd_make_float4(it->x * s, it->y * s, it->u.rect.w * s, it->u.rect.h * s);
             q.mode = PF_QUAD_RECT;

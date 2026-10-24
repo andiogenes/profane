@@ -1000,9 +1000,22 @@ diff, commit, push/pull), 5 ediff. Items 1 and 2 are done; item 3 is started (it
   The IME rect and `pf_window_cursor_rect` report the target. Hollow cursors do not animate.
 - Verified: `test_anim`, `test_cursor_animation` (monotonic, no overshoot, snapping rules, late tick, Reduce Motion).
   Not verified on screen, nor for feel (omega, the 2-cell threshold) or latency with animation running.
-- Still to do in item 3: smooth scrolling needs a clip primitive in the display list and Metal renderer (a row
-  moving past the window edge would draw over the neighbor window), so it waits for that; window split/resize,
-  pop-up fade/slide and fold/unfold are the other consumers; `full` currently adds nothing over `subtle`.
+- Part 2, the clip primitive and smooth scrolling. `pf_display_clip` / `pf_display_unclip` are display items (one
+  clip at a time, no nesting; `pf_display_append` moves a clip with its window). The renderer stamps the current clip
+  (whole device pixels) on every quad instance and the fragment shader discards outside it, so the single instanced
+  draw call and the item order are unchanged. `PFQuadInstance` grew to 64 bytes.
+- Smooth scroll (`animate-scroll`, default `#f`; same gates as the cursor): when a window's top line changes between
+  two frames, the text starts where it was (a spring `scroll`, omega 30, about 150 ms) and glides to its place, clipped
+  to the body, with the row above shown while it is lower. It snaps for edits (the snapshot changed, so typing at the
+  bottom never trails), for jumps of more than a window, for resizes and new buffers, on a late tick and under Reduce
+  Motion. A wrapped buffer glides by screen rows. While it glides the cursor is drawn with its row and does not
+  animate; `pf_window_cursor_rect`, `pos_rect` and `pos_at` give final positions, so for about 150 ms a click can be
+  off by the remaining offset. No clip is emitted when nothing glides, so ordinary frames are unchanged.
+- Verified: `test_clip` (macos label: renders a list offscreen through the Metal renderer and reads the PNG: inside,
+  each edge pixel, outside, and after the clip ends), `test_clip` in `test_display`, `test_smooth_scroll`. Not
+  verified in the app window, nor the feel.
+- Still to do in item 3: window split/resize, pop-up fade/slide and fold/unfold as consumers; `full` adds nothing
+  over `subtle` yet.
 
 ## 9. Milestones
 

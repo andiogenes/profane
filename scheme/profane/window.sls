@@ -922,6 +922,10 @@
     "Glide the cursor to where point jumped (rows, far columns) instead of moving it at once. Needs
 ui-motion subtle or full, and macOS Reduce Motion off.")
 
+  (defvar animate-scroll #f
+    "Glide the text when a window scrolls (C-v, M-v, point leaving the window) instead of jumping.
+Edits and long jumps still scroll at once. Needs ui-motion subtle or full, and macOS Reduce Motion off.")
+
   ;; ui-motion: off (or #f), subtle, full (pf_anim.h). macOS Reduce Motion overrides it in C.
   (define (apply-motion! v)
     (%motion-set-level (case v [(full) 2] [(subtle) 1] [else 0])))
@@ -1137,6 +1141,8 @@ screen rows."
       (apply-motion! (var-ref 'ui-motion))
       (add-var-watcher! 'animate-cursor (lambda (name value where) (%motion-set-cursor (if value 1 0))))
       (%motion-set-cursor (if (var-ref 'animate-cursor) 1 0))
+      (add-var-watcher! 'animate-scroll (lambda (name value where) (%motion-set-scroll (if value 1 0))))
+      (%motion-set-scroll (if (var-ref 'animate-scroll) 1 0))
       (add-var-watcher! 'truncate-lines (lambda (name value where) (apply-options!)))
       (add-var-watcher! 'word-wrap (lambda (name value where) (apply-options!)))
       #t))

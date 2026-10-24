@@ -42,6 +42,16 @@ int pf_motion_cursor(void) {
     return cursor_on && pf_motion_level() > PF_MOTION_OFF;
 }
 
+static int scroll_on;
+
+void pf_motion_set_scroll(int on) {
+    scroll_on = on != 0;
+}
+
+int pf_motion_scroll(void) {
+    return scroll_on && pf_motion_level() > PF_MOTION_OFF;
+}
+
 int pf_motion_level(void) {
     return reduced ? PF_MOTION_OFF : level;
 }

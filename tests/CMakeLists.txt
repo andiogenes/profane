@@ -100,6 +100,23 @@ target_link_libraries(test_atlas PRIVATE pf_core "-framework CoreGraphics" "-fra
 add_test(NAME macos.atlas COMMAND test_atlas)
 set_tests_properties(macos.atlas PROPERTIES LABELS macos)
 
+add_executable(test_clip macos/test_clip.m
+  "${PROJECT_SOURCE_DIR}/platform/macos/PFMetalRenderer.m"
+  "${PROJECT_SOURCE_DIR}/platform/macos/PFFont.m"
+  "${PROJECT_SOURCE_DIR}/platform/macos/PFGlyphAtlas.m")
+target_include_directories(test_clip PRIVATE "${PROJECT_SOURCE_DIR}/platform/macos" c)
+target_compile_options(test_clip PRIVATE -fobjc-arc ${PROFANE_WARNINGS})
+target_link_libraries(test_clip PRIVATE pf_core "-framework AppKit" "-framework CoreGraphics"
+  "-framework CoreText" "-framework ImageIO" "-framework Metal" "-framework QuartzCore" "-framework UniformTypeIdentifiers"
+  "-framework Foundation")
+# -newDefaultLibrary finds default.metallib beside the executable.
+add_custom_command(TARGET test_clip POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${CMAKE_BINARY_DIR}/platform/macos/default.metallib" "$<TARGET_FILE_DIR:test_clip>/default.metallib")
+add_dependencies(test_clip profane)
+add_test(NAME macos.clip COMMAND test_clip)
+set_tests_properties(macos.clip PROPERTIES LABELS macos)
+
 add_executable(test_keys macos/test_keys.m "${PROJECT_SOURCE_DIR}/platform/macos/PFKeys.m")
 target_include_directories(test_keys PRIVATE "${PROJECT_SOURCE_DIR}/platform/macos" c)
 target_compile_options(test_keys PRIVATE -fobjc-arc ${PROFANE_WARNINGS})

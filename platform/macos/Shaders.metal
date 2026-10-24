@@ -8,6 +8,7 @@ struct QuadOut {
     float2 uv;
     float2 local;   // position from the quad's center, pixels (rounded modes)
     float4 params [[flat]];
+    float4 clip [[flat]];
     float4 color; // premultiplied
     uint mode [[flat]];
 };
@@ -28,6 +29,7 @@ vertex QuadOut pf_quad_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     float4 rgba = float4((c >> 24) & 0xFF, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF) / 255.0;
     out.color = float4(rgba.rgb * rgba.a, rgba.a);
     out.mode = q.mode;
+    out.clip = q.clip;
     return out;
 }
 
@@ -40,6 +42,11 @@ static float round_box(float2 p, float2 b, float r) {
 fragment float4 pf_quad_fragment(QuadOut in [[stage_in]], texture2d<float> gray [[texture(0)]],
                                  texture2d<float> color [[texture(1)]]) {
     constexpr sampler nearest(filter::nearest);
+    float2 p = in.position.xy;
+    if (p.x < in.clip.x || p.y < in.clip.y || p.x >= in.clip.x + in.clip.z ||
+        p.y >= in.clip.y + in.clip.w) {
+        discard_fragment();
+    }
     switch (in.mode) {
     case PF_QUAD_ROUND_RECT: {
         float d = round_box(in.local, in.params.xy, in.params.z);

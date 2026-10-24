@@ -4,6 +4,7 @@
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 struct pf_display {
     atomic_size_t refs;
@@ -43,6 +44,22 @@ static pf_display_item *push(pf_display *d) {
         d->items = xrealloc(d->items, d->cap * sizeof *d->items);
     }
     return &d->items[d->count++];
+}
+
+void pf_display_clip(pf_display *d, float x, float y, float w, float h) {
+    pf_display_item *it = push(d);
+    it->kind = PF_DISPLAY_CLIP;
+    it->color = 0;
+    it->x = x;
+    it->y = y;
+    it->u.rect.w = w > 0 ? w : 0;
+    it->u.rect.h = h > 0 ? h : 0;
+}
+
+void pf_display_unclip(pf_display *d) {
+    pf_display_item *it = push(d);
+    memset(it, 0, sizeof *it);
+    it->kind = PF_DISPLAY_UNCLIP;
 }
 
 void pf_display_rect(pf_display *d, float x, float y, float w, float h, uint32_t color) {

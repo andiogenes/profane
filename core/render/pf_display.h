@@ -16,6 +16,8 @@ typedef enum pf_display_kind {
     PF_DISPLAY_GLYPH,
     PF_DISPLAY_ROUND_RECT, /* filled, or a RADIUS-rounded outline LINE points wide */
     PF_DISPLAY_SHADOW,     /* a rounded box blurred by BLUR (a gaussian's sigma), for drop shadows */
+    PF_DISPLAY_CLIP,       /* later items draw only inside the rect (rect.w, rect.h) */
+    PF_DISPLAY_UNCLIP,     /* ends the clip */
 } pf_display_kind;
 
 typedef struct pf_display_item {
@@ -51,6 +53,11 @@ void pf_display_round_rect(pf_display *d, float x, float y, float w, float h, fl
  * box itself is shadowed too: draw it on top. */
 void pf_display_shadow(pf_display *d, float x, float y, float w, float h, float radius, float blur,
                        uint32_t color);
+/* Clips the items that follow to the rect X, Y, W, H until pf_display_unclip. Clips do not nest:
+ * a new one replaces the current. A clip is not carried across pf_display_append, so every list
+ * that clips must end it. */
+void pf_display_clip(pf_display *d, float x, float y, float w, float h);
+void pf_display_unclip(pf_display *d);
 void pf_display_glyph(pf_display *d, uint32_t font, uint32_t glyph, float x, float baseline,
                       uint32_t color);
 
