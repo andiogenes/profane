@@ -22,7 +22,7 @@
           window? window-live? window-frame window-buffer set-window-buffer! window-parent
           selected-window select-window minibuffer-window window-minibuffer?
           window-point set-window-point! window-start-line set-window-start-line!
-          window-body-lines window-edges window-list next-window window-label set-window-label!
+          window-body-lines window-hscroll set-window-hscroll! window-edges window-list next-window window-label set-window-label!
           split? split-direction split-children split-weights split-parent
           split-window delete-window delete-other-windows balance-windows resize-window!
           switch-to-buffer other-buffer
@@ -272,6 +272,15 @@
   (define (window-start-line w) (%win-top-line (window-handle w)))
   (define (set-window-start-line! w line) (%win-set-top-line (window-handle w) (max 0 line)))
   (define (window-body-lines w) (%win-body-lines (window-handle w)))
+
+  ;; Columns (default-font cells) the window is scrolled sideways. Redisplay scrolls to keep point
+  ;; visible (auto-hscroll); a value set here is the least it scrolls (Emacs scroll-left).
+  (define (window-hscroll w)
+    (exact (round (/ (%win-hscroll (window-handle w)) (cell-width (window-frame w))))))
+  (define (set-window-hscroll! w columns)
+    (%win-set-min-hscroll (window-handle w)
+                          (inexact (* (max 0 columns) (cell-width (window-frame w)))))
+    (max 0 columns))
 
   ;; ---- the tree ----
 
@@ -801,6 +810,18 @@
   (define-command (other-window) "Select the ARGth window after the selected one, cyclically."
     (select-window (next-window (selected-window) (n))))
   (define-command (balance-windows) "Make windows the same size." (balance-windows))
+
+  ;; Emacs scroll-left / scroll-right: by ARG columns, or the window's width less two.
+  (define (hscroll-amount w)
+    (if (current-prefix-arg)
+        (prefix-numeric-value)
+        (max 1 (- (exact (floor (/ (caddr (window-edges w)) (cell-width (window-frame w))))) 2))))
+  (define-command (scroll-left) "Scroll the selected window's text left (see further right)."
+    (let ([w (selected-window)])
+      (set-window-hscroll! w (+ (window-hscroll w) (hscroll-amount w)))))
+  (define-command (scroll-right) "Scroll the selected window's text right (back toward the start)."
+    (let ([w (selected-window)])
+      (set-window-hscroll! w (- (window-hscroll w) (hscroll-amount w)))))
   (define-command (enlarge-window) "Make the selected window ARG lines taller."
     (resize-window! (selected-window) (* (n) (line-height (selected-frame))) 'below))
   (define-command (shrink-window) "Make the selected window ARG lines shorter."
@@ -818,6 +839,7 @@
                   ("C-x o" . other-window) ("C-x +" . balance-windows)
                   ("C-x ^" . enlarge-window) ("C-x }" . enlarge-window-horizontally)
                   ("C-x {" . shrink-window-horizontally)
+                  ("C-x <" . scroll-left) ("C-x >" . scroll-right)
                   ("C-x <left>" . previous-buffer) ("C-x <right>" . next-buffer)
                   ("C-x C-<left>" . previous-buffer) ("C-x C-<right>" . next-buffer)))
       #t)))

@@ -34,6 +34,7 @@
       (show-paren-match (background . bg-paren-match))
       (show-paren-mismatch (background . bg-paren-mismatch))
       (vertical-border (foreground . border))
+      (fringe (foreground . fg-dim))
       (mode-line (foreground . fg) (background . bg-mode-line))
       (mode-line-inactive (foreground . fg-dim) (background . bg-mode-line-inactive))
       (mode-line-highlight (background . bg-highlight))

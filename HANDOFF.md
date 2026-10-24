@@ -16,7 +16,7 @@ it is stale.
   | `m2-registries` | `cfb2dfd` | 1. vars, hooks, keymaps, faces, modes, command loop (plan §8f) |
   | `m2-faces` | `d76a0f5` | 2. text properties + faces in the display engine (§8g) |
   | `m2-themes` | `2b703c6` | 3. themes, design tokens, typography, `ui-style` (§8h) |
-  | `m2-windows` | (this branch's tip) | 4. windows, mode lines, echo area, tabs, ace-window, transpose-frame (§8i) |
+  | `m2-windows` | `7b9db99` + follow-up | 4. windows, mode lines, echo area, tabs, ace-window, transpose-frame, horizontal scrolling (§8i) |
 
   Each branch was cut from the previous one, so `m2-windows` contains all four. The owner chose a fast-forward of
   `main` (no PRs) for M1; ask before merging or pushing M2.
@@ -171,4 +171,5 @@ The order was agreed with the owner. Each item is a branch, cut from `m2-windows
 - **Kill ring** is profane-internal; the macOS pasteboard joins with `(profane macos)` (M3).
 - **Undo history** is unbounded (no `undo-limit` yet).
 - **No CI** exists. `tests/macos/latency.sh` is the CI latency benchmark the plan asks for, once there is macOS CI.
-- **Lines are truncated, not wrapped.** At most 4096 characters per line are shaped.
+- **Lines are truncated, not wrapped**; windows scroll sideways to keep point visible (§8i). Soft wrap is planned
+  for M4 (plan §9). At most 4096 characters per line are shaped.

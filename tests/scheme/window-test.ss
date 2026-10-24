@@ -122,6 +122,31 @@
   (test-equal "face runs" '((7 11 bold)) runs))
 (with-current-buffer b (var-kill-local! 'mode-line-format))
 
+;; ---- horizontal scrolling ----
+(keys "C-x 1")
+(define saved-point (point))
+(with-current-buffer b
+  (goto-char (point-max))
+  (insert (make-string 300 #\y)))
+(redisplay-prepare!)
+(%frm-redisplay (%frame-handle f))
+(test-assert "point past the right edge scrolls the window sideways"
+             (> (window-hscroll (selected-window)) 0))
+(goto-char (line-beginning-position))
+(redisplay-prepare!)
+(%frm-redisplay (%frame-handle f))
+(test-eqv "and back" 0 (window-hscroll (selected-window)))
+(keys "C-x <")
+(redisplay-prepare!)
+(%frm-redisplay (%frame-handle f))
+(test-eqv "C-x < scrolls by the window width less two columns" 78 (window-hscroll (selected-window)))
+(keys "C-x >")
+(redisplay-prepare!)
+(%frm-redisplay (%frame-handle f))
+(test-eqv "C-x > back" 0 (window-hscroll (selected-window)))
+(with-current-buffer b (delete-region (- (point-max) 300) (point-max)))
+(goto-char saved-point)
+
 ;; ---- the echo area ----
 (define (echo-text) (with-current-buffer (window-buffer (minibuffer-window)) (buffer-string)))
 (message "hello")

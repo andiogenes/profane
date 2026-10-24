@@ -60,5 +60,7 @@ int pf_win_set_edges(pf_handle win, float fringe_left, float fringe_right, float
 int pf_win_set_mode_line(pf_handle win, const char *utf8, size_t len, const uint32_t *runs,
                          size_t nruns, uint32_t face, int box);
 double pf_win_mode_line_height(pf_handle win);
+double pf_win_hscroll(pf_handle win); /* points */
+int pf_win_set_min_hscroll(pf_handle win, float points);
 
 #endif

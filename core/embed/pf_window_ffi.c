@@ -300,6 +300,20 @@ int pf_win_set_mode_line(pf_handle win, const char *utf8, size_t len, const uint
     return w ? set_strip(w, set_mode_line, utf8, len, runs, nruns, face, box) : INVALID;
 }
 
+double pf_win_hscroll(pf_handle win) {
+    pf_window *w = window_of(win);
+    return w ? pf_window_hscroll(w) : INVALID;
+}
+
+int pf_win_set_min_hscroll(pf_handle win, float points) {
+    pf_window *w = window_of(win);
+    if (!w) {
+        return INVALID;
+    }
+    pf_window_set_min_hscroll(w, points);
+    return 0;
+}
+
 double pf_win_mode_line_height(pf_handle win) {
     pf_window *w = window_of(win);
     return w ? pf_window_mode_line_height(w) : INVALID;

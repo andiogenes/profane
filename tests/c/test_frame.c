@@ -47,6 +47,7 @@ static const pf_font_source fonts = {NULL, fake_metrics, fake_scaled};
 #define BORDER 0x777777FFu
 #define ML_BG 0xCCCCCCFFu
 #define TAB_BG 0xDDDDDDFFu
+#define MARK 0x555555FFu
 
 static void set_face(uint32_t id, uint32_t flags, uint32_t fg, uint32_t bg) {
     pf_face f = {.flags = flags, .fg = fg, .bg = bg};
@@ -60,6 +61,8 @@ static void faces(void) {
     pf_face_set_role(PF_ROLE_CURSOR, 2);
     set_face(3, PF_FACE_HAS_FG, BORDER, 0);
     pf_face_set_role(PF_ROLE_VERTICAL_BORDER, 3);
+    set_face(4, PF_FACE_HAS_FG, MARK, 0);
+    pf_face_set_role(PF_ROLE_FRINGE, 4); /* continuation marks in its foreground */
     set_face(10, PF_FACE_HAS_BG, 0, ML_BG); /* mode line */
     set_face(11, PF_FACE_HAS_BG, 0, TAB_BG); /* tab bar */
 }
@@ -195,6 +198,45 @@ int main(void) {
     PF_CHECK(tab && NEAR(tab->y, 0) && NEAR(tab->u.rect.w, 400));
     PF_CHECK(t && t->y < 24);
     pf_display_release(d);
+
+    /* Horizontal scrolling. Regression: with point past the right edge of a long line the
+     * window did not scroll, and the cursor was drawn outside the window, over its neighbor. */
+    pf_frame_set_text_scale(f, w1, 1);
+    pf_frame_set_tab_bar(f, NULL, 0, NULL, 0, 0, 0);
+    pf_frame_place_window(f, w1, 0, 0, 200, 140, 1);
+    pf_window_set_edges(w1, 1, 1, 1); /* text area: x 1 .. 198, then fringe, divider */
+    pf_buf_marker_set(a, pa, 62);     /* end of the 62-character line */
+    d = pf_frame_redisplay(f);
+    PF_CHECK(pf_frame_cursor_rect(f, rect) == 0);
+    PF_CHECK(rect[0] >= 1 && rect[0] + rect[2] <= 198.5f); /* cursor inside the text area */
+    PF_CHECK(pf_window_hscroll(w1) > 0);
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        const pf_display_item *it = &pf_display_items(d)[i];
+        if (it->kind == PF_DISPLAY_GLYPH && it->u.glyph.glyph == 'a') {
+            PF_CHECK(it->x >= 1 - 0.5f && it->x + 10 <= 198.5f); /* clipped on both sides */
+        }
+        if (it->kind == PF_DISPLAY_RECT && it->color == CURSOR) {
+            PF_CHECK(it->x >= 0 && it->x + it->u.rect.w <= 200);
+        }
+    }
+    /* Text continues to the left: a mark in the left fringe. */
+    PF_CHECK(find_rect(d, MARK) && NEAR(find_rect(d, MARK)->x, 0));
+    pf_display_release(d);
+    pf_buf_marker_set(a, pa, 0); /* back at the start: no scroll */
+    d = pf_frame_redisplay(f);
+    PF_CHECK(pf_window_hscroll(w1) == 0);
+    const pf_display_item *mark = find_rect(d, MARK); /* continues to the right */
+    PF_CHECK(mark && NEAR(mark->x, 198));
+
+    pf_display_release(d);
+    /* scroll-left sets a minimum the automatic scrolling keeps. */
+    pf_window_set_min_hscroll(w1, 100);
+    d = pf_frame_redisplay(f);
+    PF_CHECK(NEAR(pf_window_hscroll(w1), 100));
+    const pf_display_item *c = find_rect(d, CURSOR); /* the first is w1's when it has one */
+    PF_CHECK(!c || c->y >= 140); /* point is off to the left: no cursor drawn in w1 */
+    pf_display_release(d);
+    pf_window_set_min_hscroll(w1, 0);
 
     /* Removing a window. */
     PF_CHECK(pf_frame_remove_window(f, w2) == 0);

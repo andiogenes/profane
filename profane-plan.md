@@ -446,8 +446,12 @@ the renderer tags the frame answering each event and records when it was submitt
 - Sanitizers: ASan+UBSan clean (C, Scheme suites, app, real key input). UBSan is now fatal in that tree, and the
   Scheme suites run there with the ASan runtime preloaded (they used to abort); it flagged pointer arithmetic on an
   empty text-property run list (`pf_props.c`, item 2), fixed.
+- **Horizontal scrolling** (item-4 follow-up): truncated lines need it, or point disappears past the right edge (and
+  its cursor was drawn over the neighboring window). Emacs's `auto-hscroll-mode`: when point leaves the text area
+  (with a margin), the window scrolls to center it; `scroll-left`/`scroll-right` (`C-x <`/`C-x >`) set a minimum.
+  Fringe marks show lines continuing past either edge.
 - Not yet: mouse selection/resizing of windows, scrolling commands (`C-v`/`M-v`, recenter), header lines,
-  per-window buffer history (`next-buffer` cycles the buffer list), window configurations beyond tabs.
+  per-window buffer history (`next-buffer` cycles the buffer list), window configurations beyond tabs. Soft wrap: M4.
 
 ## 9. Milestones
 
@@ -457,7 +461,7 @@ the renderer tags the frame answering each event and records when it was submitt
 | M1 | Text + render | Piece tree, undo, layout cache, atlas, `pf_renderer`, 3-layer view stack, IME; line numbers, hl-line, paren match; <8 ms key-to-pixel |
 | M2 | Core workflow | Registries, native-view window kind (stub view), `(profane canvas)` low-level API (internal popups/transients/jump labels built on it), default + ported keymaps, windows, tab-bar, ace-window/avy/transpose, complete (vertico/marginalia/consult), transients, themes, design tokens, UI typography (SF Pro + code font), `ui-style` presets |
 | M3 | Async + tools | Processes/PTY, ripgrep/find, dired + sidebar, vterm, shell-here, Keychain, `(profane macos)`, TLS sockets |
-| M4 | Git v1 + ediff | Fringe git marks, motion system (smooth scroll, cursor, splits, pop-ups, Reduce Motion). **Dogfood**: daily editing, git and terminal in profane |
+| M4 | Git v1 + ediff | Soft wrap (`truncate-lines`, `word-wrap`, `visual-line-mode` with screen-line motion; needed for daily editing and later for Org-lite/Markdown), fringe git marks, motion system (smooth scroll, cursor, splits, pop-ups, Reduce Motion). **Dogfood**: daily editing, git and terminal in profane |
 | M5 | Languages | tree-sitter (Clojure, Scala, Scheme, Lua, Swift, C/C++, JSON, Markdown, LLVM IR, MLIR), LSP + corfu + hierarchies, regex mode definer, formatters, HTTPS/SSE client for Scheme, inline diagnostics, inlay hints, indent guides, occurrence highlight |
 | M6 | Agents I | ACP client (Claude Code etc.), profane as MCP server, agent diff review + permission prompts |
 | M7 | Widget toolkit | `(profane widget)`: layout, standard widgets, buffer-backed text input, focus/keyboard nav, theming, accessibility; sidebar/dashboard/transients rebuilt on it; new mode line and tab bar |

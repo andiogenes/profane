@@ -82,6 +82,11 @@ void pf_window_set_mode_line(pf_window *w, const uint32_t *cps, size_t n,
                              const pf_strip_run *runs, size_t nruns, uint32_t face, int box);
 float pf_window_mode_line_height(const pf_window *w);
 
+/* Horizontal scroll in points. Redisplay scrolls sideways to keep point visible (Emacs
+ * auto-hscroll), never below the minimum set by scroll-left/scroll-right. */
+float pf_window_hscroll(const pf_window *w);
+void pf_window_set_min_hscroll(pf_window *w, float points);
+
 /* Scrolls so LINE is the first one shown (redisplay still keeps point visible). */
 void pf_window_set_top_line(pf_window *w, size_t line);
 
