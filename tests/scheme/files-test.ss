@@ -167,6 +167,16 @@
       (delete-file p)))
 (rm-rf root)
 
+;; ---- C-x C-c ----
+(test-eq "C-x C-c is bound" 'save-buffers-kill-terminal (lookup-key (global-map) (kbd "C-x C-c")))
+(let ([b (find-file-noselect (string-append root "-quit.txt"))])
+  (switch-to-buffer b)
+  (with-current-buffer b (insert "x"))
+  (keys "C-x C-c")
+  (test-assert "unsaved changes: it asks instead of exiting" (minibuffer-active?))
+  (keys "C-g")
+  (test-assert "C-g cancels without exiting" (not (minibuffer-active?))))
+
 (delete-headless-frame! f)
 (test-end "files")
 (test-exit)

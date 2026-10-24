@@ -192,6 +192,19 @@
                           (save-buffer)
                           (message "Wrote ~a" path))))))
 
+  (define-command (save-buffers-kill-terminal)
+    "Exit profane; if file buffers have unsaved changes, ask first."
+    (let ([dirty (filter (lambda (b) (and (buffer-file-name b) (with-current-buffer b (buffer-modified?))))
+                         (buffer-list))])
+      (if (null? dirty)
+          (exit)
+          (completing-read (format "~a modified buffer~a; exit anyway? " (length dirty)
+                                   (if (= 1 (length dirty)) "" "s"))
+                           '("no" "yes")
+                           (lambda (answer) (when (equal? answer "yes") (exit)))
+                           'require-match #t 'default "no"))))
+
   (define bindings
     (for-each (lambda (b) (define-key! (global-map) (car b) (cdr b)))
-              '(("C-x C-f" . find-file) ("C-x C-s" . save-buffer) ("C-x C-w" . write-file)))))
+              '(("C-x C-f" . find-file) ("C-x C-s" . save-buffer) ("C-x C-w" . write-file)
+                ("C-x C-c" . save-buffers-kill-terminal)))))
