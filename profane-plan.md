@@ -855,7 +855,7 @@ Decisions:
 - **Keyboard takeover** (two new buffer-local variables in the command loop, usable by any mode): `key-filter` (a procedure
   from the first key of a sequence to a command, or #f for the keymaps) and `text-input-command` (what unbound typed text
   runs); `last-input-key` tells the command which key. vterm sends every key to the program except
-  `vterm-keymap-exceptions` (`C-c C-x C-u C-g M-x M-o M-g C-y M-y M-:`; the owner's `M-o` and `M-g` prefix included);
+  `vterm-keymap-exceptions` (`C-c C-x C-g M-x M-o M-g C-y M-y M-:`; the owner's `M-o` and `M-g` prefix included; Emacs's vterm also keeps `C-u`, but in a shell it kills the line, so it goes to the program here, found by using it);
   typed text, input-method text included, goes to the program as UTF-8. Under `C-c`: `C-c C-c/C-d/C-z/C-g/C-l` send that
   control key; `C-q` sends the next key as it is. `C-y`/`M-y` paste (bracketed when the program asked).
 - **Processes feed it raw bytes**: `start-process` gained `(binary . #t)` (filters get bytevectors, no decoding), so
@@ -887,9 +887,8 @@ Decisions:
   non-ASCII, the excepted keys, yank, resizing with the window, copy mode, exit handling, killing the buffer kills the program,
   reuse and prefix argument, `shell-here` per directory, a 200-line history and scrolling) and the running app: real fish
   started by `M-x vterm`, its prompt (with the git branch) drawn into the terminal, `echo $fish_pid` typed with real key events.
-  **Not verified**: how it looks on screen (the Metal path was not looked at: only the display list is tested), key-to-pixel
-  latency in a terminal, full-screen programs (vim, htop, less) on the real renderer, a very fast output flood (`yes`),
-  fish's own key bindings beyond the shown prompt, the Russian layout (plain keys go as typed text, so letters follow the layout).
+  *Not verified when written* (see "On-screen check of M3" below for what was looked at afterwards): the Russian layout (plain
+  keys go as typed text, so letters follow the layout) and fish's own key bindings beyond the shown prompt.
 
 **Item 8: TLS sockets** (`platform/macos/PFNet.*`, `(profane net)`). Decisions:
 
@@ -915,6 +914,36 @@ Decisions:
   **Not verified**: proxies, IPv6-only hosts, connections surviving sleep/network changes, TLS 1.3 session resumption, a
   `PF_NET_MAX_OUTSTANDING` stall under a slow consumer (the large transfer passed but its pause was not observed), and
   closing while a send is in flight.
+
+**On-screen check of M3** (the owner asked for pixels and the terminal in practice; real window, captured by window id, window
+brought to the front first). Looked at: dired, the sidebar beside a file, the buffer menu, and the terminal running fish,
+`ls --color`, htop, vim (syntax colors, arrows, `C-f`, insert mode, `:q!`), a truecolor/256-color/attribute/wide-character/emoji
+demo in the light and dark themes, box-drawing tables, scrollback, a split with dired, and the real window resized (htop
+re-laid out: 38 x 154 cells). All of it drew correctly: cell alignment, colors, bold/italic/underline/strike/reverse, CJK and
+emoji widths (emoji in color), the cursor (block, hollow in other windows), the alternate screen, the theme following light/dark.
+Found and fixed:
+
+- **`C-u` was an editor key in terminals** (as Emacs's vterm has it) and never reached fish, where it kills the line; removed
+  from `vterm-keymap-exceptions`.
+- **Buffer menu header** was not aligned with its columns.
+- **Box-drawing and block characters left gaps** between cells and rows (the font's glyphs do not fill the cell). They are now
+  drawn as rectangles that fill it (`core/display/pf_boxdraw.*`: all of U+2500-257F but the diagonals, light/heavy/double
+  strokes generated from the Unicode names; U+2580-259F halves, eighths, quadrants, shades by alpha). Tables, lazygit-style
+  UIs and bars now join.
+- Dark theme: terminal color 0 (black) was nearly invisible on the dark background; lightened.
+
+Measured: key to echo in the terminal 0-1 ms (key event, pty, fish, back to the grid); the editor's own key-to-frame latency
+with typing into a terminal p95 0.8 ms submit, 0.9 ms commit (the 20 ms "present" is the display's refresh and compositing).
+Flooding the terminal keeps the main thread responsive (REPL round trip median 8 ms, max 10 ms during a 400,000-line flood) but
+throughput is about 30,000 lines/s (1,000,000 lines of `seq`: 32 s): libvterm moves its whole screen buffer for every scrolled
+line (a 31 x 114 screen is about 150 KB per line). Fine for logs and builds, slow for `yes`; a ring-buffer screen would fix it
+if it ever matters.
+
+Still seen on screen and **not fixed** (decisions for the owner): the sidebar tree touches the window's left edge (no
+padding), buffers named `*vterm*` show the editor's `All (1,0)` position in the mode line (the terminal's title is kept but
+unused), SGR "dim" is not drawn dimmed (libvterm does not report it), a ZWJ emoji family is drawn as three emoji, powerline
+glyphs need a patched font, and there is no mouse in terminals (no wheel scrolling, no selection). Not looked at: Russian layout,
+a Retina display (the machine is 1x), vim's mouse, fish's completions menu, less, a flood of long lines.
 
 **M3 is complete** (plan §9, M3 row): processes/PTY (item 2), ripgrep/find (4), dired and the sidebar (6), vterm and shell-here
 (7), Keychain (5), `(profane macos)` (3) and TLS sockets (8), on the async foundation (1). One thing the row did not name

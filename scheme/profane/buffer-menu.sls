@@ -43,8 +43,7 @@
                    (pad-right (mode-name b) 12) " "
                    (or (buffer-file-name b) "")))
 
-  (define header "MRM Buffer")
-
+  
   (define (index) (- (line-number-at-pos) 2))
   (define (entry-at i) (let ([v (var-ref 'buffer-menu-entries)]) (and (>= i 0) (< i (vector-length v)) (vector-ref v i))))
   (define (this-buffer!) (or (entry-at (index)) (error 'buffer-menu "no buffer on this line")))
@@ -64,7 +63,8 @@
        (lambda ()
          (erase-buffer)
          (let ([from (point)])
-           (insert (string-append header (make-string (max 0 (- (+ width 28) (string-length header))) #\space) "Size  Mode         File"))
+           (insert (string-append (pad-right "MCRM Buffer" (+ 5 width 2)) (pad-left "Size" 8) "  "
+                                  (pad-right "Mode" 12) " File"))
            (put-text-property from (point) 'face 'shadow)
            (insert "\n"))
          (for-each (lambda (b)

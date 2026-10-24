@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "pf_boxdraw.h"
 #include "pf_face.h"
 #include "pf_props.h"
 #include "pf_text.h"
@@ -969,7 +970,8 @@ static void draw_terminal(pf_window *w, pf_display *d, float body_h, uint32_t wi
                                    : cell.fg;
             uint32_t font = fonts[(cell.bold ? 1 : 0) | (cell.italic ? 2 : 0)];
             float x = (float)c * cw;
-            if (!blank) {
+            int drawn = !blank && n == 1 && pf_boxdraw(d, cell.cps[0], x, y, cw, lh, color);
+            if (!blank && !drawn) {
                 const pf_line_layout *lay = pf_layout_line(w->cache, font, cell.cps, n);
                 for (size_t g = 0; g < lay->nglyphs; g++) {
                     pf_display_glyph(d, lay->glyphs[g].font, lay->glyphs[g].glyph, x + lay->glyphs[g].x,

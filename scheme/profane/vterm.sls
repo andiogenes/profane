@@ -28,7 +28,7 @@
   (defvar vterm-scrollback 5000 "Lines of history a terminal keeps.")
   (defvar vterm-kill-buffer-on-exit #t "Kill a terminal's buffer when its program exits.")
   (defvar vterm-keymap-exceptions
-    '("C-c" "C-x" "C-u" "C-g" "M-x" "M-o" "M-g" "C-y" "M-y" "M-:")
+    '("C-c" "C-x" "C-g" "M-x" "M-o" "M-g" "C-y" "M-y" "M-:")
     "Keys the editor keeps in a terminal buffer instead of sending them to the program.")
 
   (define terminal-faces

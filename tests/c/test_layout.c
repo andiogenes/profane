@@ -471,6 +471,34 @@ static void test_terminal_window(void) {
     PF_CHECK(d != NULL && count_color(d, PF_DISPLAY_RECT, 0xFF0000FF) == 0 && pf_window_cursor_rect(w, rect) == -1);
     pf_display_release(d);
 
+    /* box-drawing and block characters are rectangles that fill their cell, not font glyphs */
+    pf_term_feed(t, "\x1b[2J\x1b[H\xe2\x94\x80\xe2\x94\x82\xe2\x94\xbc\xe2\x96\x88\xe2\x96\x84\xe2\x96\x91x", 7 + 3 * 6 + 1);
+    pf_window_set_option(w, PF_WINDOW_CURSOR, PF_CURSOR_NONE);
+    d = pf_window_redisplay(w);
+    PF_CHECK(d != NULL);
+    PF_CHECK_EQ_SIZE(count_kind(d, PF_DISPLAY_GLYPH), 1); /* only the x */
+    {
+        const pf_display_item *r = pf_display_items(d);
+        size_t full = 0, wide_thin = 0, tall_thin = 0, half = 0, shade = 0;
+        for (size_t i = 0; i < pf_display_count(d); i++) {
+            if (r[i].kind != PF_DISPLAY_RECT) {
+                continue;
+            }
+            float rw = r[i].u.rect.w, rh = r[i].u.rect.h;
+            full += NEAR(rw, 10) && NEAR(rh, 20);
+            wide_thin += NEAR(rw, 10) && NEAR(rh, 1); /* ─ and the horizontal of ┼, across their cells */
+            tall_thin += NEAR(rw, 1) && NEAR(rh, 20) && NEAR(r[i].x, 14.5f) /* │ in the second cell */;
+            half += NEAR(rw, 10) && NEAR(rh, 10) && NEAR(r[i].x, 40); /* ▄: the lower half of cell 4 */
+            shade += (r[i].color & 0xFF) < 0xFF && r[i].color != 0 && NEAR(rw, 10) && NEAR(rh, 20);
+        }
+        PF_CHECK_EQ_SIZE(full, 2); /* █ and ░ (a full cell at partial alpha) */
+        PF_CHECK_EQ_SIZE(wide_thin, 2);
+        PF_CHECK_EQ_SIZE(half, 1);
+        PF_CHECK_EQ_SIZE(shade, 1);
+        PF_CHECK_EQ_SIZE(tall_thin, 1);
+    }
+    pf_display_release(d);
+
     /* a terminal window has no text positions */
     PF_CHECK(pf_window_pos_rect(w, 0, rect) == -1);
 

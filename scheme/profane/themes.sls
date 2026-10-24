@@ -93,7 +93,7 @@
                  (bg-paren-match . "#31466d") (bg-paren-mismatch . "#6b2b33")
                  (bg-mode-line . "#2b3654") (bg-mode-line-inactive . "#171c2c")
                  (bg-tab-bar . "#141929") (border . "#5c6888")
-                 (term-black . "#3a4057") (term-red . red) (term-green . green) (term-yellow . yellow)
+                 (term-black . "#555d7a") (term-red . red) (term-green . green) (term-yellow . yellow)
                  (term-blue . blue) (term-magenta . magenta) (term-cyan . cyan) (term-white . "#c8ccd8")
                  (term-bright-black . "#6b7390") (term-bright-red . "#ffb3b6") (term-bright-green . "#a0eaa0")
                  (term-bright-yellow . "#f5df9a") (term-bright-blue . "#b0d0ff") (term-bright-magenta . "#f9c0ef")
