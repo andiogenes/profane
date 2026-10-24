@@ -12,7 +12,7 @@
   (export handle-key handle-text last-input-text pending-keys self-insert-amalgamation
           set-transient-map exit-transient-map! clear-transient-map! transient-map-active?
           set-input-buffer-function! set-key-reader!
-          command-busy? resume-busy! abort-busy!)
+          command-busy? resume-busy! abort-busy! command-wait! command-wake!)
   (import (chezscheme) (profane native) (profane buffer) (profane window) (profane keymap)
           (profane mode) (profane command) (profane hook) (profane var))
 
@@ -156,6 +156,27 @@
 
   (define (command-busy?) (and suspended #t))
 
+  ;; A command that waits for something other than the clock (a process, a timer: (profane
+  ;; async) await) parks its engine instead of spinning: the slice ends without scheduling a
+  ;; resume, and command-wake! schedules one when what it waits for may have happened. Still
+  ;; "busy": C-g aborts it and other input queues.
+  (define waiting #f)
+
+  ;; Inside a command: blocks until (READY?) is true and returns #t. Elsewhere there is no
+  ;; engine to park, and it returns #f at once: the caller must wait some other way.
+  (define (command-wait! ready?)
+    (and in-command
+         (begin
+           (let loop ()
+             (unless (ready?)
+               (set! waiting #t)
+               (engine-block)
+               (loop)))
+           #t)))
+
+  (define (command-wake!)
+    (when (and suspended waiting) (schedule-resume!)))
+
   (define (schedule-resume!)
     (unless resume-scheduled
       (set! resume-scheduled #t)
@@ -165,6 +186,7 @@
   (define (slice!)
     (let ([e suspended] [was-busy (and suspended #t)])
       (set! suspended #f)
+      (set! waiting #f)
       (set! in-command #t)
       (e (var-ref 'command-slice-ticks)
          (lambda (ticks . vals)
@@ -176,7 +198,7 @@
            (set! suspended e2)
            (set! saved-buffer (current-buffer))
            (%input-set-busy #t)
-           (schedule-resume!)))))
+           (unless waiting (schedule-resume!))))))
 
   (define (run-in-engine thunk)
     (if in-command
@@ -193,6 +215,7 @@
   ;; C-g while a command is suspended: drop it and the typeahead.
   (define (abort-busy!)
     (set! suspended #f)
+    (set! waiting #f)
     (set! input-queue '())
     (%input-set-busy #f)
     (set-pending! '())

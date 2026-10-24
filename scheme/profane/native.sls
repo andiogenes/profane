@@ -24,6 +24,8 @@
           %cvs-popup-shown %cvs-frame-hit %cvs-hit-canvas %cvs-hit-cursor %cvs-overlay-redisplay
           %cvs-set-window %cvs-window-body %cvs-hit-x %cvs-hit-y
           %input-set-prefix-pending %input-set-press-and-hold %input-set-busy
+          %async-post %async-post-after %async-pop %async-data %async-wait %async-pending
+          %async-wake-ack %async-rewake
           %face-define %face-role-set %buf-put-prop %buf-get-prop %display-set-line-spacing)
   (import (chezscheme))
 
@@ -38,6 +40,14 @@
       [(_ name c-name (arg ...) result)
        (define name (foreign-procedure c-name (arg ...) result))]))
 
+  (define-native %async-post "pf_async_post" (unsigned-64 int u8* size_t) int)
+  (define-native %async-post-after "pf_async_post_after" (unsigned-64 int u8* size_t unsigned-32) int)
+  (define-native %async-pop "pf_async_pop" (u8* u8*) integer-64)
+  (define-native %async-data "pf_async_data" (u8* size_t) void)
+  (define-native %async-wait "pf_async_wait" (unsigned-32) integer-64)
+  (define-native %async-pending "pf_async_pending" () integer-64)
+  (define-native %async-wake-ack "pf_async_wake_ack" () void)
+  (define-native %async-rewake "pf_async_rewake" () void)
   (define-native %buf-new "pf_buf_new" (u8* size_t) unsigned-32)
   (define-native %buf-free "pf_buf_free" (unsigned-32) int)
   (define-native %buf-chars "pf_buf_chars" (unsigned-32) integer-64)

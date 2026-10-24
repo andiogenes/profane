@@ -227,5 +227,6 @@ clang-format -i <files>                                 # format C / ObjC (brew 
 | Display lists, renderer interface, fonts | `core/render/` |
 | FFI veneers | `core/embed/pf_*_ffi.*`, `pf_handles.*`, `pf_scheme.*`, `pf_input.*` |
 | Metal renderer, glyph atlas, view stack, native views, keys/IME, fonts, shaper | `platform/macos/PF*.m`, `ProfaneView.m`, `Shaders.metal` (§8b, §8d, §8e) |
-| Scheme libraries | `scheme/profane/*.sls`: buffer, window, tab-bar, ace-window, transpose-frame, var, hook, keymap, face, command, mode, command-loop, simple, minibuffer, complete, canvas, eval, display, theme, themes, native, repl |
+| Async queue (events posted from other threads, timers) | `core/async/pf_async.*`, `(profane async)` (§8k) |
+| Scheme libraries | `scheme/profane/*.sls`: async, buffer, window, tab-bar, ace-window, transpose-frame, var, hook, keymap, face, command, mode, command-loop, simple, minibuffer, complete, canvas, eval, display, theme, themes, native, repl |
 | Boot, C→Scheme entry points (`pf-key`, `pf-insert-text`, `pf-startup`, `pf-redisplay`, …), init files | `scheme/boot.ss`, `scheme/init.ss` |

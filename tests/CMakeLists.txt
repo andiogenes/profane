@@ -3,6 +3,10 @@ add_executable(test_utf8 c/test_utf8.c)
 target_link_libraries(test_utf8 PRIVATE pf_core)
 add_test(NAME c.utf8 COMMAND test_utf8)
 
+add_executable(test_async c/test_async.c)
+target_link_libraries(test_async PRIVATE pf_core)
+add_test(NAME c.async COMMAND test_async)
+
 add_executable(test_text c/test_text.c)
 target_link_libraries(test_text PRIVATE pf_core)
 add_test(NAME c.text COMMAND test_text)
@@ -38,11 +42,11 @@ target_compile_definitions(test_scheme PRIVATE
   PF_TEST_SCHEME_DIR="${PROJECT_SOURCE_DIR}/scheme")
 add_test(NAME c.scheme COMMAND test_scheme)
 
-foreach(_t IN ITEMS test_utf8 test_text test_text_undo test_props test_display test_layout test_frame
+foreach(_t IN ITEMS test_async test_utf8 test_text test_text_undo test_props test_display test_layout test_frame
                    test_canvas test_scheme)
   target_compile_options(${_t} PRIVATE ${PROFANE_WARNINGS})
 endforeach()
-set_tests_properties(c.utf8 c.text c.text_undo c.props c.display c.layout c.frame c.canvas c.scheme
+set_tests_properties(c.async c.utf8 c.text c.text_undo c.props c.display c.layout c.frame c.canvas c.scheme
   PROPERTIES LABELS c)
 
 # Scheme suites (label: scheme), run by the standalone Chez against the source tree. In a

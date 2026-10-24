@@ -645,6 +645,31 @@ waits for. Keep this list current: remove an entry when it is done, add one when
 followed, checked from Scheme state, not pixels). The CJK input-method check is dropped: the owner does not use those
 languages.
 
+## 8k. Async and tools (M3)
+
+**Item 1: async foundation** (`core/async/pf_async.*`, `(profane async)`). Decisions:
+
+- **A completion queue, not a worker pool.** Any thread calls `pf_async_post(token, kind, bytes)`; the main thread pops
+  events and Scheme calls the handler registered for the token (`async-token-new`). The queue is in the portable core
+  (pthreads), so Scheme tests run it without the shell; the shell only sets a wake hook (`pf_async_set_wake`) that
+  dispatches `pf-async` on the main queue. Wakes are coalesced until the drain acknowledges, and a drain handles at most
+  `async-dispatch-limit` (64) events before asking for another wake, so a flood cannot starve input or redisplay. The plan's
+  "GCD queues" stay a platform choice for later items: processes, FSEvents and search post to this queue from their own
+  dispatch sources or threads. A general worker pool is a seam: nothing needs it until git/search (add it then).
+- **The queue is unbounded.** Producers that can outrun the editor (a process reader) must stop reading while their events
+  are unpopped; that is the process layer's job (item 2).
+- **Promises and `await`** replace the plan's "one-shot continuations". Capturing a continuation inside an engine and
+  resuming it later fights the command loop's engines, so `await` inside a command *parks the engine*
+  (`command-wait!`, via `engine-block`): the slice ends with no resume scheduled, the command stays "busy" (C-g aborts
+  it, other input queues), and settling the promise (`command-wake!`) schedules the resume. Outside a command (REPL,
+  tests) `await` pumps events and blocks the main thread. Handlers and promise callbacks are not sliced, like hooks.
+- **Timers**: `async-after`, `async-cancel!`, `async-sleep` (a promise). Each timer is a detached thread sleeping until it
+  fires, which is fine for a few; a timer heap belongs with the first user that needs many (run-with-timer, M4 motion).
+- **Verified**: `c.async` (order, wake coalescing, timer thread, four producers x 1000 events), `async-test.ss`
+  (dispatch, released tokens, raising handlers, batching, promises, parked `await` with typeahead, C-g abort), and the
+  running app headless: a timer's event arrived through the wake hook (no polling) and a command parked in `await` resumed
+  on its own. Not verified: behavior under ASan/TSan (not run), a flood against a real window.
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |

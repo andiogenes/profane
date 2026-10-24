@@ -8,7 +8,7 @@
 (import (profane repl) (profane buffer) (profane window) (profane var) (profane hook)
         (profane keymap) (profane face) (profane command) (profane mode) (profane command-loop)
         (profane simple) (profane display) (profane theme) (profane themes) (profane tab-bar)
-        (profane transpose-frame) (profane ace-window) (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy) (profane mouse) (profane files))
+        (profane transpose-frame) (profane ace-window) (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy) (profane mouse) (profane files) (profane async))
 
 ;;; Chez invokes a library only when one of its variables is first used; libraries whose body
 ;;; registers commands, modes and bindings must be invoked explicitly.
@@ -71,6 +71,10 @@
 ;;; The next time slice of a command that outlived its first (see (profane command-loop)); the
 ;;; shell calls this from its event loop until the command is done or aborted with C-g.
 (define (pf-resume) (resume-busy!))
+
+;;; Events posted from other threads are waiting (see (profane async)); the shell calls this on
+;;; the main thread after a wake.
+(define (pf-async) (async-dispatch!))
 
 ;;; Key-to-pixel latency of the main view (see pf_renderer_latency): a printable report.
 (define (latency-report)

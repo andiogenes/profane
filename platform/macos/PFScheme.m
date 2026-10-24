@@ -4,6 +4,7 @@
 
 #import "ProfaneView.h"
 
+#include "pf_async.h"
 #include "pf_scheme.h"
 
 void pf_app_quit(void) {
@@ -36,7 +37,16 @@ void pf_app_schedule_resume(void) {
     });
 }
 
+/* Called from any thread when events were posted to the async queue (core/async): drains it on
+ * the main thread, between event-loop turns. Coalesced by the queue, so one block at most waits. */
+static void pf_app_async_wake(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        pf_scheme_call("pf-async", NULL, 0, NULL);
+    });
+}
+
 int PFSchemeBoot(void) {
+    pf_async_set_wake(pf_app_async_wake);
     NSString *resources = NSBundle.mainBundle.resourcePath;
     NSString *bootDir = [resources stringByAppendingPathComponent:@"boot"];
     NSString *schemeDir = [resources stringByAppendingPathComponent:@"scheme"];
