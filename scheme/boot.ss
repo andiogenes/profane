@@ -8,13 +8,13 @@
 (import (profane repl) (profane buffer) (profane window) (profane var) (profane hook)
         (profane keymap) (profane face) (profane command) (profane mode) (profane command-loop)
         (profane simple) (profane display) (profane theme) (profane themes) (profane tab-bar)
-        (profane transpose-frame) (profane ace-window) (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy) (profane mouse) (profane files) (profane async) (profane process) (profane macos) (profane search) (profane secrets) (profane dired) (profane sidebar) (profane buffer-menu) (profane vterm) (profane net) (profane git marks))
+        (profane transpose-frame) (profane ace-window) (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy) (profane mouse) (profane files) (profane async) (profane process) (profane macos) (profane search) (profane secrets) (profane dired) (profane sidebar) (profane buffer-menu) (profane vterm) (profane net) (profane git) (profane git marks))
 
 ;;; Chez invokes a library only when one of its variables is first used; libraries whose body
 ;;; registers commands, modes and bindings must be invoked explicitly.
 (for-each invoke-library '((profane simple) (profane window) (profane display) (profane themes)
                            (profane tab-bar) (profane transpose-frame) (profane ace-window)
-                           (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy) (profane mouse) (profane files) (profane search) (profane dired) (profane sidebar) (profane buffer-menu) (profane vterm) (profane git marks)))
+                           (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy) (profane mouse) (profane files) (profane search) (profane dired) (profane sidebar) (profane buffer-menu) (profane vterm) (profane git) (profane git marks)))
 
 ;;; Defaults until the shell reports the macOS appearance: the light theme, the minimal style.
 (load-theme 'profane-light)

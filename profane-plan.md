@@ -1034,6 +1034,31 @@ diff, commit, push/pull), 5 ediff. Items 1 and 2 are done; item 3 is started (it
   Motion, pop-up fade in and out with the canvas freed mid-fade; the window tests fail with the animation disabled),
   feature thresholds in `test_anim`. Not verified in the app window or for feel.
 
+## 8m. Git v1 (M4 item 4)
+
+Decisions (owner, 2026-10-24): reads go through the git CLI, asynchronously, behind a backend registry so a libgit2
+worker can replace them later by Scheme config (`git-read-backend`); the commit message is a buffer written with
+`git commit -F` (no editor protocol until v2 rebase); staging covers files, hunks and the lines of a region.
+`AGENTS.md`'s "libgit2 for reads" now means: libgit2 where it must run in-process (the fringe marks, §8l) and as the
+planned worker backend; the CLI reads status and diffs until then.
+
+Steps, one commit each, tested against throwaway repos with the real `git`:
+- **4a** `(profane git)`: `run-git` (async via `run-process`, `GIT_TERMINAL_PROMPT=0`, `GIT_OPTIONAL_LOCKS=0`,
+  `GIT_EDITOR=true`, `LC_MESSAGES=C`, every command and its output in `*git-process*`), repo discovery, status
+  (`--porcelain=v2 --branch -z`) and diff (unified, parsed into files and hunks) readers, the backend registry.
+- **4b** `(profane section)`: a section tree rendered into a read-only buffer (heading, children, folded flag, `TAB`,
+  `n p M-n M-p`); refresh re-renders from the model and restores point and folds by section identity.
+- **4c** status buffer on `C-x g`: head/merge/push lines, untracked, unstaged, staged, unpushed/unpulled, hunks with
+  diff faces.
+- **4d** staging: `s u k` on a file, a hunk or the region's lines (partial patches through `git apply --cached [-R]`),
+  `S U` for all, confirmation before discarding.
+- **4e** commit transient and message buffer (`C-c C-c`, `C-c C-k`; amend prefills; staged diff shown beside);
+  branch, push, pull and fetch transients. Credentials: git's own helper (osxkeychain) and ssh-agent; an askpass
+  through `profane-client` is a seam.
+- **4f** `d` diff, `RET` on a commit shows it, a plain `l` log list (the graph is v2).
+- **4g** word-level diff refinement (first to cut).
+Refresh is manual (`g`) and after every git command profane runs; FSEvents (§8k) would make it automatic.
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |

@@ -85,7 +85,8 @@ clang-format -i <files>                                 # format C / ObjC (brew 
   symbols, not procedures. Don't capture procedures where a symbol lookup is expected.
 - **Rendering**: everything goes through the `pf_renderer` C interface. `ProfaneView` has three layers
   (base Metal, native views, overlay Metal); pop-ups always go on the overlay layer.
-- **Git**: libgit2 for reads, `git` CLI for every mutation.
+- **Git**: `git` CLI for every mutation. Reads: libgit2 where they must run in-process (fringe marks); status and
+  diffs go through the CLI asynchronously until a libgit2 worker backend replaces them (plan §8m, `git-read-backend`).
 - **UI**: all styling comes from theme design tokens. `(ui-style 'minimal)` is the default and the visual
   regression baseline; new chrome must be off in the minimal preset unless the plan says otherwise.
 - **Input latency**: input is always handled before animation ticks; under load animations are dropped,
