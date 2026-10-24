@@ -63,6 +63,7 @@ target_link_libraries(profane PRIVATE
   "-framework ImageIO"
   "-framework Metal"
   "-framework QuartzCore"
+  "-framework Security"
   "-framework UniformTypeIdentifiers")
 
 # Sign the finished bundle with the hardened runtime and allow-jit. Runs after any binary or

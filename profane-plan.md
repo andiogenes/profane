@@ -752,6 +752,23 @@ Decisions:
   file, `C-g` back to `*scratch*`, `consult-find` opening a file). Not verified: a very large tree (the 5000 cap and the
   stop of a flooding process were not exercised), and the visual look of the candidates.
 
+**Item 5: Keychain, `(profane secrets)`** (`PFMacOS.m`, `scheme/profane/secrets.sls`). Decisions:
+
+- `secret-get` / `secret-set!` / `secret-delete!` on **generic passwords of the login keychain**, by service and account
+  (strings; UTF-8 text only, no binary secrets yet). `secret-set!` adds or updates. A missing item is `#f`; any other
+  failure raises with the system's message (`SecCopyErrorMessageString`). Nothing is cached or written by profane.
+  Without the shell there is no keychain; `set-secrets-backend!` installs a fake (as `set-pasteboard-backend!`), which
+  is how the tests of later users (git credentials, the agent's API key) will run.
+- Uses the legacy file keychain (no data-protection keychain, so no keychain-access-groups entitlement is needed).
+  **Caveat, not exercised**: items are tied to the creating app's signature; an ad-hoc build changes with every rebuild, so
+  macOS may ask the user to allow access to items made by an earlier build. A stable signing identity
+  (`PROFANE_CODESIGN_IDENTITY`) avoids it. In the checks below the same build wrote and read, so no prompt appeared.
+- Not done: prompting for a secret in the minibuffer without echo (no password input yet), internet passwords, git
+  credential helper (M4, "Keychain credentials"), the agent's API key UI (M9).
+- **Verified**: `secrets-test.ss` (the API over a fake backend, the no-backend errors) and `macos.sh` against the real login
+  keychain with a throwaway service deleted afterwards (missing, set with non-ASCII text, replace, wrong account, delete
+  twice); the keychain held no leftovers afterwards.
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |

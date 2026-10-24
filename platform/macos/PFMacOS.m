@@ -2,6 +2,7 @@
 
 #import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <Security/Security.h>
 
 static NSData *stash;
 
@@ -11,6 +12,10 @@ static int64_t keep(NSString *s) {
         stash = [NSData data];
     }
     return (int64_t)stash.length;
+}
+
+int64_t pf_app_stash_length(void) {
+    return stash ? (int64_t)stash.length : 0;
 }
 
 void pf_app_stash_copy(void *buf, size_t cap) {
@@ -99,4 +104,81 @@ int64_t pf_app_window_bounds(const void *query, size_t len) {
         }
     }
     return keep(out);
+}
+
+static int64_t PFKeychainFail(OSStatus status) {
+    if (status == errSecItemNotFound) {
+        return -1;
+    }
+    CFStringRef message = SecCopyErrorMessageString(status, NULL);
+    NSString *text = message ? CFBridgingRelease(message) : nil;
+    if (!text) {
+        text = [NSString stringWithFormat:@"Keychain error %d", (int)status];
+    }
+    keep(text);
+    return -2;
+}
+
+static NSMutableDictionary *PFKeychainQuery(const void *service, size_t slen, const void *account,
+                                            size_t alen) {
+    NSString *svc = PFString(service, slen);
+    NSString *acct = PFString(account, alen);
+    if (!svc || !acct) {
+        return nil;
+    }
+    return [@{
+        (id)kSecClass : (id)kSecClassGenericPassword,
+        (id)kSecAttrService : svc,
+        (id)kSecAttrAccount : acct,
+    } mutableCopy];
+}
+
+int64_t pf_app_secret_get(const void *service, size_t slen, const void *account, size_t alen) {
+    NSMutableDictionary *query = PFKeychainQuery(service, slen, account, alen);
+    if (!query) {
+        keep(@"service and account must be UTF-8");
+        return -2;
+    }
+    query[(id)kSecReturnData] = @YES;
+    query[(id)kSecMatchLimit] = (id)kSecMatchLimitOne;
+    CFTypeRef result = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    if (status != errSecSuccess) {
+        return PFKeychainFail(status);
+    }
+    NSData *data = CFBridgingRelease(result);
+    NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    if (!text) {
+        keep(@"the stored secret is not UTF-8 text");
+        return -2;
+    }
+    return keep(text);
+}
+
+int64_t pf_app_secret_set(const void *service, size_t slen, const void *account, size_t alen,
+                          const void *value, size_t vlen) {
+    NSMutableDictionary *query = PFKeychainQuery(service, slen, account, alen);
+    if (!query) {
+        keep(@"service and account must be UTF-8");
+        return -2;
+    }
+    NSData *data = [NSData dataWithBytes:value length:vlen];
+    NSMutableDictionary *add = [query mutableCopy];
+    add[(id)kSecValueData] = data;
+    OSStatus status = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+    if (status == errSecDuplicateItem) {
+        status = SecItemUpdate((__bridge CFDictionaryRef)query,
+                               (__bridge CFDictionaryRef) @{(id)kSecValueData : data});
+    }
+    return status == errSecSuccess ? 0 : PFKeychainFail(status);
+}
+
+int64_t pf_app_secret_delete(const void *service, size_t slen, const void *account, size_t alen) {
+    NSMutableDictionary *query = PFKeychainQuery(service, slen, account, alen);
+    if (!query) {
+        keep(@"service and account must be UTF-8");
+        return -2;
+    }
+    OSStatus status = SecItemDelete((__bridge CFDictionaryRef)query);
+    return status == errSecSuccess ? 0 : PFKeychainFail(status);
 }

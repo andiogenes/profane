@@ -5,6 +5,9 @@
  * keep the bytes until pf_app_stash_copy takes them (so Scheme can size its buffer without
  * running anything twice). */
 
+/* Length of the text kept by the last call (an error message after a failed one). */
+int64_t pf_app_stash_length(void);
+
 /* Copies up to CAP bytes of the text kept by the last call into BUF. */
 void pf_app_stash_copy(void *buf, size_t cap);
 
@@ -26,3 +29,12 @@ int64_t pf_app_applescript(const void *source, size_t len);
 /* On-screen windows of the app named QUERY (or whose pid is QUERY), front to back, one per line
  * as "x y w h" in points from the top left of the main display. Returns the text's length. */
 int64_t pf_app_window_bounds(const void *query, size_t len);
+
+/* Keychain generic passwords (login keychain), identified by SERVICE and ACCOUNT (UTF-8). All
+ * return -1 for "no such item" and -2 for any other failure, with the system's message kept as
+ * text. pf_app_secret_get returns the value's length (>= 0, text kept); pf_app_secret_set adds or
+ * replaces an item and returns 0; pf_app_secret_delete returns 0 if it deleted one. */
+int64_t pf_app_secret_get(const void *service, size_t slen, const void *account, size_t alen);
+int64_t pf_app_secret_set(const void *service, size_t slen, const void *account, size_t alen,
+                          const void *value, size_t vlen);
+int64_t pf_app_secret_delete(const void *service, size_t slen, const void *account, size_t alen);

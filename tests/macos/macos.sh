@@ -42,6 +42,17 @@ expect '(guard (c [else #t]) (run-applescript "this is not applescript") #f)' '#
 expect '(app-window-bounds "No Such App pf")' '()'
 expect '(let ([w (app-window-bounds "Finder")]) (andmap (lambda (b) (and (= 4 (length b)) (andmap integer? b))) w))' '#t'
 
+# Keychain: a throwaway service, removed afterwards even when a check fails
+svc="profane-test-$$"
+cleanup_secret() { "$client" --socket "$sock" --eval "(secret-delete! \"$svc\" \"acct\")" >/dev/null 2>&1 || true; }
+trap 'cleanup_secret; kill $pid 2>/dev/null || true; rm -rf "$dir"' EXIT
+expect "(secret-get \"$svc\" \"acct\")" '#f'
+expect "(secret-set! \"$svc\" \"acct\" \"s3cr3t ✓\")" ''
+expect "(secret-get \"$svc\" \"acct\")" '"s3cr3t ✓"'
+expect "(begin (secret-set! \"$svc\" \"acct\" \"changed\") (secret-get \"$svc\" \"acct\"))" '"changed"'
+expect "(secret-get \"$svc\" \"other\")" '#f'
+expect "(let* ([a (secret-delete! \"$svc\" \"acct\")] [b (secret-delete! \"$svc\" \"acct\")] [c (secret-get \"$svc\" \"acct\")]) (list a b c))" '(#t #f #f)'
+
 # URLs that are not URLs are refused (nothing is opened)
 expect '(open-url "not a url")' '#f'
 expect '(open-url "")' '#f'
