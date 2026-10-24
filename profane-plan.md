@@ -422,6 +422,14 @@ the renderer tags the frame answering each event and records when it was submitt
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
   minibuffer reads input in this window (below).
+- **Canvas windows** (M2, after item 7). `pf_window_set_canvas` (through `pf_frame_set_window_canvas`) makes a window draw a canvas
+  in its body instead of text, on the base layer from the body's top-left, so it sits under native views and the
+  overlay; no fringes or cursor, mode line kept. A canvas change redraws just that window. Hit testing looks at
+  pop-ups first, then canvas windows (`pf_frame_hit_test_at` also returns canvas-local coordinates, which
+  `canvas-click!` now uses). Scheme: `(set-window-canvas! w canvas)`, `(window-canvas w)`; the canvas is sized to
+  the body before each frame (a `define-canvas` redraws on change); `delete-canvas!` detaches it. Ops are not
+  clipped to the body yet, so draw inside w x h. Inline canvases stay deferred (they need display-engine and layout
+  support for reserved space in a line).
 - **Native-view windows** (M2 item 7). `pf_window_set_native(kind)` (through `pf_frame_set_window_native`) makes a window leave
   its body (everything but the mode line and divider) empty on the base layer: no text, fringes or cursor. The frame
   reports native windows to the shell as placements (`pf_frame_native_get`: window tag, kind, body rect in frame

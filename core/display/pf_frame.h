@@ -93,6 +93,14 @@ const pf_display *pf_frame_redisplay_overlay(pf_frame *f);
 /* The topmost pop-up region at (X, Y): its region id (and CANVAS, its canvas, CURSOR its
  * cursor shape), or -1 when the point is over no region. */
 int64_t pf_frame_hit_test(const pf_frame *f, float x, float y, pf_canvas **canvas, int *cursor);
+/* Like pf_frame_hit_test, also looking at the canvas windows below the pop-ups; LX and LY (may
+ * be NULL) get the point in the canvas's own coordinates. */
+int64_t pf_frame_hit_test_at(const pf_frame *f, float x, float y, pf_canvas **canvas, int *cursor,
+                             float *lx, float *ly);
+/* Makes window W a canvas window showing C (NULL: a text window). */
+int pf_frame_set_window_canvas(pf_frame *f, pf_window *w, pf_canvas *c);
+/* Detaches C from every window showing it. */
+void pf_frame_detach_canvas(pf_frame *f, pf_canvas *c);
 /* Text size in face FACE, as pop-ups draw it. */
 void pf_frame_text_extent(pf_frame *f, const uint32_t *cps, size_t n, uint32_t face, float *width,
                           float *height);

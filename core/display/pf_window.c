@@ -56,6 +56,9 @@ struct pf_window {
     pf_strip mode_line;
     float mode_line_h;
     uint32_t native; /* native view kind, 0: text */
+    pf_canvas *canvas; /* canvas window: drawn instead of text */
+    uint64_t shown_canvas_version;
+    const pf_canvas *shown_canvas;
     float hscroll, min_hscroll; /* points the text is scrolled left; scroll-left's minimum */
 };
 
@@ -683,6 +686,18 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
     }
 }
 
+void pf_window_set_canvas(pf_window *w, pf_canvas *canvas) {
+    if (w->canvas != canvas) {
+        w->canvas = canvas;
+        w->cursor_valid = 0;
+        w->dirty = 1;
+    }
+}
+
+pf_canvas *pf_window_canvas(const pf_window *w) {
+    return w->canvas;
+}
+
 void pf_window_set_native(pf_window *w, uint32_t kind) {
     if (w->native != kind) {
         w->native = kind;
@@ -715,7 +730,8 @@ const pf_display *pf_window_redisplay(pf_window *w) {
     }
     uint64_t faces = pf_face_generation();
     uint64_t props = text ? pf_props_generation(pf_text_props(text)) : 0;
-    if (!w->dirty && s == w->shown && point == w->shown_point && w->top == w->shown_top &&
+    uint64_t cvs_version = w->canvas ? pf_canvas_version(w->canvas) : 0;
+    if (!w->dirty && w->canvas == w->shown_canvas && cvs_version == w->shown_canvas_version && s == w->shown && point == w->shown_point && w->top == w->shown_top &&
         faces == w->shown_faces && props == w->shown_props) {
         return NULL;
     }
@@ -726,6 +742,8 @@ const pf_display *pf_window_redisplay(pf_window *w) {
     w->shown_top = w->top;
     w->shown_faces = faces;
     w->shown_props = props;
+    w->shown_canvas = w->canvas;
+    w->shown_canvas_version = cvs_version;
 
     uint32_t bg = role_color(PF_ROLE_DEFAULT, PF_FACE_HAS_BG, 0xFFFFFFFF);
     uint32_t fg = role_color(PF_ROLE_DEFAULT, PF_FACE_HAS_FG, 0x000000FF);
@@ -734,12 +752,15 @@ const pf_display *pf_window_redisplay(pf_window *w) {
     pf_layout_begin_frame(w->cache);
     float body_h = w->height - w->mode_line_h;
     uint32_t fringe = role_color(PF_ROLE_FRINGE, PF_FACE_HAS_BG, 0);
-    if (!w->native) {
+    if (!w->native && !w->canvas) {
         pf_display_rect(d, 0, 0, w->fringe_left, body_h, fringe);
         pf_display_rect(d, w->width - w->divider - w->fringe_right, 0, w->fringe_right, body_h,
                         fringe);
     }
-    if (s && !w->native) {
+    if (w->canvas) {
+        pf_canvas_env env = {w->cache, w->fonts, default_font_of(w)};
+        pf_canvas_render(w->canvas, d, &env, 0, 0);
+    } else if (s && !w->native) {
         draw_text(w, d, text, s, point, bg, fg);
     }
 

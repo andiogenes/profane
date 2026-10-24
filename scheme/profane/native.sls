@@ -22,6 +22,7 @@
           %cvs-fill-round-rect %cvs-stroke-round-rect %cvs-shadow %cvs-line %cvs-text %cvs-add-hit
           %cvs-hit-test %cvs-text-width %cvs-text-height %cvs-popup-show %cvs-popup-hide
           %cvs-popup-shown %cvs-frame-hit %cvs-hit-canvas %cvs-hit-cursor %cvs-overlay-redisplay
+          %cvs-set-window %cvs-window-body %cvs-hit-x %cvs-hit-y
           %input-set-prefix-pending
           %face-define %face-role-set %buf-put-prop %buf-get-prop %display-set-line-spacing)
   (import (chezscheme))
@@ -123,6 +124,10 @@
   (define-native %cvs-hit-canvas "pf_cvs_hit_canvas" () unsigned-32)
   (define-native %cvs-hit-cursor "pf_cvs_hit_cursor" () int)
   (define-native %cvs-overlay-redisplay "pf_cvs_overlay_redisplay" (unsigned-32) integer-64)
+  (define-native %cvs-set-window "pf_cvs_set_window" (unsigned-32 unsigned-32 unsigned-32) int)
+  (define-native %cvs-window-body "pf_cvs_window_body" (unsigned-32 int) double)
+  (define-native %cvs-hit-x "pf_cvs_hit_x" () double)
+  (define-native %cvs-hit-y "pf_cvs_hit_y" () double)
   (define-native %input-set-prefix-pending "pf_input_set_prefix_pending" (boolean) void)
   (define-native %face-define "pf_face_define"
     (unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32) void)

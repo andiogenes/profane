@@ -14,8 +14,14 @@
 ;;; Coordinates are points from the canvas's top-left; pop-ups are placed in frame
 ;;; coordinates. Hit regions answer canvas-click! with the handler of the topmost region.
 ;;;
-;;; Not yet (plan §5.1): paths and bezier curves, images, clip and transform, canvas windows
-;;; and inline canvases; mouse events reach canvas-click! once the shell routes the mouse.
+;;; Canvas windows: (set-window-canvas! w canvas) makes the body of window W (all but its mode
+;;; line) a drawing surface on the base layer, in place of text; the canvas is sized to the
+;;; body before each frame (a define-canvas redraws when that changes). The window keeps its
+;;; buffer for its mode line and its place in the window tree.
+;;;
+;;; Not yet (plan §5.1): paths and bezier curves, images, clip and transform (ops are not
+;;; clipped to a canvas window's body, so draw inside w x h), inline canvases, and mouse
+;;; events: they reach canvas-click! once the shell routes the mouse.
 
 (library (profane canvas)
   (export make-canvas delete-canvas! canvas? canvas-width canvas-height set-canvas-size!
@@ -23,6 +29,7 @@
           fill-rect! fill-rounded-rect! stroke-rounded-rect! draw-shadow! draw-line! draw-text!
           add-hit-region! text-extent
           show-popup! hide-popup! popup-shown? draw-popup-background!
+          set-window-canvas! window-canvas
           canvas-click! canvas-at)
   (import (chezscheme) (profane native) (profane window) (profane theme) (profane display)
           (profane var) (profane hook))
@@ -53,8 +60,12 @@
       (unless f (error 'show-popup! "there is no frame"))
       (%frame-handle f)))
 
+  (define window-canvases (make-weak-eq-hashtable)) ; window -> canvas
+
   (define (delete-canvas! c)
     (hide-popup! c)
+    (let-values ([(ws cs) (hashtable-entries window-canvases)])
+      (vector-for-each (lambda (w k) (when (eq? k c) (set-window-canvas! w #f))) ws cs))
     (hashtable-delete! live (canvas-handle c))
     (%cvs-free (canvas-handle c))
     (void))
@@ -144,15 +155,15 @@
     (and (>= (%cvs-frame-hit (frame-handle) (fl x) (fl y)) 0)
          (hashtable-ref live (%cvs-hit-canvas) #f)))
 
-  ;; Calls the handler of the topmost region at frame point (X, Y) with the point in the
-  ;; canvas's coordinates; returns #t if there was one.
+  ;; Calls the handler of the topmost region (of a pop-up, else of a canvas window) at frame
+  ;; point (X, Y) with the point in the canvas's coordinates; returns #t if there was one.
   (define (canvas-click! x y)
     (let ([id (%cvs-frame-hit (frame-handle) (fl x) (fl y))])
       (and (>= id 0)
            (let* ([c (hashtable-ref live (%cvs-hit-canvas) #f)]
                   [h (and c (if (zero? id) (canvas-click c) (let ([r (assv id (canvas-regions c))]) (and r (cadr r)))))]
-                  [o (and c (canvas-origin c))])
-             (and h o (begin (h (- x (car o)) (- y (cdr o))) #t))))))
+                  [lx (%cvs-hit-x)] [ly (%cvs-hit-y)])
+             (and h (begin (h lx ly) #t))))))
 
   ;; ---- retained drawing ----
 
@@ -182,8 +193,30 @@
     (let-values ([(keys vals) (hashtable-entries live)])
       (vector-for-each proc vals)))
 
-  (define (register-canvas-drawer!) (add-hook! 'pre-redisplay-hook (lambda (f) (redraw-dirty!))))
+  (define (register-canvas-drawer!) (add-hook! 'pre-redisplay-hook (lambda (f) (fit-canvas-windows!) (redraw-dirty!))))
   (define installed (begin (register-canvas-drawer!) #t))
+
+  ;; ---- canvas windows ----
+
+  (define (window-canvas w) (hashtable-ref window-canvases w #f))
+
+  ;; CANVAS #f makes W a text window again.
+  (define (set-window-canvas! w canvas)
+    (%cvs-set-window (%frame-handle (window-frame w)) (%window-handle w)
+                     (if canvas (canvas-handle canvas) 0))
+    (if canvas (hashtable-set! window-canvases w canvas) (hashtable-delete! window-canvases w))
+    (when canvas (fit-to-window! w canvas))
+    (void))
+
+  (define (fit-to-window! w c)
+    (let ([bw (%cvs-window-body (%window-handle w) 2)] [bh (%cvs-window-body (%window-handle w) 3)])
+      (unless (and (= bw (%cvs-width (canvas-handle c))) (= bh (%cvs-height (canvas-handle c))))
+        (set-canvas-size! c bw bh)
+        (if (canvas-draw c) (invalidate! c) (void)))))
+
+  (define (fit-canvas-windows!)
+    (let-values ([(ws cs) (hashtable-entries window-canvases)])
+      (vector-for-each (lambda (w c) (when (window-live? w) (fit-to-window! w c))) ws cs)))
 
   ;; ---- pop-up surfaces ----
 

@@ -3,6 +3,7 @@
 
 #include <math.h>
 
+#include "pf_buffer_ffi.h"
 #include "pf_canvas.h"
 #include "pf_face.h"
 #include "pf_frame.h"
@@ -136,6 +137,52 @@ int main(void) {
     d = pf_frame_redisplay_overlay(f);
     PF_CHECK(d != NULL && pf_display_count(d) == 0); /* hiding redraws the overlay, now empty */
     pf_display_release(d);
+
+    /* A canvas window: the body shows the canvas instead of the text, hits go through it. */
+    pf_face bgf = {.flags = PF_FACE_HAS_BG | PF_FACE_HAS_FG, .fg = 0x112233FFu, .bg = 0xFFFFFFFFu};
+    pf_face_set(1, &bgf);
+    pf_handle buf = pf_buf_new("text", 4);
+    uint32_t marker = pf_buf_marker_new(buf, 0, 0);
+    pf_window *win = pf_frame_add_window(f, 5);
+    pf_window_set_buffer(win, buf, marker);
+    pf_frame_place_window(f, win, 10, 20, 200, 100, 1);
+    pf_canvas *cw = pf_canvas_new(200, 100);
+    pf_canvas_fill_rect(cw, 5, 5, 50, 10, 0x00FF00FFu);
+    pf_canvas_add_hit(cw, 0, 0, 50, 50, 3, 1);
+    d = pf_frame_redisplay(f);
+    size_t glyphs_before = count_kind(d, PF_DISPLAY_GLYPH);
+    PF_CHECK(glyphs_before >= 4); /* the text (and the glyph redrawn under the cursor) */
+    pf_display_release(d);
+    PF_CHECK(pf_frame_set_window_canvas(f, win, cw) == 0 && pf_window_canvas(win) == cw);
+    d = pf_frame_redisplay(f);
+    PF_CHECK(d != NULL && count_kind(d, PF_DISPLAY_GLYPH) == 0);
+    int found = 0;
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        const pf_display_item *q = &pf_display_items(d)[i];
+        found |= q->kind == PF_DISPLAY_RECT && q->color == 0x00FF00FFu && NEAR(q->x, 15) &&
+                 NEAR(q->y, 25);
+    }
+    PF_CHECK(found); /* moved to the window's place */
+    pf_display_release(d);
+    PF_CHECK(pf_frame_redisplay(f) == NULL);
+    pf_canvas_fill_rect(cw, 0, 0, 1, 1, 0x000000FFu);
+    d = pf_frame_redisplay(f);
+    PF_CHECK(d != NULL); /* a canvas change redraws the window */
+    pf_display_release(d);
+    float lx, ly;
+    pf_canvas *got = NULL;
+    int cur = 0;
+    PF_CHECK(pf_frame_hit_test_at(f, 10 + 20, 20 + 30, &got, &cur, &lx, &ly) == 3 && got == cw);
+    PF_CHECK(cur == 1 && NEAR(lx, 20) && NEAR(ly, 30));
+    PF_CHECK(pf_frame_hit_test_at(f, 10 + 60, 20 + 30, &got, &cur, &lx, &ly) == -1);
+    pf_frame_detach_canvas(f, cw);
+    PF_CHECK(pf_window_canvas(win) == NULL);
+    d = pf_frame_redisplay(f);
+    PF_CHECK(d != NULL && count_kind(d, PF_DISPLAY_GLYPH) == glyphs_before);
+    pf_display_release(d);
+    pf_canvas_free(cw);
+    pf_frame_remove_window(f, win);
+    pf_buf_free(buf);
 
     pf_canvas_free(c);
     pf_frame_free(f);

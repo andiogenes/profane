@@ -422,7 +422,8 @@ const pf_display *pf_frame_redisplay_overlay(pf_frame *f) {
     return pf_display_finish(d);
 }
 
-int64_t pf_frame_hit_test(const pf_frame *f, float x, float y, pf_canvas **canvas, int *cursor) {
+int64_t pf_frame_hit_test_at(const pf_frame *f, float x, float y, pf_canvas **canvas, int *cursor,
+                             float *lx, float *ly) {
     for (size_t i = f->npopups; i-- > 0;) {
         const popup *p = &f->popups[i];
         int64_t id = pf_canvas_hit_test(p->canvas, x - p->x, y - p->y, cursor);
@@ -430,8 +431,63 @@ int64_t pf_frame_hit_test(const pf_frame *f, float x, float y, pf_canvas **canva
             if (canvas) {
                 *canvas = p->canvas;
             }
+            if (lx) {
+                *lx = x - p->x;
+            }
+            if (ly) {
+                *ly = y - p->y;
+            }
+            return id;
+        }
+    }
+    for (size_t i = 0; i < f->count; i++) {
+        const entry *e = &f->entries[i];
+        pf_canvas *c = pf_window_canvas(e->w);
+        if (!c || !e->shown) {
+            continue;
+        }
+        float r[4];
+        pf_window_body_rect(e->w, r);
+        float cx = x - e->x - r[0], cy = y - e->y - r[1];
+        if (cx < 0 || cy < 0 || cx >= r[2] || cy >= r[3]) {
+            continue;
+        }
+        int64_t id = pf_canvas_hit_test(c, cx, cy, cursor);
+        if (id >= 0) {
+            if (canvas) {
+                *canvas = c;
+            }
+            if (lx) {
+                *lx = cx;
+            }
+            if (ly) {
+                *ly = cy;
+            }
             return id;
         }
     }
     return -1;
+}
+
+int64_t pf_frame_hit_test(const pf_frame *f, float x, float y, pf_canvas **canvas, int *cursor) {
+    return pf_frame_hit_test_at(f, x, y, canvas, cursor, NULL, NULL);
+}
+
+int pf_frame_set_window_canvas(pf_frame *f, pf_window *w, pf_canvas *c) {
+    entry *e = find(f, w);
+    if (!e) {
+        return -1;
+    }
+    pf_window_set_canvas(w, c);
+    f->dirty = 1;
+    return 0;
+}
+
+void pf_frame_detach_canvas(pf_frame *f, pf_canvas *c) {
+    for (size_t i = 0; i < f->count; i++) {
+        if (pf_window_canvas(f->entries[i].w) == c) {
+            pf_window_set_canvas(f->entries[i].w, NULL);
+            f->dirty = 1;
+        }
+    }
 }

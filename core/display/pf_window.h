@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "pf_canvas.h"
 #include "pf_display.h"
 #include "pf_handles.h"
 #include "pf_layout.h"
@@ -98,6 +99,13 @@ void pf_window_set_native(pf_window *w, uint32_t kind);
 uint32_t pf_window_native(const pf_window *w);
 /* The body's rect in window coordinates (points). */
 void pf_window_body_rect(const pf_window *w, float rect[4]);
+
+/* Canvas window kind: the body (see pf_window_body_rect) shows CANVAS, drawn on the base layer
+ * from (0, 0) at the body's top-left, instead of text; NULL makes it a text window again. Not
+ * owned: detach it before freeing the canvas. Ops outside the body are not clipped yet, so
+ * size the canvas to the body. A canvas window draws no fringes or cursor. */
+void pf_window_set_canvas(pf_window *w, pf_canvas *canvas);
+pf_canvas *pf_window_canvas(const pf_window *w);
 
 /* Forces the next redisplay to render. */
 void pf_window_invalidate(pf_window *w);

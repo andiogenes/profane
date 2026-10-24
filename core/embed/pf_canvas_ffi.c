@@ -57,6 +57,7 @@ int pf_cvs_free(pf_handle canvas) {
     pf_frame *f = frame_of(pf_frm_selected());
     if (f) {
         pf_frame_popup_hide(f, c);
+        pf_frame_detach_canvas(f, c);
     }
     pf_canvas_free(c);
     return 0;
@@ -191,6 +192,7 @@ int pf_cvs_popup_shown(pf_handle frame, pf_handle canvas) {
 
 static pf_canvas *hit_canvas;
 static int hit_cursor;
+static float hit_lx, hit_ly;
 
 int64_t pf_cvs_frame_hit(pf_handle frame, float x, float y) {
     pf_frame *f = frame_of(frame);
@@ -199,11 +201,40 @@ int64_t pf_cvs_frame_hit(pf_handle frame, float x, float y) {
     }
     hit_canvas = NULL;
     hit_cursor = 0;
-    return pf_frame_hit_test(f, x, y, &hit_canvas, &hit_cursor);
+    hit_lx = hit_ly = 0;
+    return pf_frame_hit_test_at(f, x, y, &hit_canvas, &hit_cursor, &hit_lx, &hit_ly);
 }
 
 pf_handle pf_cvs_hit_canvas(void) {
     return hit_canvas ? pf_handle_of(hit_canvas, PF_HANDLE_CANVAS) : 0;
+}
+
+double pf_cvs_hit_x(void) {
+    return hit_lx;
+}
+
+double pf_cvs_hit_y(void) {
+    return hit_ly;
+}
+
+int pf_cvs_set_window(pf_handle frame, pf_handle win, pf_handle canvas) {
+    pf_frame *f = frame_of(frame);
+    pf_window *w = pf_handle_get(win, PF_HANDLE_WINDOW);
+    pf_canvas *c = canvas ? canvas_of(canvas) : NULL;
+    if (!f || !w || (canvas && !c)) {
+        return INVALID;
+    }
+    return pf_frame_set_window_canvas(f, w, c);
+}
+
+double pf_cvs_window_body(pf_handle win, int field) {
+    pf_window *w = pf_handle_get(win, PF_HANDLE_WINDOW);
+    float r[4];
+    if (!w || field < 0 || field > 3) {
+        return INVALID;
+    }
+    pf_window_body_rect(w, r);
+    return r[field];
 }
 
 int pf_cvs_hit_cursor(void) {

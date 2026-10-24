@@ -42,11 +42,20 @@ double pf_cvs_text_height(pf_handle frame, uint32_t face);
 int pf_cvs_popup_show(pf_handle frame, pf_handle canvas, float x, float y);
 int pf_cvs_popup_hide(pf_handle frame, pf_handle canvas);
 int pf_cvs_popup_shown(pf_handle frame, pf_handle canvas);
-/* Topmost pop-up region at (X, Y) in frame coordinates: its id, or -1. The canvas it is in and
+/* Topmost pop-up or canvas-window region at (X, Y) in frame coordinates: its id, or -1. The canvas it is in and
  * its cursor shape are then pf_cvs_hit_canvas and pf_cvs_hit_cursor. */
 int64_t pf_cvs_frame_hit(pf_handle frame, float x, float y);
 pf_handle pf_cvs_hit_canvas(void);
 int pf_cvs_hit_cursor(void);
+/* ---- canvas windows (the body of a window shows a canvas, on the base layer) ---- */
+/* CANVAS 0 makes WIN a text window again. */
+int pf_cvs_set_window(pf_handle frame, pf_handle win, pf_handle canvas);
+/* Field 0-3 of WIN's body rect (x, y, width, height; window coordinates), as for pf_frm_native. */
+double pf_cvs_window_body(pf_handle win, int field);
+/* Where the last pf_cvs_frame_hit landed, in the canvas's own coordinates. */
+double pf_cvs_hit_x(void);
+double pf_cvs_hit_y(void);
+
 /* Renders the overlay as the shell would; returns its item count, -1 if nothing changed. */
 int64_t pf_cvs_overlay_redisplay(pf_handle frame);
 
