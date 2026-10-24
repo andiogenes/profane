@@ -283,6 +283,23 @@ void pf_frame_set_tab_bar(pf_frame *f, const uint32_t *cps, size_t n, const pf_s
     }
 }
 
+void pf_frame_tick(pf_frame *f, double now) {
+    for (size_t i = 0; i < f->count; i++) {
+        if (f->entries[i].shown) {
+            pf_window_tick(f->entries[i].w, now);
+        }
+    }
+}
+
+int pf_frame_animating(const pf_frame *f) {
+    for (size_t i = 0; i < f->count; i++) {
+        if (f->entries[i].shown && pf_window_animating(f->entries[i].w)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 const pf_display *pf_frame_redisplay(pf_frame *f) {
     if (pf_face_generation() != f->style_generation) {
         /* Faces changed (theme, font, line spacing): the default font's metrics may have. */

@@ -4,6 +4,7 @@
 #include <math.h>
 #include <string.h>
 
+#include "pf_anim.h"
 #include "pf_buffer_ffi.h"
 #include "pf_face.h"
 #include "pf_props.h"
@@ -521,6 +522,15 @@ static const pf_display_item *find_glyph(const pf_display *d, uint32_t ch) {
     return NULL;
 }
 
+static size_t count_glyph(const pf_display *d, uint32_t ch) {
+    size_t n = 0;
+    const pf_display_item *it = pf_display_items(d);
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        n += it[i].kind == PF_DISPLAY_GLYPH && it[i].u.glyph.glyph == ch;
+    }
+    return n;
+}
+
 static void test_soft_wrap(void) {
     pf_layout_cache *cache = pf_layout_cache_new(fake, 256, 8);
     pf_window_style s = style();
@@ -654,6 +664,80 @@ static void test_line_marks(void) {
     pf_layout_cache_free(cache);
 }
 
+static void test_cursor_animation(void) {
+    pf_layout_cache *cache = pf_layout_cache_new(fake, 256, 8);
+    pf_window_style s = style();
+    pf_window *w = pf_window_new(cache, &s);
+    pf_window_set_size(w, 105, 120, 1);
+    const char *text = "0123456789\nabcdefghij\nklmnopqrst";
+    pf_handle buf = pf_buf_new(text, strlen(text));
+    uint32_t point = pf_buf_marker_new(buf, 0, 0);
+    pf_window_set_buffer(w, buf, point);
+
+    /* Off: the box is where point is at once. */
+    const pf_display *d = frame_at(w, buf, point, 0);
+    pf_display_release(d);
+    d = frame_at(w, buf, point, 15);
+    PF_CHECK(find_rect(d, 0xFF0000FF, 0) && NEAR(find_rect(d, 0xFF0000FF, 0)->y, 20));
+    pf_display_release(d);
+    PF_CHECK(!pf_window_animating(w));
+
+    pf_motion_set_level(PF_MOTION_SUBTLE);
+    d = frame_at(w, buf, point, 0);
+    pf_display_release(d);
+
+    /* Typing and short moves along a row snap: the cursor never trails the text. */
+    d = frame_at(w, buf, point, 2);
+    PF_CHECK(NEAR(find_rect(d, 0xFF0000FF, 0)->x, 25) && !pf_window_animating(w));
+    pf_display_release(d);
+
+    /* A jump to another row glides: the first frame is still near the start, ticks bring it in. */
+    d = frame_at(w, buf, point, 25); /* row 2, column 3 */
+    const pf_display_item *box = find_rect(d, 0xFF0000FF, 0);
+    PF_CHECK(box && NEAR(box->x, 25) && NEAR(box->y, 0) && pf_window_animating(w));
+    PF_CHECK(count_glyph(d, 'n') == 1); /* the character is not redrawn over the box yet */
+    pf_display_release(d);
+    float prev_y = 0;
+    double now = 100;
+    int frames = 0;
+    while (pf_window_tick(w, now += 1.0 / 120) && frames++ < 200) {
+        d = pf_window_redisplay(w);
+        PF_CHECK(d != NULL);
+        box = find_rect(d, 0xFF0000FF, 0);
+        PF_CHECK(box->y >= prev_y - 1e-3f && box->y <= 40.0f + 1e-3f); /* monotonic, no overshoot */
+        prev_y = box->y;
+        pf_display_release(d);
+    }
+    PF_CHECK(frames > 3 && frames < 40 && !pf_window_animating(w));
+    d = pf_window_redisplay(w);
+    box = find_rect(d, 0xFF0000FF, 0);
+    PF_CHECK(box && NEAR(box->x, 35) && NEAR(box->y, 40)); /* arrived */
+    PF_CHECK(count_glyph(d, 'n') == 2); /* drawn again in the background color over the box */
+    pf_display_release(d);
+
+    /* A late tick (the main thread was busy) drops the animation: the cursor is there. */
+    d = frame_at(w, buf, point, 5);
+    pf_display_release(d);
+    PF_CHECK(pf_window_animating(w));
+    pf_window_tick(w, 500); /* first tick of an animation starts it */
+    pf_window_tick(w, 501); /* a second later */
+    PF_CHECK(!pf_window_animating(w));
+    d = pf_window_redisplay(w);
+    PF_CHECK(NEAR(find_rect(d, 0xFF0000FF, 0)->y, 0));
+    pf_display_release(d);
+
+    /* Reduce Motion: off wins over the setting. */
+    pf_motion_set_reduced(1);
+    d = frame_at(w, buf, point, 25);
+    PF_CHECK(NEAR(find_rect(d, 0xFF0000FF, 0)->y, 40) && !pf_window_animating(w));
+    pf_display_release(d);
+    pf_motion_set_reduced(0);
+    pf_motion_set_level(PF_MOTION_OFF);
+
+    pf_window_free(w);
+    pf_layout_cache_free(cache);
+}
+
 int main(void) {
     test_terminal_window();
     test_layout();
@@ -661,6 +745,7 @@ int main(void) {
     test_editing_modes();
     test_soft_wrap();
     test_line_marks();
+    test_cursor_animation();
     test_faces();
     return PF_TEST_RESULT();
 }

@@ -161,6 +161,13 @@ size_t pf_window_move_rows(pf_window *w, size_t pos, long delta, float goal_x);
  * after the last line at its bottom). N == 0 clears them. Bars take the git roles' colors. */
 void pf_window_set_line_marks(pf_window *w, const uint32_t *triples, size_t n);
 
+/* Animation (pf_anim.h): the cursor box glides to where point moved instead of jumping. TICK
+ * advances it to time NOW (seconds, any epoch) and returns 1 while it is still moving; the shell
+ * ticks before each redisplay and keeps redisplaying while this returns 1. A tick that comes
+ * more than 50 ms after the last drops the animation (the cursor arrives at once). */
+int pf_window_tick(pf_window *w, double now);
+int pf_window_animating(const pf_window *w);
+
 /* Forces the next redisplay to render. */
 void pf_window_invalidate(pf_window *w);
 

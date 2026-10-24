@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "pf_anim.h"
 #include "pf_boxdraw.h"
 #include "pf_face.h"
 #include "pf_props.h"
@@ -67,6 +68,13 @@ struct pf_window {
     uint32_t term_faces[4];
     uint64_t shown_term_version;
     const pf_term *shown_term;
+    /* The animated cursor: where the box is drawn (springs toward the cursor's cell), and what the
+     * target was relative to. cur_time 0: the animation starts at the next tick. */
+    pf_spring cur_x, cur_y;
+    int cur_init;
+    size_t cur_top;
+    float cur_key[3]; /* hscroll, width, height at the last frame */
+    double cur_time;
     uint32_t *marks;            /* fringe marks: line, count, kind */
     size_t nmarks;
     int wrap;                   /* PF_WRAP_* */
@@ -789,6 +797,61 @@ static void auto_hscroll(pf_window *w, float cx, float cw, float width) {
 static void draw_line_marks(pf_window *w, pf_display *d, size_t line, size_t lines, float top,
                             int first_row, int last_row);
 
+enum { CURSOR_OMEGA = 45 }; /* about 100 ms to settle */
+
+/* Where to draw the cursor box whose cell is at X, Y: springs toward it, except that moves that
+ * typing and short motion make (a couple of cells along a row) and jumps the scroll or a resize
+ * cause just snap, so the cursor never trails the text it is editing. */
+static void cursor_animate(pf_window *w, float x, float y, float *dx, float *dy) {
+    float cell = w->style.cell_width;
+    float key[3] = {w->hscroll, w->width, w->height};
+    int same = w->cur_init && w->cur_top == w->top && memcmp(key, w->cur_key, sizeof key) == 0;
+    if (same && (x != w->cur_x.target || y != w->cur_y.target)) {
+        if (y == w->cur_y.target && fabsf(x - w->cur_x.target) <= 2 * cell + 0.5f) {
+            same = 0;
+        } else {
+            w->cur_x.target = x;
+            w->cur_y.target = y;
+            w->cur_time = 0;
+        }
+    }
+    if (!same) {
+        pf_spring_snap(&w->cur_x, x);
+        pf_spring_snap(&w->cur_y, y);
+    }
+    w->cur_init = 1;
+    w->cur_top = w->top;
+    memcpy(w->cur_key, key, sizeof key);
+    *dx = w->cur_x.value;
+    *dy = w->cur_y.value;
+}
+
+int pf_window_animating(const pf_window *w) {
+    return w->cur_init && (!pf_spring_settled(&w->cur_x, 0.25f) || !pf_spring_settled(&w->cur_y, 0.25f));
+}
+
+int pf_window_tick(pf_window *w, double now) {
+    if (!pf_window_animating(w)) {
+        return 0;
+    }
+    double dt = w->cur_time == 0 ? 1.0 / 120 : now - w->cur_time;
+    w->cur_time = now;
+    w->dirty = 1;
+    if (dt > 0.05 || pf_motion_level() == 0) {
+        /* A late frame (the main thread was busy) or motion switched off: arrive now. */
+        pf_spring_snap(&w->cur_x, w->cur_x.target);
+        pf_spring_snap(&w->cur_y, w->cur_y.target);
+        return 0;
+    }
+    pf_spring_step(&w->cur_x, CURSOR_OMEGA, (float)dt);
+    pf_spring_step(&w->cur_y, CURSOR_OMEGA, (float)dt);
+    if (!pf_window_animating(w)) {
+        pf_spring_snap(&w->cur_x, w->cur_x.target);
+        pf_spring_snap(&w->cur_y, w->cur_y.target);
+    }
+    return pf_window_animating(w);
+}
+
 /* The buffer's visible lines: faces, hl-line, brackets, line numbers, text, cursor, and marks in
  * the fringes for lines continuing past the edges. */
 static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_snapshot *s,
@@ -929,10 +992,17 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
             int shown = cx >= left - 0.5f && cx + cw <= right + 0.5f;
             uint32_t cc = role_color(PF_ROLE_CURSOR, PF_FACE_HAS_BG, fg);
             float lh = st->line_height, px = 1.0f / w->scale;
+            float ax = cx, ay = top; /* where the box is drawn */
+            if (shown && w->cursor_kind == PF_CURSOR_BOX && pf_motion_level() > 0) {
+                cursor_animate(w, cx, top, &ax, &ay);
+            } else {
+                w->cur_init = 0;
+            }
             if (shown && w->cursor_kind == PF_CURSOR_BOX) {
-                /* Filled box; the character under it is redrawn in the background color. */
-                pf_display_rect(d, cx, top, cw, lh, cc);
-                if (k < lay->nchars) {
+                /* Filled box; the character under it is redrawn in the background color once the
+                 * box has arrived. */
+                pf_display_rect(d, ax, ay, cw, lh, cc);
+                if (k < lay->nchars && ax == cx && ay == top) {
                     emit_glyphs(d, lay, xs, baseline, left, right, bg, NULL, k, k + 1);
                 }
             } else if (shown && w->cursor_kind == PF_CURSOR_HOLLOW) {

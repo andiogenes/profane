@@ -1,5 +1,7 @@
 #include "pf_window_ffi.h"
 
+#include "pf_anim.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -358,6 +360,11 @@ int pf_win_set_line_marks(pf_handle win, const uint32_t *triples, size_t n) {
     }
     pf_window_set_line_marks(w, triples, n);
     return 0;
+}
+
+int pf_motion_set_level_ffi(int level) {
+    pf_motion_set_level(level);
+    return pf_motion_level();
 }
 
 int pf_frm_cursor_at(pf_handle frame, float x, float y) {

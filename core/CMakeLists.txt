@@ -2,6 +2,7 @@
 # be built as a dylib for Scheme tests run by the standalone `scheme` binary.
 set(PF_NATIVE_SOURCES
   async/pf_async.c
+  display/pf_anim.c
   display/pf_boxdraw.c
   display/pf_canvas.c
   display/pf_face.c

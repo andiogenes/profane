@@ -60,6 +60,11 @@ float pf_frame_strip_height(const pf_frame *f, uint32_t face, int box);
  * did. */
 const pf_display *pf_frame_redisplay(pf_frame *f);
 
+/* Animations (pf_window_tick) of every window: call TICK with the current time before
+ * pf_frame_redisplay; ANIMATING says whether another redisplay is needed soon. */
+void pf_frame_tick(pf_frame *f, double now);
+int pf_frame_animating(const pf_frame *f);
+
 /* ---- native-view windows ----
  * A window of a native kind (pf_window_set_native, through the frame) leaves its body empty
  * on the base layer; the shell puts a platform view of that kind there, above the base layer

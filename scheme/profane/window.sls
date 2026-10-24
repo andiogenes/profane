@@ -918,6 +918,10 @@
               display-modes)
     (%win-set-option (window-handle w) wrap-option (if (window-minibuffer? w) 0 (wrap-mode-of w))))
 
+  ;; ui-motion: off (or #f), subtle, full (pf_anim.h). macOS Reduce Motion overrides it in C.
+  (define (apply-motion! v)
+    (%motion-set-level (case v [(full) 2] [(subtle) 1] [else 0])))
+
   (define (apply-options!)
     (for-each (lambda (f) (for-each apply-display-options! (frame-windows f)))
               (vector->list (hashtable-values frames))))
@@ -1125,6 +1129,8 @@ screen rows."
                        (for-each %relayout! (vector->list (hashtable-values frames))))))
                 '(ui-fringe-width ui-mode-line-style line-spacing))
       (add-var-watcher! 'global-hl-line-sticky-flag (lambda (name value where) (apply-options!)))
+      (add-var-watcher! 'ui-motion (lambda (name value where) (apply-motion! value)))
+      (apply-motion! (var-ref 'ui-motion))
       (add-var-watcher! 'truncate-lines (lambda (name value where) (apply-options!)))
       (add-var-watcher! 'word-wrap (lambda (name value where) (apply-options!)))
       #t))

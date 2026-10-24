@@ -953,7 +953,7 @@ terminal's mouse and focus handling, listening sockets, a process-level coding s
 ## 8l. Editing surface and motion (M4)
 
 M4 items, one branch each (`m4-<topic>`): 1 soft wrap, 2 fringe git marks, 3 motion system, 4 Git v1 (status, stage,
-diff, commit, push/pull), 5 ediff. Items 1 and 2 are done; the rest are not started.
+diff, commit, push/pull), 5 ediff. Items 1 and 2 are done; item 3 is started (its animated cursor is in, the rest is listed under it); 4 and 5 are not.
 
 **1. Soft wrap** (`m4-soft-wrap`).
 - `pf_window` has a wrap option (`PF_WINDOW_WRAP`: truncate, break at the last character that fits, break after
@@ -984,6 +984,25 @@ diff, commit, push/pull), 5 ediff. Items 1 and 2 are done; the rest are not star
   (FSEvents, §8k); marks are not drawn for untracked files or for a file whose repo is a worktree/submodule (untested).
 - Verified: `test_git` (real repo in /tmp), `test_line_marks`, `git-marks-test.ss`, a clean build and `--self-test`.
   Not verified on screen, and not measured against the key-to-pixel target on a large file.
+
+**3. Motion system** (`m4-motion`), part 1: the foundation and the animated cursor.
+- `core/display/pf_anim.*`: critically damped springs in closed form (any step is stable, no overshoot) and the
+  motion level: off / subtle / full from `ui-motion`, with macOS Reduce Motion (read in `ProfaneView`, re-read on
+  `NSWorkspaceAccessibilityDisplayOptionsDidChange`) forcing off. The level is off in C until Scheme applies
+  `ui-motion` at startup, so C tests see no animation unless they enable it.
+- Clock and loop: `pf_frame_tick(f, now)` before each `pf_frame_redisplay`; while `pf_frame_animating`, the view
+  queues one more redisplay about 1/120 s later as a plain main-queue block, so keys and the REPL run between
+  frames. A tick more than 50 ms after the last (the main thread was busy) drops the animation: it arrives at once.
+  Input is never delayed by animation; under load the animation is what is lost.
+- Animated cursor (subtle and up): the box glides to a new row or a far cell (omega 45, about 100 ms). Typing and
+  moves of up to two cells along a row snap, so the cursor never trails the text being edited; scrolling, resizing
+  and hscroll snap too. The character under the box is redrawn in the background color only once it has arrived.
+  The IME rect and `pf_window_cursor_rect` report the target. Hollow cursors do not animate.
+- Verified: `test_anim`, `test_cursor_animation` (monotonic, no overshoot, snapping rules, late tick, Reduce Motion).
+  Not verified on screen, nor for feel (omega, the 2-cell threshold) or latency with animation running.
+- Still to do in item 3: smooth scrolling needs a clip primitive in the display list and Metal renderer (a row
+  moving past the window edge would draw over the neighbor window), so it waits for that; window split/resize,
+  pop-up fade/slide and fold/unfold are the other consumers; `full` currently adds nothing over `subtle`.
 
 ## 9. Milestones
 

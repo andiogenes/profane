@@ -13,6 +13,7 @@
 
 #include <string.h>
 
+#include "pf_anim.h"
 #include "pf_display.h"
 #include "pf_display_ffi.h"
 #include "pf_face.h"
@@ -138,6 +139,7 @@ static const pf_font_source font_source = {NULL, font_metrics, font_scaled};
 
 @implementation ProfaneView {
     double _inputTime; /* timestamp of the event being handled, 0 if none */
+    BOOL _animScheduled; /* a redisplay for the animations in flight is queued */
     NSString *_marked; /* input-method composition, nil when none */
     NSRange _markedSelection;
     NSEvent *_interpreting; /* the key event inside -interpretKeyEvents: */
@@ -228,8 +230,15 @@ static const pf_font_source font_source = {NULL, font_metrics, font_scaled};
         [_metal startWithView:self];
         [self reportAccent];
         [self reportAppearance];
+        [self reportReduceMotion];
+        [[NSWorkspace.sharedWorkspace notificationCenter]
+            addObserver:self
+               selector:@selector(reportReduceMotion)
+                   name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+                 object:nil];
         [self rebuild];
     } else {
+        [[NSWorkspace.sharedWorkspace notificationCenter] removeObserver:self];
         [_metal stop];
     }
 }
@@ -291,6 +300,11 @@ static const pf_font_source font_source = {NULL, font_metrics, font_scaled};
     [self redisplay];
 }
 
+/* macOS "Reduce Motion" switches every animation off (pf_anim.h). */
+- (void)reportReduceMotion {
+    pf_motion_set_reduced(NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion);
+}
+
 /* Tells Scheme whether macOS is in light or dark mode; it restyles the faces. */
 - (void)reportAppearance {
     NSAppearanceName name = [self.effectiveAppearance
@@ -325,6 +339,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
         return;
     }
     pf_scheme_call("pf-redisplay", NULL, 0, NULL);
+    pf_frame_tick(_frame, CACurrentMediaTime());
     [_nativeViews syncWithFrame:_frame]; /* windows of native kinds: views over their bodies */
     const pf_display *d = pf_frame_redisplay(_frame);
     if (d) { /* shows under a resize until the next frame */
@@ -346,6 +361,22 @@ static CGColorRef create_cgcolor(uint32_t c) {
         pf_renderer_submit(_metal.renderer, PF_LAYER_OVERLAY, overlay);
         pf_display_release(overlay);
     }
+    [self scheduleAnimationFrame];
+}
+
+/* While something animates, redisplay again about one refresh later. It is a plain main-queue
+ * block, so keys and the REPL are handled between frames, and a frame that comes late makes the
+ * animation arrive at once (pf_window_tick) instead of slowing input down. */
+- (void)scheduleAnimationFrame {
+    if (_animScheduled || !pf_frame_animating(_frame)) {
+        return;
+    }
+    _animScheduled = YES;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(NSEC_PER_SEC / 120)),
+                   dispatch_get_main_queue(), ^{
+                       self->_animScheduled = NO;
+                       [self redisplay];
+                   });
 }
 
 /* ---- input ---- */
