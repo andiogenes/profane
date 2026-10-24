@@ -362,6 +362,22 @@ int pf_win_set_mode_line(pf_handle win, const char *utf8, size_t len, const uint
     return w ? set_strip(w, set_mode_line, utf8, len, runs, nruns, face, box) : INVALID;
 }
 
+static void set_header_line(void *w, const uint32_t *cps, size_t n, const pf_strip_run *runs,
+                            size_t nruns, uint32_t face, int box) {
+    pf_window_set_header_line(w, cps, n, runs, nruns, face, box);
+}
+
+int pf_win_set_header_line(pf_handle win, const char *utf8, size_t len, const uint32_t *runs,
+                           size_t nruns, uint32_t face, int box) {
+    pf_window *w = window_of(win);
+    return w ? set_strip(w, set_header_line, utf8, len, runs, nruns, face, box) : INVALID;
+}
+
+double pf_win_header_line_height(pf_handle win) {
+    pf_window *w = window_of(win);
+    return w ? pf_window_header_line_height(w) : INVALID;
+}
+
 double pf_win_hscroll(pf_handle win) {
     pf_window *w = window_of(win);
     return w ? pf_window_hscroll(w) : INVALID;

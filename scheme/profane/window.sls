@@ -23,6 +23,7 @@
           selected-window select-window minibuffer-window window-minibuffer?
           window-point set-window-point! window-start-line set-window-start-line!
           window-body-lines window-hscroll set-window-hscroll! window-edges window-list next-window window-label set-window-label!
+          window-prev-buffers window-next-buffers scroll-window-lines!
           window-pos-rect window-visible-range window-native set-window-native! native-view-kinds register-native-view-kind!
           split? split-direction split-children split-weights split-parent
           split-window delete-window delete-other-windows balance-windows resize-window!
@@ -217,9 +218,30 @@
     (check-live 'set-window-buffer! w)
     (let ([b (get-buffer buffer)])
       (unless (and b (buffer-live? b)) (error 'set-window-buffer! "no such live buffer" buffer))
-      (attach-buffer! w b)
+      (let ([old (window-buffer w)])
+        (attach-buffer! w b)
+        (unless (or navigating (eq? old b)) (remember-previous! w old)))
       (when (selected? w) (set-buffer b))
       b))
+
+  ;; Each window remembers the buffers it showed before (most recent first) and, after
+  ;; previous-buffer, those it can go forward to; switching to a buffer by any other means
+  ;; starts the forward list over, as in Emacs.
+  (define prev-buffers (make-weak-eq-hashtable))
+  (define next-buffers (make-weak-eq-hashtable))
+  (define navigating #f)
+  (define history-length 30)
+
+  (define (live-history table w) (filter buffer-live? (hashtable-ref table w '())))
+
+  (define (remember-previous! w old)
+    (when (and old (buffer-live? old))
+      (let ([h (cons old (remq old (live-history prev-buffers w)))])
+        (hashtable-set! prev-buffers w (if (> (length h) history-length) (list-head h history-length) h))
+        (hashtable-delete! next-buffers w))))
+
+  (define (window-prev-buffers w) (live-history prev-buffers w))
+  (define (window-next-buffers w) (live-history next-buffers w))
 
   (define (window-point w)
     (let ([b (window-buffer w)])
@@ -355,9 +377,13 @@
   (define (cell-width f) (%frm-cell-width (frame-handle f) 1.0))
   (define (mode-line-box?) (eq? (var-ref 'ui-mode-line-style) 'raised))
   (define (mode-line-height f)
-    (if (var-ref 'mode-line-format)
-        (%frm-strip-height (frame-handle f) (face-id 'mode-line) (mode-line-box?))
-        0))
+    (+ (if (var-ref 'mode-line-format)
+           (%frm-strip-height (frame-handle f) (face-id 'mode-line) (mode-line-box?))
+           0)
+       ;; a window with a header line needs room for it too
+       (if (var-ref 'header-line-format)
+           (%frm-strip-height (frame-handle f) (face-id 'header-line) (mode-line-box?))
+           0)))
 
   ;; The smallest window: window-min-height lines plus its mode line, window-min-width cells
   ;; plus fringes.
@@ -614,10 +640,102 @@
       (when (and i (> (length bs) 1))
         (switch-to-buffer (list-ref bs (mod (+ i step) (length bs)))))))
 
+  ;; Goes N buffers back (N > 0) or forward (N < 0) in the selected window's own history; with
+  ;; none to go to, through the global buffer list as before.
+  (define (navigate-buffers n)
+    (let ([w (selected-window)])
+      (let loop ([k (abs n)])
+        (when (> k 0)
+          (let* ([from (if (> n 0) prev-buffers next-buffers)]
+                 [to (if (> n 0) next-buffers prev-buffers)]
+                 [h (live-history from w)])
+            (cond
+              [(pair? h)
+               (let ([current (window-buffer w)])
+                 (hashtable-set! from w (cdr h))
+                 (hashtable-set! to w (cons current (remq current (live-history to w))))
+                 (set! navigating #t)
+                 (guard (c [else (set! navigating #f) (raise c)])
+                   (set-window-buffer! w (car h)))
+                 (set! navigating #f))]
+              [else (cycle-buffer (if (> n 0) -1 1))])
+            (loop (- k 1)))))))
+
   (define-command (next-buffer) "Show the next buffer in the selected window."
-    (cycle-buffer (prefix-numeric-value)))
+    (navigate-buffers (- (prefix-numeric-value))))
   (define-command (previous-buffer) "Show the previous buffer in the selected window."
-    (cycle-buffer (- (prefix-numeric-value))))
+    (navigate-buffers (prefix-numeric-value)))
+
+  ;; ---- scrolling ----
+
+  ;; Scrolls W by N lines (negative: toward the start of the buffer), moving point to the
+  ;; nearest visible line, same column, if that is what it takes to keep it on screen.
+  (define (scroll-window-lines! w n)
+    (let* ([b (window-buffer w)] [h (%buffer-handle b)]
+           [lines (%buf-lines h)]
+           [top (window-start-line w)]
+           [new (max 0 (min (+ top n) (- lines 1)))])
+      (unless (= new top)
+        (set-window-start-line! w new)
+        (let* ([body (window-body-lines w)]
+               [pos (window-point w)] [line (%buf-line-of h pos)]
+               [last (max new (min (- lines 1) (+ new (- body 1))))]
+               [target (cond [(< line new) new] [(> line last) last] [else #f])])
+          (when target (move-point-to-line! w h pos line target lines))))))
+
+  (define (move-point-to-line! w h pos line target lines)
+    (let* ([col (- pos (%buf-line-start h line))]
+           [start (%buf-line-start h target)]
+           [end (if (< (+ target 1) lines) (- (%buf-line-start h (+ target 1)) 1) (%buf-chars h))])
+      (set-window-point! w (min (+ start col) end))))
+
+  (defvar next-screen-context-lines 2
+    "Lines of overlap between the screens C-v and M-v scroll through.")
+
+  ;; C-v (sign 1) and M-v (sign -1): a screen less the context lines, or ARG lines with a prefix
+  ;; argument. Point keeps its row on screen. When the end (start) is already visible, point
+  ;; goes there first and only then does it complain, as in Emacs.
+  (define (scroll-screen sign who)
+    (let* ([w (selected-window)] [h (%buffer-handle (window-buffer w))]
+           [lines (%buf-lines h)] [top (window-start-line w)] [body (window-body-lines w)]
+           [arg (current-prefix-arg)]
+           [n (* sign (if arg (prefix-numeric-value arg)
+                          (max 1 (- body (var-ref 'next-screen-context-lines)))))]
+           [pos (point)] [row (- (%buf-line-of h pos) top)])
+      (cond
+        [(and (> n 0) (>= (+ top body) lines))
+         (if (= pos (point-max)) (error who "End of buffer") (goto-char (point-max)))]
+        [(and (< n 0) (= top 0))
+         (if (= pos (point-min)) (error who "Beginning of buffer") (goto-char (point-min)))]
+        [else
+         (let ([new (max 0 (min (+ top n) (- lines 1)))])
+           (set-window-start-line! w new)
+           (move-point-to-line! w h pos (%buf-line-of h pos)
+                                (max 0 (min (+ new (max row 0)) (- lines 1))) lines))])))
+
+  (define-command (scroll-up-command) "Scroll forward a screen (ARG lines with a prefix)."
+    (scroll-screen 1 'scroll-up-command))
+  (define-command (scroll-down-command) "Scroll back a screen (ARG lines with a prefix)."
+    (scroll-screen -1 'scroll-down-command))
+
+  ;; C-l: point's line in the middle of the window, then at the top, then at the bottom; with a
+  ;; number, on that row (negative: from the bottom).
+  (define recenter-step 0)
+
+  (define-command (recenter-top-bottom)
+    "Put point's line in the middle, then at the top, then at the bottom of the window."
+    (let* ([w (selected-window)] [h (%buffer-handle (window-buffer w))]
+           [body (max 1 (window-body-lines w))]
+           [arg (current-prefix-arg)]
+           [line (%buf-line-of h (point))]
+           [row (cond
+                  [arg (let ([n (prefix-numeric-value arg)]) (if (< n 0) (+ body n) n))]
+                  [else
+                   (set! recenter-step (if (eq? (last-command) 'recenter-top-bottom)
+                                           (mod (+ recenter-step 1) 3)
+                                           0))
+                   (case recenter-step [(0) (quotient body 2)] [(1) 0] [else (- body 1)])])])
+      (set-window-start-line! w (max 0 (- line (max 0 (min row (- body 1))))))))
 
   ;; ---- the echo area ----
   ;; Messages go into a buffer shown by the minibuffer window, which grows to fit them (up to
@@ -738,6 +856,11 @@
     "What mode lines show; #f for none. Buffer-local when set."
     '(local))
 
+  (defvar header-line-format #f
+    "What the header line (above the text of a window) shows, in the format of mode-line-format;
+#f for none. Buffer-local when set."
+    '(local))
+
   (define segments (make-eq-hashtable))
 
   (define (register-mode-line-segment! name proc) (hashtable-set! segments name proc) name)
@@ -748,7 +871,11 @@
        (define registered (register-mode-line-segment! 'name (lambda (w) body ...)))]))
 
   ;; The mode line of W as a string and face runs ((start end face-name) ...).
-  (define (format-mode-line w)
+  (define (format-mode-line w) (format-line w 'mode-line-format))
+
+  ;; The text and face runs of the format in variable FORMAT-VAR (mode-line-format or
+  ;; header-line-format) for window W.
+  (define (format-line w format-var)
     (let ([out '()] [len 0] [runs '()])
       (define (emit! s face)
         (let ([n (string-length s)])
@@ -757,7 +884,7 @@
             (when face (set! runs (cons (list len (+ len n) face) runs)))
             (set! len (+ len n)))))
       (define (walk elt face depth)
-        (when (> depth 32) (error 'format-mode-line "mode-line-format nests too deeply"))
+        (when (> depth 32) (error 'format-mode-line "line format nests too deeply"))
         (cond
           [(string? elt) (emit! elt face)]
           [(number? elt) (emit! (number->string elt) face)]
@@ -773,10 +900,10 @@
       (with-current-buffer (window-buffer w)
         (guard (c [else (set! out '()) (set! len 0) (set! runs '())
                         (emit! (call-with-string-output-port
-                                (lambda (p) (display "mode line: " p)
+                                (lambda (p) (display "line format: " p)
                                   (if (condition? c) (display-condition c p) (write c p))))
                                'error)])
-          (walk (var-ref 'mode-line-format) #f 0)))
+          (walk (var-ref format-var) #f 0)))
       (values (apply string-append (reverse out)) (reverse runs))))
 
   (define-mode-line-segment (mode-line-window-label w)
@@ -836,6 +963,23 @@
                                   (runs->bytevector runs) (length runs)
                                   (if face (face-id face) 0) box)))))))
 
+  ;; The header line: header-line-format (buffer-local, #f for none) in the same format as the
+  ;; mode line, drawn at the top of the window in the header-line face.
+  (define header-keys (make-weak-eq-hashtable)) ; window -> what it last showed
+
+  (define (update-header-line! w)
+    (let ([fmt (with-current-buffer (window-buffer w) (var-ref 'header-line-format))])
+      (let-values ([(text runs) (if fmt (format-line w 'header-line-format) (values "" '()))])
+        (let* ([face (and fmt 'header-line)]
+               [box (and fmt (mode-line-box?))]
+               [key (list text runs face box)])
+          (unless (equal? key (hashtable-ref header-keys w #f))
+            (hashtable-set! header-keys w key)
+            (let ([bv (string->utf8 text)])
+              (%win-set-header-line (window-handle w) bv (bytevector-length bv)
+                                    (runs->bytevector runs) (length runs)
+                                    (if face (face-id face) 0) box)))))))
+
   ;; The active region (transient-mark-mode, see (profane command-loop)) shows in the selected
   ;; window only, as in Emacs.
   (define (update-region! w)
@@ -868,7 +1012,8 @@
         (unless (or mini-active (buffer-live? (window-buffer (frame-minibuffer f))))
           (attach-buffer! (frame-minibuffer f) (echo-buffer)))
         (run-hooks 'pre-redisplay-hook f)
-        (for-each (lambda (w) (update-mode-line! w) (update-text-scale! w) (update-region! w))
+        (for-each (lambda (w) (update-mode-line! w) (update-header-line! w) (update-text-scale! w)
+                    (update-region! w))
                   (window-list f)))))
 
   ;; Fringes, mode line style and line spacing change the layout. (The calls make sure the
@@ -930,5 +1075,8 @@
                   ("C-x {" . shrink-window-horizontally)
                   ("C-x <" . scroll-left) ("C-x >" . scroll-right)
                   ("C-x <left>" . previous-buffer) ("C-x <right>" . next-buffer)
-                  ("C-x C-<left>" . previous-buffer) ("C-x C-<right>" . next-buffer)))
+                  ("C-x C-<left>" . previous-buffer) ("C-x C-<right>" . next-buffer)
+                  ("C-v" . scroll-up-command) ("M-v" . scroll-down-command)
+                  ("<next>" . scroll-up-command) ("<prior>" . scroll-down-command)
+                  ("C-l" . recenter-top-bottom)))
       #t)))

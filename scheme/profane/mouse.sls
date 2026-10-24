@@ -33,6 +33,7 @@
             [else (loop (cdr ws))])))
 
   (define (mode-line-h w) (%win-mode-line-height (window-handle* w)))
+  (define (header-h w) (%win-header-line-height (window-handle* w)))
   (define (window-handle* w) (%window-handle w))
   (define (frame-h) (%frame-handle (selected-frame)))
 
@@ -112,6 +113,7 @@
                  (select-window w)
                  (set! drag (list 'resize w 'right x))]
                 [on-mode-line (select-window w)]
+                [(< ly (header-h w)) (select-window w)]
                 [(not (text-window? w)) (select-window w)]
                 [else (text-down w x y clicks)])))]
       [else (void)]))
@@ -154,27 +156,7 @@
 
   (define fractions (make-weak-eq-hashtable)) ; window -> unscrolled fraction of a line
 
-  ;; Scrolls W by N lines (negative: up, toward the start of the buffer), keeping point on screen.
-  (define (scroll-lines! w n)
-    (let* ([b (window-buffer w)] [h (%buffer-handle b)]
-           [lines (%buf-lines h)]
-           [top (window-start-line w)]
-           [new (max 0 (min (+ top n) (- lines 1)))])
-      (unless (= new top)
-        (set-window-start-line! w new)
-        (keep-point-visible! w h new (window-body-lines w) lines))))
-
-  ;; Moves W's point to the nearest visible line (same column if it fits) when scrolling put it
-  ;; off screen, as Emacs does for the mouse wheel.
-  (define (keep-point-visible! w h top body lines)
-    (let* ([pos (window-point w)] [line (%buf-line-of h pos)]
-           [last (max top (min (- lines 1) (+ top (- body 1))))]
-           [target (cond [(< line top) top] [(> line last) last] [else #f])])
-      (when target
-        (let* ([col (- pos (%buf-line-start h line))]
-               [start (%buf-line-start h target)]
-               [next (if (< (+ target 1) lines) (- (%buf-line-start h (+ target 1)) 1) (%buf-chars h))])
-          (set-window-point! w (min (+ start col) next))))))
+  (define (scroll-lines! w n) (scroll-window-lines! w n))
 
   (define (handle-scroll x y dx dy precise)
     (let ([w (window-at (inexact x) (inexact y))])

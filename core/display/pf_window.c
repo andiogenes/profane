@@ -55,6 +55,8 @@ struct pf_window {
     float fringe_left, fringe_right, divider;
     pf_strip mode_line;
     float mode_line_h;
+    pf_strip header;
+    float header_h;
     size_t region_start, region_end; /* the active region, empty: none */
     uint32_t native; /* native view kind, 0: text */
     pf_canvas *canvas; /* canvas window: drawn instead of text */
@@ -95,6 +97,7 @@ void pf_window_free(pf_window *w) {
         free(w->runs);
         free(w->props_buf);
         pf_strip_free(&w->mode_line);
+        pf_strip_free(&w->header);
         free(w);
     }
 }
@@ -127,6 +130,14 @@ static void update_mode_line_height(pf_window *w) {
     w->mode_line_h = w->mode_line.face ? pf_strip_height(w->fonts, w->mode_line.face,
                                                          default_font_of(w), w->mode_line.box)
                                        : 0;
+    w->header_h = w->header.face ? pf_strip_height(w->fonts, w->header.face, default_font_of(w),
+                                                   w->header.box)
+                                 : 0;
+}
+
+/* Where the text starts: below the header line and the top padding. */
+static float top_inset(const pf_window *w) {
+    return w->style.pad_top + w->header_h;
 }
 
 void pf_window_set_style(pf_window *w, const pf_window_style *style) {
@@ -188,6 +199,18 @@ void pf_window_set_mode_line(pf_window *w, const uint32_t *cps, size_t n,
 
 float pf_window_mode_line_height(const pf_window *w) {
     return w->mode_line_h;
+}
+
+void pf_window_set_header_line(pf_window *w, const uint32_t *cps, size_t n,
+                               const pf_strip_run *runs, size_t nruns, uint32_t face, int box) {
+    if (pf_strip_set(&w->header, cps, n, runs, nruns, face, box)) {
+        update_mode_line_height(w);
+        w->dirty = 1;
+    }
+}
+
+float pf_window_header_line_height(const pf_window *w) {
+    return w->header_h;
 }
 
 float pf_window_hscroll(const pf_window *w) {
@@ -258,7 +281,7 @@ size_t pf_window_top_line(const pf_window *w) {
 
 size_t pf_window_body_lines(const pf_window *w) {
     float lh = w->style.line_height;
-    float usable = w->height - w->mode_line_h - w->style.pad_top;
+    float usable = w->height - w->mode_line_h - top_inset(w);
     size_t n = lh > 0 && usable > 0 ? (size_t)floorf(usable / lh) : 0;
     return n ? n : 1;
 }
@@ -567,7 +590,7 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
     size_t lines = pf_text_lines(s);
     /* A partly visible last row is drawn only where the mode line, drawn later, covers its
      * overflow. */
-    float body_h = w->height - w->mode_line_h - st->pad_top;
+    float body_h = w->height - w->mode_line_h - top_inset(w);
     size_t visible = !w->mode_line.face           ? pf_window_body_lines(w)
                      : st->line_height > 0 && body_h > 0 ? (size_t)ceilf(body_h / st->line_height)
                                                        : 0;
@@ -594,7 +617,7 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
         size_t line = w->top + i;
         row r = layout_row(w, text, s, line, point, default_font);
         const pf_line_layout *lay = r.lay;
-        float top = st->pad_top + (float)i * st->line_height;
+        float top = top_inset(w) + (float)i * st->line_height;
         float baseline = top + st->ascent;
 
         /* Backgrounds first: faces, the hl-line band (an overlay in Emacs, so above them), then
@@ -750,9 +773,9 @@ uint32_t pf_window_native(const pf_window *w) {
 
 void pf_window_body_rect(const pf_window *w, float rect[4]) {
     rect[0] = 0;
-    rect[1] = 0;
+    rect[1] = w->header_h;
     rect[2] = w->width - w->divider;
-    rect[3] = w->height - w->mode_line_h;
+    rect[3] = w->height - w->mode_line_h - w->header_h;
 }
 
 int pf_window_pos_rect(pf_window *w, size_t pos, float rect[4]) {
@@ -764,7 +787,7 @@ int pf_window_pos_rect(pf_window *w, size_t pos, float rect[4]) {
     const pf_window_style *st = &w->style;
     size_t lines = pf_text_lines(s);
     size_t line = pf_text_line_of(s, pos);
-    float body_h = w->height - w->mode_line_h - st->pad_top;
+    float body_h = w->height - w->mode_line_h - top_inset(w);
     size_t visible = !w->mode_line.face           ? pf_window_body_lines(w)
                      : st->line_height > 0 && body_h > 0 ? (size_t)ceilf(body_h / st->line_height)
                                                        : 0;
@@ -785,7 +808,7 @@ int pf_window_pos_rect(pf_window *w, size_t pos, float rect[4]) {
         return -1;
     }
     rect[0] = x;
-    rect[1] = st->pad_top + (float)(line - w->top) * st->line_height;
+    rect[1] = top_inset(w) + (float)(line - w->top) * st->line_height;
     rect[2] = cw > 0 ? cw : st->cell_width;
     rect[3] = st->line_height;
     return 0;
@@ -803,7 +826,7 @@ int64_t pf_window_pos_at(pf_window *w, float x, float y) {
         return -1;
     }
     size_t lines = pf_text_lines(s);
-    size_t row_index = y < st->pad_top ? 0 : (size_t)((y - st->pad_top) / st->line_height);
+    size_t row_index = y < top_inset(w) ? 0 : (size_t)((y - top_inset(w)) / st->line_height);
     size_t line = w->top + row_index;
     if (line >= lines) {
         line = lines - 1;
@@ -855,13 +878,13 @@ const pf_display *pf_window_redisplay(pf_window *w) {
     float body_h = w->height - w->mode_line_h;
     uint32_t fringe = role_color(PF_ROLE_FRINGE, PF_FACE_HAS_BG, 0);
     if (!w->native && !w->canvas) {
-        pf_display_rect(d, 0, 0, w->fringe_left, body_h, fringe);
-        pf_display_rect(d, w->width - w->divider - w->fringe_right, 0, w->fringe_right, body_h,
-                        fringe);
+        pf_display_rect(d, 0, w->header_h, w->fringe_left, body_h - w->header_h, fringe);
+        pf_display_rect(d, w->width - w->divider - w->fringe_right, w->header_h, w->fringe_right,
+                        body_h - w->header_h, fringe);
     }
     if (w->canvas) {
         pf_canvas_env env = {w->cache, w->fonts, default_font_of(w)};
-        pf_canvas_render(w->canvas, d, &env, 0, 0);
+        pf_canvas_render(w->canvas, d, &env, 0, w->header_h);
     } else if (s && !w->native) {
         draw_text(w, d, text, s, point, bg, fg);
     }
@@ -869,6 +892,8 @@ const pf_display *pf_window_redisplay(pf_window *w) {
     /* Chrome over the text: the divider, the mode line. */
     pf_display_rect(d, w->width - w->divider, 0, w->divider, w->height,
                     role_color(PF_ROLE_VERTICAL_BORDER, PF_FACE_HAS_FG, fg));
+    pf_strip_render(&w->header, d, w->cache, w->fonts, default_font_of(w), 0, 0,
+                    w->width - w->divider, w->header_h, w->scale);
     pf_strip_render(&w->mode_line, d, w->cache, w->fonts, default_font_of(w), 0, body_h,
                     w->width - w->divider, w->mode_line_h, w->scale);
     return pf_display_finish(d);

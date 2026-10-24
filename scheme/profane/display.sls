@@ -126,6 +126,7 @@
          (vertical-border () "The line between side-by-side windows (its foreground).")
          (mode-line ((family . "system-ui")) "The selected window's mode line.")
          (mode-line-inactive ((inherit . mode-line)) "Other windows' mode lines.")
+         (header-line ((inherit . mode-line)) "The header line at the top of a window.")
          (mode-line-buffer-id ((family . "system-ui") (weight . bold))
                               "The buffer name in mode lines.")
          (mode-line-highlight () "Highlighted mode line text (window labels).")

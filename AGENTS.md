@@ -24,9 +24,9 @@ are in `profane-plan.md` §8a–§8j; read the section for an area before changi
 milestone (plan §9). Do not start work from a later milestone unless asked; when a task touches a later
 milestone's area, leave a seam, not an implementation.
 
-**M2 still open** (plan §9, M2 row): window extras (`C-v`/`M-v`/recenter, per-window buffer
-history, header lines); electric-pair. Consult's imenu and xref wait for modes and tree-sitter (M5), ripgrep and
-find for M3.
+**M2** is feature-complete as planned (the M2 row of plan §9); what was left out on purpose is listed in plan §8j. Its
+owner-port gaps wait on other milestones: consult's imenu and xref (modes and tree-sitter, M5), ripgrep and find (M3),
+neotree and the buffer menu (listing and tree views).
 
 **Known gaps:** the full list, with what each waits for, is `profane-plan.md` §8j. The one every agent must know:
 `C-g` cannot interrupt a busy Scheme loop (a mistyped `(let loop () (loop))` in `M-:` hangs the editor); it needs

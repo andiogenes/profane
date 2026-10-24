@@ -4,7 +4,7 @@
 (library (profane simple)
   (export kill-ring kill-new current-kill)
   (import (chezscheme) (profane buffer) (profane keymap) (profane command)
-          (profane command-loop) (profane var))
+          (profane command-loop) (profane var) (profane mode))
 
   (define (n) (prefix-numeric-value))
 
@@ -12,9 +12,56 @@
 
   ;; ---- insertion and deletion ----
 
+  ;; ---- electric-pair-mode ----
+  ;; Typing an opening bracket or quote inserts its partner and leaves point between them;
+  ;; typing the partner when it is next just moves over it; with the region active the pair
+  ;; goes around it; DEL between an empty pair deletes both. An opener is not paired before a
+  ;; word character, a quote not next to one (so apostrophes and closing quotes stay single).
+  ;; There is no syntax table yet, so a quote typed inside a string pairs when it follows a
+  ;; space (M5).
+  (define-minor-mode electric-pair-mode (global)
+    "Insert the closing bracket or quote together with the opening one.")
+
+  (defvar electric-pair-pairs '((#\( . #\)) (#\[ . #\]) (#\{ . #\}) (#\" . #\"))
+    "Characters that are typed in pairs: (opener . closer).")
+
+  (define (word-char? c) (and c (or (char-alphabetic? c) (char-numeric? c) (char=? c #\_))))
+
+  (define (electric-pair-insert c)
+    (let* ([pairs (var-ref 'electric-pair-pairs)]
+           [open (assv c pairs)]
+           [closer? (find (lambda (p) (and (char=? (cdr p) c) (not (char=? (car p) c)))) pairs)]
+           [next (char-after)] [prev (char-before)])
+      (cond
+        [(and closer? (eqv? next c)) (forward-char 1) #t]
+        [(and open (char=? (car open) (cdr open)))        ; a quote
+         (cond [(eqv? next c) (forward-char 1) #t]
+               [(or (word-char? prev) (word-char? next)) #f]
+               [else (insert (string c c)) (backward-char 1) #t])]
+        [(and open (mark) (var-ref 'mark-active) (not (= (mark) (point))))
+         (let ([lo (min (mark) (point))] [hi (max (mark) (point))] [back? (< (point) (mark))])
+           (goto-char hi) (insert (string (cdr open)))
+           (goto-char lo) (insert (string (car open)))
+           (set-mark! (if back? (+ hi 1) (+ lo 1)))
+           (goto-char (if back? (+ lo 1) (+ hi 1)))
+           #t)]
+        [(and open (not (word-char? next)))
+         (insert (string (car open) (cdr open)))
+         (backward-char 1)
+         #t]
+        [else #f])))
+
+  (define (pair-around-point?)
+    (let ([prev (char-before)] [next (char-after)])
+      (and prev next
+           (let ([p (assv prev (var-ref 'electric-pair-pairs))]) (and p (char=? (cdr p) next))))))
+
   (define-command (self-insert-command)
     "Insert the typed text, ARG times."
-    (repeat (n) (lambda () (insert (last-input-text)))))
+    (let ([text (last-input-text)])
+      (unless (and (var-ref 'electric-pair-mode) (= (n) 1) (= (string-length text) 1)
+                   (electric-pair-insert (string-ref text 0)))
+        (repeat (n) (lambda () (insert text))))))
 
   (define-command (newline) "Insert a newline, ARG times." (repeat (n) (lambda () (insert "\n"))))
 
@@ -24,7 +71,11 @@
 
   (define-command (insert-tab) (repeat (n) (lambda () (insert "\t"))))
   (define-command (delete-char) (delete-char (n)))
-  (define-command (delete-backward-char) (delete-char (- (n))))
+  (define-command (delete-backward-char)
+    "Delete the character before point; between an empty pair (electric-pair-mode), both."
+    (if (and (var-ref 'electric-pair-mode) (= (n) 1) (pair-around-point?))
+        (delete-region (- (point) 1) (+ (point) 1))
+        (delete-char (- (n)))))
 
   ;; ---- motion ----
 

@@ -37,6 +37,7 @@
       (fringe (foreground . fg-dim))
       (mode-line (foreground . fg) (background . bg-mode-line))
       (mode-line-inactive (foreground . fg-dim) (background . bg-mode-line-inactive))
+      (header-line (foreground . fg) (background . bg-mode-line-inactive))
       (mode-line-highlight (background . bg-highlight))
       (tab-bar (foreground . fg-dim) (background . bg-tab-bar))
       (tab-bar-tab (foreground . fg) (background . bg))

@@ -422,6 +422,20 @@ the renderer tags the frame answering each event and records when it was submitt
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
   minibuffer reads input in this window (below).
+- **Window extras** (M2). *Scrolling:* `C-v`/`M-v` (also `<next>`/`<prior>`) scroll a screen less `next-screen-context-lines` (2), or ARG lines
+  with a prefix; point keeps its screen row; with the end (start) visible point goes there first and the next press
+  complains. `C-l` (`recenter-top-bottom`) puts point's line in the middle, then top, then bottom; a numeric argument is a
+  row (negative: from the bottom). The mouse wheel shares `scroll-window-lines!`. *Buffer history:* every window keeps
+  the buffers it showed (`window-prev-buffers`, most recent first, 30) and the ones `previous-buffer` came back from
+  (`window-next-buffers`); a switch by any other means drops the forward list; with no history the commands fall back
+  to cycling the global list. Killed buffers drop out. *Header line:* `header-line-format` (buffer-local, `#f` by default
+  so the minimal preset shows none; the mode-line format language) in the `header-line` face, drawn by a second
+  `pf_strip` at the top of the window; text, cursor, fringes, `pf_window_body_rect`, `pf_window_pos_rect/at` and canvas
+  windows all start below it (`top_inset`), the minimum window height counts it, and a click on it only selects the
+  window. *electric-pair-mode* (on at startup): `( [ { "` insert their partner and leave point between, typing the
+  partner over itself skips it, a region is wrapped (kept inside), DEL between an empty pair deletes both, an opener
+  is not paired before a word character and a quote not next to one; no syntax table yet, so a quote typed inside a
+  string after a space pairs (M5), and RET between a pair does not open an extra line (no indentation yet).
 - **File names** (`(profane files)`, M2). `expand-file-name` (`~`, relative names from a directory, `.`/`..`, repeated slashes, trailing
   slash kept), `abbreviate-file-name`, `file-name-directory`/`-nondirectory`, `directory-entries`, the buffer-local
   `default-directory` (else the visited file's directory, else `~/`), and `read-file-name`: `completing-read` over the
@@ -580,8 +594,7 @@ the renderer tags the frame answering each event and records when it was submitt
 State at the end of the M2 work so far (everything in §8i is on `main`). Deliberately deferred work, each with what it
 waits for. Keep this list current: remove an entry when it is done, add one when something is left as a seam.
 
-**M2 items still open** (§9, M2 row): window extras (`C-v`/`M-v`/
-recenter, per-window buffer history, header lines); electric-pair. The owner's port (`scheme/init.ss`) still lacks
+**M2 items still open** (§9, M2 row): none that was planned; the rest is deferred below. The owner's port (`scheme/init.ss`) still lacks
 `M-g i` (imenu) and `M-g s` (search), which need modes, tree-sitter and the search core (M5, ripgrep/find M3);
 `M-g t` (neotree) and `C-x C-b` (buffer menu), which need listing and tree views; `C-x 4 C-x C-b`.
 
@@ -598,8 +611,8 @@ recenter, per-window buffer history, header lines); electric-pair. The owner's p
   canvases (they need display-engine support for reserved space in a line), key and focus events.
 - Native views: only the stub kind; web (M11) and PDF kinds, key/mouse routing into views, focus handoff.
 - Mouse: the tab bar, dragging text, middle-click, right-click menus, momentum scrolling (see the Mouse entry in §8i).
-- Windows: `C-v`/`M-v`/recenter, header lines, per-window buffer history
-  (`next-buffer` cycles the whole buffer list).
+- Windows: `scroll-other-window`, `C-M-l`, window-start/point saved per history entry; electric-pair rules need a
+  syntax table (M5); RET between a pair does not open an extra line (needs indentation).
 - Completion: `completion-preselect 'nearest` (the `preselect` option is the seam), corfu (popup completion).
 - Undo restores text but not its text properties (fine once highlighting re-runs); undo history is unbounded.
 - Text properties use arrays (O(runs) per edit); switch to a tree when tree-sitter makes runs dense (M5).

@@ -261,6 +261,40 @@ int main(void) {
     d = pf_frame_redisplay(f);
     pf_display_release(d);
 
+    /* A header line: one strip above the text; everything below it moves down by its height. */
+    {
+        size_t body_before = pf_window_body_lines(w1);
+        pf_window_invalidate(w1);
+        d = pf_frame_redisplay(f);
+        const pf_display_item *a_before = find_glyph(d, 'a');
+        float ay = a_before ? a_before->y : 0;
+        pf_display_release(d);
+        uint32_t hdr[] = {'H', 'D', 'R'};
+        pf_window_set_header_line(w1, hdr, 3, NULL, 0, 11, 0); /* face 11: the tab bar's background */
+        float hh = pf_window_header_line_height(w1);
+        PF_CHECK(hh > 0);
+        d = pf_frame_redisplay(f);
+        const pf_display_item *a_after = find_glyph(d, 'a');
+        const pf_display_item *hd = find_glyph(d, 'H');
+        PF_CHECK(a_after && NEAR(a_after->y, ay + hh)); /* the text moved down by the header */
+        PF_CHECK(hd && a_after && hd->y < a_after->y); /* the header text sits above the text */
+        const pf_display_item *bar = find_rect(d, TAB_BG);
+        PF_CHECK(bar && NEAR(bar->y, 0) && NEAR(bar->u.rect.h, hh));
+        pf_display_release(d);
+        PF_CHECK(pf_window_body_lines(w1) <= body_before);
+        float body[4];
+        pf_window_body_rect(w1, body);
+        PF_CHECK(NEAR(body[1], hh));
+        float r[4];
+        PF_CHECK(pf_window_pos_rect(w1, 0, r) == 0 && r[1] >= hh); /* the first line starts below it */
+        PF_CHECK(pf_window_pos_at(w1, 5, hh + 1) == 0); /* and clicks map through the offset */
+        pf_window_set_header_line(w1, NULL, 0, NULL, 0, 0, 0); /* none again */
+        PF_CHECK(NEAR(pf_window_header_line_height(w1), 0));
+        d = pf_frame_redisplay(f);
+        PF_CHECK(a_before && find_glyph(d, 'a') && NEAR(find_glyph(d, 'a')->y, ay));
+        pf_display_release(d);
+    }
+
     /* Native-view windows: the body is left empty and reported to the shell. */
     uint64_t gen0 = pf_frame_native_generation(f);
     PF_CHECK_EQ_SIZE(pf_frame_native_count(f), 0);

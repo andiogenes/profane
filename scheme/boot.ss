@@ -133,7 +133,7 @@
       (when w (set-window-buffer! w scratch)))
     ;; The owner's Emacs setup (plan §2): all on in the default preset.
     (for-each (lambda (m) (set-minor-mode! m #t))
-              '(display-line-numbers-mode global-hl-line-mode show-paren-mode))
+              '(display-line-numbers-mode global-hl-line-mode show-paren-mode electric-pair-mode))
     (pf-load-init-files)))
 
 ;;; Socket REPL sessions, keyed by connection id (an integer chosen by the shell).
