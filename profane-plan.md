@@ -1056,6 +1056,16 @@ Steps, one commit each, tested against throwaway repos with the real `git`:
   line face); other windows showing the buffer lose their own point on a render; ids that disappear forget their fold.
 - **4c** status buffer on `C-x g`: head/merge/push lines, untracked, unstaged, staged, unpushed/unpulled, hunks with
   diff faces.
+  *Done.* `(profane git status)`: `magit-status` (`C-x g`, one buffer per repository, `magit: <dir>`), mode
+  `git-status-mode` on `section-mode`. Sections: Head and Upstream lines, Untracked, Unmerged paths, Unstaged and
+  Staged changes (files, then hunks with `git-diff-*` faces), Unpulled, Unmerged into upstream, Recent commits (10);
+  `g` refreshes, `RET` visits the file (on a hunk line, at that line in the new version). Every section's value is a
+  `git-item` (kind, area, path, change, diff file, hunk, commit) for the staging commands. `(profane git)` gained
+  `git-log` (a third backend procedure) and `git-commit` records. Roots are separated by a blank line
+  (`section-separate-roots`). When the changes have more than `git-status-diff-line-limit` (3000) diff lines their
+  files start folded; folds the user made are remembered by id and win over that default.
+  Reads are sequential (status, two diffs, up to four logs): about seven short processes per refresh, each awaited in
+  turn; parallelizing them is a seam. A refresh happens on open and on `g`, not after external changes.
 - **4d** staging: `s u k` on a file, a hunk or the region's lines (partial patches through `git apply --cached [-R]`),
   `S U` for all, confirmation before discarding.
 - **4e** commit transient and message buffer (`C-c C-c`, `C-c C-k`; amend prefills; staged diff shown beside);

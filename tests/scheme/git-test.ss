@@ -11,7 +11,7 @@
             [else (loop (+ i 1))]))))
 (define (sh fmt . args) (system (apply format fmt args)))
 
-(define dir (let ([p (format "/tmp/pf-git-~a" (random 1000000000))]) (sh "mkdir -p ~a" p) p))
+(define dir (let ([p (format "/tmp/pf-git-~a" (random 1000000000))]) (sh "rm -rf ~a ~a-remote.git; mkdir -p ~a" p p p) p))
 (define remote (string-append dir "-remote.git"))
 (define (git . args) (sh "cd ~a && git -c user.email=t@t -c user.name=t ~a >/dev/null 2>&1" dir
                          (apply string-append (map (lambda (a) (format "'~a' " a)) args))))
@@ -111,9 +111,21 @@
 (let* ([f (car (git-diff dir #f))] [h (car (git-diff-file-hunks f))])
   (test-assert "\"\\ No newline\" lines are kept" (member "\\ No newline at end of file" (git-diff-hunk-lines h))))
 
+;; ---- log ----
+(let ([commits (git-log dir #f 3)])
+  (test-eqv "log: newest first, limited" 3 (length commits))
+  (test-equal "log: subject of the newest" "x" (git-commit-subject (car commits)))
+  (test-assert "log: hashes" (and (= 40 (string-length (git-commit-hash (car commits))))
+                                  (< (string-length (git-commit-short (car commits))) 40)))
+  (test-assert "log: refs on the head commit" (contains? (git-commit-refs (car commits)) "main"))
+  (test-assert "log: author and date" (and (> (string-length (git-commit-author (car commits))) 0)
+                                           (> (string-length (git-commit-date (car commits))) 0))))
+(test-equal "log: a range" '("x" "third" "rename" "second") (map git-commit-subject (git-log dir "origin/main..HEAD" 10)))
+(test-equal "log: a bad range is empty" '() (git-log dir "no-such-ref..HEAD" 10))
+
 ;; ---- backends ----
 (test-equal "the cli backend is registered" '(cli) (git-backend-names))
-(define-git-backend! 'fake (list (cons 'status (lambda (root) 'fake-status)) (cons 'diff (lambda (root s p) '()))))
+(define-git-backend! 'fake (list (cons 'status (lambda (root) 'fake-status)) (cons 'diff (lambda (root s p) '())) (cons 'log (lambda (r a l) '()))))
 (var-set! 'git-read-backend 'fake)
 (test-eq "a selected backend answers" 'fake-status (git-status dir))
 (var-set! 'git-read-backend 'nothing)

@@ -21,8 +21,10 @@
           git-diff-file-hunks git-diff-file-binary?
           git-diff-hunk? git-diff-hunk-header git-diff-hunk-old-start git-diff-hunk-old-len
           git-diff-hunk-new-start git-diff-hunk-new-len git-diff-hunk-lines
-          git-status git-diff define-git-backend! git-backend-names
-          parse-git-status parse-git-diff)
+          git-status git-diff git-log define-git-backend! git-backend-names
+          git-commit? git-commit-hash git-commit-short git-commit-subject git-commit-author
+          git-commit-date git-commit-refs
+          parse-git-status parse-git-diff parse-git-log)
   (import (chezscheme) (profane buffer) (profane process) (profane async) (profane var)
           (profane fs))
 
@@ -261,12 +263,33 @@
          [hh (loop (cdr ls) files dl header hunks hh (cons (car ls) hl))]
          [else (loop (cdr ls) files dl (cons (car ls) header) hunks hh hl)]))))
 
+  ;; ---- log ----
+
+  (define-record-type git-commit
+    (fields hash short subject author date refs)
+    (nongenerative profane-git-commit))
+
+  (define log-format "--format=%x1e%H%x1f%h%x1f%s%x1f%an%x1f%ar%x1f%D")
+
+  ;; Parses `git log` output in log-format.
+  (define (parse-git-log text)
+    (let loop ([recs (cdr (split-on text #\x1e))] [out '()])
+      (if (null? recs)
+          (reverse out)
+          (let ([f (split-on (drop-right-char (car recs) #\newline) #\x1f)])
+            (loop (cdr recs)
+                  (if (= (length f) 6)
+                      (cons (make-git-commit (list-ref f 0) (list-ref f 1) (list-ref f 2) (list-ref f 3)
+                                             (list-ref f 4) (list-ref f 5))
+                            out)
+                      out))))))
+
   ;; ---- backends ----
 
   (define backends (make-eq-hashtable))
 
-  ;; A backend is an alist of (status . (lambda (root) ...)) and (diff . (lambda (root staged? paths)
-  ;; ...)); both run inside a command and may await.
+  ;; A backend is an alist of (status . (lambda (root) ...)), (diff . (lambda (root staged? paths)
+  ;; ...)) and (log . (lambda (root range limit) ...)); they run inside a command and may await.
   (define (define-git-backend! name procs) (hashtable-set! backends name procs))
   (define (git-backend-names) (vector->list (hashtable-keys backends)))
 
@@ -277,6 +300,10 @@
       (cdr (assq which b))))
 
   (define (git-status root) ((backend-proc 'status) root))
+  ;; The commits of RANGE (a revision or "a..b"; #f: HEAD), newest first, at most LIMIT. A
+  ;; repository without commits, or a bad range, gives ().
+  (define (git-log root range limit) ((backend-proc 'log) root range limit))
+
   (define (git-diff root staged? . rest) ((backend-proc 'diff) root staged? (if (null? rest) '() (car rest))))
 
   (define (cli-status root)
@@ -291,5 +318,12 @@
       (unless (zero? (car r)) (error 'git-diff (caddr r)))
       (parse-git-diff (cadr r))))
 
+  (define (cli-log root range limit)
+    (let ([r (await (run-git root (list "log" (format "-n~a" limit) log-format "--no-show-signature"
+                                        (or range "HEAD") "--")))])
+      (if (zero? (car r)) (parse-git-log (cadr r)) '())))
+
   (define cli-backend
-    (begin (define-git-backend! 'cli (list (cons 'status cli-status) (cons 'diff cli-diff))) #t)))
+    (begin (define-git-backend! 'cli (list (cons 'status cli-status) (cons 'diff cli-diff)
+                                           (cons 'log cli-log)))
+           #t)))

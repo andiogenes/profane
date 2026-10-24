@@ -31,6 +31,7 @@
 
   (defvar section-roots '() "The top-level sections of the buffer, as last rendered." '(local))
   (defvar section-fold-state #f "Folded state of every rendered section id (an equal? hashtable)." '(local))
+  (defvar section-separate-roots #f "Leave a blank line after each top-level section." '(local))
   (defvar section-refresh-function #f
     "A procedure of no arguments that rebuilds the buffer's sections (g in section-mode)." '(local))
 
@@ -122,7 +123,10 @@
       (with-inhibit-read-only
        (lambda ()
          (erase-buffer)
-         (for-each insert-section! roots)
+         (for-each (lambda (s)
+                     (insert-section! s)
+                     (when (var-ref 'section-separate-roots) (insert "\n")))
+                   roots)
          (goto-char (point-min))))
       (var-set! 'section-roots roots)
       (hashtable-clear! state)
@@ -151,7 +155,7 @@
   ;; (ids line column): the ids of the section at point and its ancestors, innermost first, and
   ;; where point was in the innermost.
   (define (anchor)
-    (let ([s (section-at-point)])
+    (let ([s (or (section-at-point) (and (> (point) (point-min)) (section-at (- (point) 1))))])
       (and s (list (ancestor-ids s)
                    (- (line-number-at-pos (point)) (line-number-at-pos (section-start s)))
                    (- (point) (line-beginning-position))))))
