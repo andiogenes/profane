@@ -527,6 +527,49 @@ the renderer tags the frame answering each event and records when it was submitt
 - Not yet: mouse selection/resizing of windows, scrolling commands (`C-v`/`M-v`, recenter), header lines,
   per-window buffer history (`next-buffer` cycles the buffer list), window configurations beyond tabs. Soft wrap: M4.
 
+## 8j. Open M2 items and known gaps
+
+State at the end of the M2 work so far (everything in §8i is on `main`). Deliberately deferred work, each with what it
+waits for. Keep this list current: remove an entry when it is done, add one when something is left as a seam.
+
+**M2 items still open** (§9, M2 row): transients (generic menus on the canvas, with `set-transient-map` for the
+keys); avy (`avy-goto-word-1`, jump labels on the canvas; the owner's `C-x C-j` waits on it); file-name reading with
+vertico's directory keys (`RET`, `DEL`, `M-DEL` on paths) and `find-file`; mouse routing into `ProfaneView`, which
+also unblocks clickable canvases, cursor shapes, mouse selection and window resizing; window extras (`C-v`/`M-v`/
+recenter, per-window buffer history, header lines); electric-pair. The owner's port (`scheme/init.ss`) still lacks
+`M-g i` (imenu) and `M-g s` (search), which need modes, tree-sitter and the search core (M5, ripgrep/find M3);
+`M-g t` (neotree) and `C-x C-b` (buffer menu), which need listing and tree views; `C-x 4 C-x C-b`.
+
+**Deferred, by area:**
+
+- `C-g` cannot interrupt a busy Scheme loop (a mistyped `(let loop () (loop))` in `M-:` hangs the editor): needs
+  engines (plan §0). **Required before M4.**
+- Evaluating: `load-file` (file-name reading, M3), `eval-defun`/`C-M-x` (defun motion, M5), `C-u C-x C-e`
+  inserting the value, a REPL buffer with history and completion (M10).
+- Region: `delete-selection-mode`, `shift-select-mode`, a mark ring, `C-SPC C-SPC`, showing it in non-selected windows.
+- Press-and-hold: held keys repeat; `press-and-hold-keys` re-enables the accent picker per key. The per-key switch
+  assumes macOS re-reads the default on each key down, which is unverified.
+- Canvas: paths and bezier curves, images, clip and transform (ops are not clipped to a canvas window), inline
+  canvases (they need display-engine support for reserved space in a line), key and focus events, cursor shapes.
+- Native views: only the stub kind; web (M11) and PDF kinds, key/mouse routing into views, focus handoff.
+- Windows: mouse selection and resizing, `C-v`/`M-v`/recenter, header lines, per-window buffer history
+  (`next-buffer` cycles the whole buffer list).
+- Completion: `completion-preselect 'nearest` (the `preselect` option is the seam), corfu (popup completion).
+- Undo restores text but not its text properties (fine once highlighting re-runs); undo history is unbounded.
+- Text properties use arrays (O(runs) per edit); switch to a tree when tree-sitter makes runs dense (M5).
+- show-paren counts brackets without syntax (strings and comments count) until M5.
+- The kill ring is profane-internal; the macOS pasteboard joins with `(profane macos)` (M3).
+- Lines are truncated, not wrapped; windows scroll sideways to keep point visible. Soft wrap is M4. At most 4096
+  characters per line are shaped.
+- No CI. `tests/macos/latency.sh` is the CI latency benchmark the plan asks for, once there is macOS CI.
+- Unexplained latency outlier: single ≈900 ms commit samples appeared in 100k-line benchmark runs while the owner
+  was using the machine, and not when it was idle (five clean runs, max < 6 ms). Hypothesis (unconfirmed): the
+  window lost the front or was covered mid-run, which macOS throttles. Watch the `max` column.
+
+**Owner checks done:** live macOS dark-mode toggle (2026-10-24: Dark at launch, then Light, then Dark; theme and face colors
+followed, checked from Scheme state, not pixels). The CJK input-method check is dropped: the owner does not use those
+languages.
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |
