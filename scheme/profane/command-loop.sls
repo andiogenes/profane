@@ -10,9 +10,16 @@
 
 (library (profane command-loop)
   (export handle-key handle-text last-input-text pending-keys self-insert-amalgamation
-          set-transient-map)
+          set-transient-map set-input-buffer-function!)
   (import (chezscheme) (profane native) (profane buffer) (profane window) (profane keymap)
-          (profane mode) (profane command))
+          (profane mode) (profane command) (profane hook))
+
+  (defhook post-command-hook)
+
+  ;; Where keys go: the selected window's buffer, unless this procedure returns a buffer (the
+  ;; minibuffer, while it reads input).
+  (define input-buffer-function (lambda () #f))
+  (define (set-input-buffer-function! proc) (set! input-buffer-function proc))
 
   (define self-insert-amalgamation 20)
 
@@ -60,9 +67,11 @@
                  (format "~a: ~s" name c))))
 
   (define (select-window-buffer)
-    (let ([w (selected-window)])
-      (when (and w (window-buffer w) (buffer-live? (window-buffer w)))
-        (set-buffer (window-buffer w)))))
+    (let ([b (input-buffer-function)] [w (selected-window)])
+      (cond
+        [(and b (buffer-live? b)) (set-buffer b)]
+        [(and w (window-buffer w) (buffer-live? (window-buffer w)))
+         (set-buffer (window-buffer w))])))
 
   ;; The binding of KEYS in the active keymaps: the first map binding it to anything wins.
   (define (key-binding keys)
@@ -88,7 +97,9 @@
       (guard (c [else (report name c)])
         (if proc (proc) (error name "no such command")))
       (%set-prefix-arg! #f)
-      (%set-last-command! name)))
+      (%set-last-command! name)
+      (guard (c [else (report 'post-command-hook c)])
+        (run-hooks 'post-command-hook))))
 
   ;; ---- prefix argument keys, handled by the loop itself ----
 

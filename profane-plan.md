@@ -421,7 +421,19 @@ the renderer tags the frame answering each event and records when it was submitt
 - **Echo area**: the minibuffer window under the tree shows an undo-disabled echo buffer (`buffer-disable-undo`,
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
-  minibuffer (item 5) will read input in this window.
+  minibuffer reads input in this window (below).
+- **Minibuffer and completion** (`(profane minibuffer)`, `(profane complete)`; M2 item 5). *Divergence from §0:* input is
+  callback-based (`(read-from-minibuffer prompt k)`, `(completing-read prompt collection k opt val ...)`), not a
+  blocking `await`: keys arrive one at a time from the shell, so a suspended command would need a continuation that
+  survives returning to C. `await` can wrap it later. While open, the minibuffer window shows ` *Minibuf-1*` (prompt in
+  `minibuffer-prompt`, solid cursor; the selected window's cursor goes hollow) and keys go to it through
+  `set-input-buffer-function!`; messages are logged but not shown. Candidates are lines below the input (vertico:
+  `vertico-count` 5, selected line in `highlight`, annotations in `shadow`), matched orderless-style (words in any
+  order, smart case), prefix then shorter first. Options: `initial require-match annotate default preselect preview
+  quit history`; collections may be procedures (dynamic/async sources). RET takes the selected candidate, M-RET the
+  input as typed, TAB completes, C-n/C-p select, M-p/M-n history, C-g aborts. One minibuffer at a time. Commands: `M-x`,
+  `C-x b`, `C-x k`, `C-x t RET`. New `post-command-hook`. Not yet: directory keys and file reading, consult sources,
+  `completion-preselect 'nearest` (the `preselect` option is the seam), interrupting a busy loop with `C-g` (engines).
 - **Chrome**: fringes of `ui-fringe-width` (fringe face); a 1 pt divider (`vertical-border`) on windows with a
   neighbor to the right; glyphs that would cross the right edge are not drawn (truncation). Without a mode line
   under it a window draws only whole rows, since a partial row would land in the window below.

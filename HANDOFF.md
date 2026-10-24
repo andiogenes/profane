@@ -135,12 +135,11 @@ The order was agreed with the owner. Each item is a branch, cut from `m2-windows
    exists at the bottom of every frame (`minibuffer-window`), showing the echo buffer; `set-transient-map` exists
    in the command loop; ace-window shows its labels in the mode line (`mode-line-window-label`); `tab-rename` is a
    procedure waiting for a command that reads a name.
-5. **Minibuffer and completion.** Reading input needs a recursive command loop: plan §0 says Scheme `await` on
-   one-shot continuations; engines for preemption/`C-g`. Read in the existing minibuffer window: show a
-   ` *Minibuf-1*` buffer there and make it selectable (`select-window` refuses it today). Then `completing-read` and
-   vertico/marginalia/consult equivalents (`(profane complete)`, async sources, annotations, live preview,
-   `completion-preselect 'nearest`), `M-x`, `C-x b`, `C-x k`, `C-x t RET`/`tab-rename`. Note `C-g` cannot interrupt
-   a busy Scheme loop yet: engines are still to be built.
+5. **Done: minibuffer and completion** (`m2-minibuffer`, plan §8i). Callback-based `read-from-minibuffer` /
+   `completing-read`, vertico-style candidates, `M-x`, `C-x b`, `C-x k`, `C-x t RET`; `post-command-hook`;
+   `tests/scheme/minibuffer-test.ss`. Left: file-name reading with directory keys, consult-style sources (imenu,
+   ripgrep, find, yank, xref) and `completion-preselect 'nearest` on top of `completing-read`; popup completion
+   (corfu) waits for the canvas (item 6). `C-g` still cannot interrupt a busy Scheme loop (engines).
 6. **`(profane canvas)` on the overlay layer** (plan §5.1): draw ops, hit regions, pop-up surfaces. Internal
    pop-ups, transients and avy jump labels are built on it; move ace-window's labels onto the windows. The overlay
    layer already exists (`PF_LAYER_OVERLAY`, transparent, ignores the mouse). Consume `ui-popup-shadow` and the

@@ -31,7 +31,9 @@
           ;; internal, for (profane tab-bar) and (profane transpose-frame)
           %make-window %delete-tree! %frame-set-root! %set-frame-top-margin! %relayout!
           %split-direction-set! %split-children-set! %split-weights-set! %frame-handle
-          %window-handle)
+          %window-handle
+          ;; internal, for (profane minibuffer)
+          %minibuffer-activate! %minibuffer-sync! %minibuffer-deactivate! %minibuffer-active?)
   (import (chezscheme) (profane native) (profane buffer) (profane var) (profane hook)
           (profane mode) (profane command) (profane keymap) (profane display) (profane theme))
 
@@ -592,8 +594,42 @@
 
   (define (newlines s) (length (filter (lambda (c) (char=? c #\newline)) (string->list s))))
 
+  ;; While the minibuffer reads input the window shows its buffer instead; messages are still
+  ;; logged but stay out of the way.
+  (define mini-active #f)
+  (define (%minibuffer-active?) mini-active)
+
+  (define (%minibuffer-activate! buffer)
+    (let ([f (selected-frame)])
+      (set! mini-active #t)
+      (attach-buffer! (frame-minibuffer f) buffer)
+      (%win-set-option (window-handle (frame-minibuffer f)) cursor-option cursor-box)
+      (let ([w (frame-selected f)])
+        (when w (%win-set-option (window-handle w) cursor-option cursor-hollow)))
+      (%minibuffer-sync!)))
+
+  ;; Follows the minibuffer buffer's point and size (it grows to show several lines).
+  (define (%minibuffer-sync!)
+    (let* ([f (selected-frame)] [m (frame-minibuffer f)] [b (window-buffer m)])
+      (set-window-point! m (buffer-point b))
+      (let ([lines (+ 1 (newlines (with-current-buffer b (buffer-string))))])
+        (unless (= lines (frame-echo-lines f))
+          (frame-echo-lines-set! f lines)
+          (%relayout! f)))))
+
+  (define (%minibuffer-deactivate!)
+    (let ([f (selected-frame)])
+      (set! mini-active #f)
+      (attach-buffer! (frame-minibuffer f) (echo-buffer))
+      (%win-set-option (window-handle (frame-minibuffer f)) cursor-option 0)
+      (let ([w (frame-selected f)])
+        (when w (%win-set-option (window-handle w) cursor-option cursor-box)))
+      (frame-echo-lines-set! f 1)
+      (%relayout! f)))
+
   (define (show-echo! text)
-    (let ([b (echo-buffer)])
+    (let ([b (if mini-active #f (echo-buffer))])
+     (when b
       (with-current-buffer b
         (unless (and (not text) (zero? (buffer-size)))
           (erase-buffer)
@@ -606,7 +642,7 @@
           (let ([lines (+ 1 (if text (newlines text) 0))])
             (unless (= lines (frame-echo-lines f))
               (frame-echo-lines-set! f lines)
-              (%relayout! f)))))))
+              (%relayout! f))))))))
 
   (define sink-installed (begin (%set-message-sink! show-echo!) #t))
 
@@ -777,7 +813,7 @@
                     (unless (buffer-live? (window-buffer w))
                       (set-window-buffer! w (other-buffer (window-buffer w)))))
                   (window-list f))
-        (unless (buffer-live? (window-buffer (frame-minibuffer f)))
+        (unless (or mini-active (buffer-live? (window-buffer (frame-minibuffer f))))
           (attach-buffer! (frame-minibuffer f) (echo-buffer)))
         (run-hooks 'pre-redisplay-hook f)
         (for-each (lambda (w) (update-mode-line! w) (update-text-scale! w)) (window-list f)))))
