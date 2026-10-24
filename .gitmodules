@@ -1,3 +1,6 @@
 [submodule "subprojects/chez"]
 	path = subprojects/chez
 	url = https://github.com/cisco/ChezScheme.git
+[submodule "subprojects/libvterm"]
+	path = subprojects/libvterm
+	url = https://github.com/neovim/libvterm

@@ -62,6 +62,10 @@ struct pf_window {
     pf_canvas *canvas; /* canvas window: drawn instead of text */
     uint64_t shown_canvas_version;
     const pf_canvas *shown_canvas;
+    pf_term *term; /* terminal window: its grid is drawn instead of text */
+    uint32_t term_faces[4];
+    uint64_t shown_term_version;
+    const pf_term *shown_term;
     float hscroll, min_hscroll; /* points the text is scrolled left; scroll-left's minimum */
 };
 
@@ -759,6 +763,34 @@ pf_canvas *pf_window_canvas(const pf_window *w) {
     return w->canvas;
 }
 
+void pf_window_set_terminal(pf_window *w, pf_term *term, const uint32_t faces[4]) {
+    if (w->term != term || (term && memcmp(w->term_faces, faces, sizeof w->term_faces) != 0)) {
+        w->term = term;
+        if (term) {
+            memcpy(w->term_faces, faces, sizeof w->term_faces);
+        }
+        w->cursor_valid = 0;
+        w->dirty = 1;
+    }
+}
+
+pf_term *pf_window_terminal(const pf_window *w) {
+    return w->term;
+}
+
+void pf_window_terminal_size(const pf_window *w, int *rows, int *cols) {
+    float body_h = w->height - w->mode_line_h - w->header_h;
+    float body_w = w->width - w->divider;
+    int r = w->style.line_height > 0 ? (int)floorf(body_h / w->style.line_height) : 1;
+    int c = w->style.cell_width > 0 ? (int)floorf(body_w / w->style.cell_width) : 1;
+    if (rows) {
+        *rows = r < 1 ? 1 : r;
+    }
+    if (cols) {
+        *cols = c < 1 ? 1 : c;
+    }
+}
+
 void pf_window_set_native(pf_window *w, uint32_t kind) {
     if (w->native != kind) {
         w->native = kind;
@@ -781,7 +813,7 @@ void pf_window_body_rect(const pf_window *w, float rect[4]) {
 int pf_window_pos_rect(pf_window *w, size_t pos, float rect[4]) {
     pf_text *text = pf_handle_get(w->buf, PF_HANDLE_TEXT);
     const pf_text_snapshot *s = text ? pf_text_current(text) : NULL;
-    if (!s || w->native || w->canvas) {
+    if (!s || w->native || w->canvas || w->term) {
         return -1;
     }
     const pf_window_style *st = &w->style;
@@ -817,7 +849,7 @@ int pf_window_pos_rect(pf_window *w, size_t pos, float rect[4]) {
 int64_t pf_window_pos_at(pf_window *w, float x, float y) {
     pf_text *text = pf_handle_get(w->buf, PF_HANDLE_TEXT);
     const pf_text_snapshot *s = text ? pf_text_current(text) : NULL;
-    if (!s || w->native || w->canvas) {
+    if (!s || w->native || w->canvas || w->term) {
         return -1;
     }
     const pf_window_style *st = &w->style;
@@ -842,6 +874,122 @@ int64_t pf_window_pos_at(pf_window *w, float x, float y) {
     return (int64_t)(r.start + idx);
 }
 
+/* The terminal grid: background runs, then the cursor, then the glyphs of each cell in the font
+ * of its attributes (a cell is shaped on its own, so a wide or fallback glyph never shifts its
+ * neighbors; the layout cache makes repeats free). */
+static void draw_terminal(pf_window *w, pf_display *d, float body_h, uint32_t window_fg) {
+    pf_term *t = w->term;
+    const float cw = w->style.cell_width, lh = w->style.line_height;
+    const float y0 = w->header_h;
+    const int rows = pf_term_rows(t), cols = pf_term_cols(t);
+    uint32_t fonts[4];
+    for (int i = 0; i < 4; i++) {
+        uint32_t f = pf_face_get(w->term_faces[i])->font;
+        fonts[i] = f ? f : default_font_of(w);
+    }
+    int curs_row, curs_col, curs_visible, curs_shape, curs_blink;
+    pf_term_cursor(t, &curs_row, &curs_col, &curs_visible, &curs_shape, &curs_blink);
+    uint32_t cursor_color = role_color(PF_ROLE_CURSOR, PF_FACE_HAS_BG, window_fg);
+    int cursor_kind = curs_visible ? w->cursor_kind : PF_CURSOR_NONE;
+    float cursor_w = cw;
+
+    /* backgrounds, in horizontal runs of one color */
+    for (int r = 0; r < rows; r++) {
+        float y = y0 + (float)r * lh;
+        if (y + lh > body_h + 0.01f) {
+            break;
+        }
+        int c = 0;
+        while (c < cols) {
+            pf_term_cell cell;
+            pf_term_cell_get(t, r, c, &cell);
+            if (cell.bg_default) {
+                c++;
+                continue;
+            }
+            int start = c;
+            uint32_t color = cell.bg;
+            while (c < cols) {
+                pf_term_cell_get(t, r, c, &cell);
+                if (cell.bg_default || cell.bg != color) {
+                    break;
+                }
+                c++;
+            }
+            pf_display_rect(d, (float)start * cw, y, (float)(c - start) * cw, lh, color);
+        }
+    }
+
+    /* the cursor: below the glyphs when it is a box, so the glyph shows through in the cell's color */
+    if (cursor_kind != PF_CURSOR_NONE && curs_row >= 0 && curs_row < rows && curs_col >= 0 &&
+        curs_col < cols) {
+        pf_term_cell under;
+        pf_term_cell_get(t, curs_row, curs_col, &under);
+        cursor_w = under.width == 2 ? 2 * cw : cw;
+        float x = (float)curs_col * cw, y = y0 + (float)curs_row * lh;
+        w->cursor[0] = x;
+        w->cursor[1] = y;
+        w->cursor[2] = cursor_w;
+        w->cursor[3] = lh;
+        w->cursor_valid = 1;
+        if (cursor_kind == PF_CURSOR_HOLLOW) {
+            pf_display_rect(d, x, y, cursor_w, 1, cursor_color);
+            pf_display_rect(d, x, y + lh - 1, cursor_w, 1, cursor_color);
+            pf_display_rect(d, x, y, 1, lh, cursor_color);
+            pf_display_rect(d, x + cursor_w - 1, y, 1, lh, cursor_color);
+        } else if (curs_shape == 2) {
+            pf_display_rect(d, x, y + lh - 2, cursor_w, 2, cursor_color);
+        } else if (curs_shape == 3) {
+            pf_display_rect(d, x, y, 2, lh, cursor_color);
+        } else {
+            pf_display_rect(d, x, y, cursor_w, lh, cursor_color);
+        }
+    }
+
+    float ascent = roundf(w->style.ascent);
+    for (int r = 0; r < rows; r++) {
+        float y = y0 + (float)r * lh;
+        if (y + lh > body_h + 0.01f) {
+            break;
+        }
+        float baseline = y + ascent;
+        for (int c = 0; c < cols; c++) {
+            pf_term_cell cell;
+            pf_term_cell_get(t, r, c, &cell);
+            if (cell.width == 0 || cell.cps[0] == 0 || cell.conceal) {
+                continue;
+            }
+            size_t n = 0;
+            while (n < PF_TERM_MAX_CPS && cell.cps[n]) {
+                n++;
+            }
+            int blank = n == 1 && cell.cps[0] == ' ';
+            int boxed = cursor_kind == PF_CURSOR_BOX && curs_shape == 1 && r == curs_row && c == curs_col;
+            uint32_t color = boxed ? (cell.bg_default ? role_color(PF_ROLE_DEFAULT, PF_FACE_HAS_BG, 0xFFFFFFFF) : cell.bg)
+                                   : cell.fg;
+            uint32_t font = fonts[(cell.bold ? 1 : 0) | (cell.italic ? 2 : 0)];
+            float x = (float)c * cw;
+            if (!blank) {
+                const pf_line_layout *lay = pf_layout_line(w->cache, font, cell.cps, n);
+                for (size_t g = 0; g < lay->nglyphs; g++) {
+                    pf_display_glyph(d, lay->glyphs[g].font, lay->glyphs[g].glyph, x + lay->glyphs[g].x,
+                                     baseline, color);
+                }
+            }
+            float span = cell.width == 2 ? 2 * cw : cw;
+            if (cell.underline) {
+                pf_display_rect(d, x, baseline + 1, span, 1, color);
+                if (cell.underline == 2) {
+                    pf_display_rect(d, x, baseline + 3, span, 1, color);
+                }
+            }
+            if (cell.strike) {
+                pf_display_rect(d, x, baseline - roundf(w->style.ascent / 3), span, 1, color);
+            }
+        }
+    }
+}
+
 const pf_display *pf_window_redisplay(pf_window *w) {
     pf_text *text = pf_handle_get(w->buf, PF_HANDLE_TEXT);
     const pf_text_snapshot *s = text ? pf_text_current(text) : NULL;
@@ -856,7 +1004,9 @@ const pf_display *pf_window_redisplay(pf_window *w) {
     uint64_t faces = pf_face_generation();
     uint64_t props = text ? pf_props_generation(pf_text_props(text)) : 0;
     uint64_t cvs_version = w->canvas ? pf_canvas_version(w->canvas) : 0;
-    if (!w->dirty && w->canvas == w->shown_canvas && cvs_version == w->shown_canvas_version && s == w->shown && point == w->shown_point && w->top == w->shown_top &&
+    uint64_t term_version = w->term ? pf_term_version(w->term) : 0;
+    if (!w->dirty && w->term == w->shown_term && term_version == w->shown_term_version &&
+        w->canvas == w->shown_canvas && cvs_version == w->shown_canvas_version && s == w->shown && point == w->shown_point && w->top == w->shown_top &&
         faces == w->shown_faces && props == w->shown_props) {
         return NULL;
     }
@@ -869,6 +1019,8 @@ const pf_display *pf_window_redisplay(pf_window *w) {
     w->shown_props = props;
     w->shown_canvas = w->canvas;
     w->shown_canvas_version = cvs_version;
+    w->shown_term = w->term;
+    w->shown_term_version = term_version;
 
     uint32_t bg = role_color(PF_ROLE_DEFAULT, PF_FACE_HAS_BG, 0xFFFFFFFF);
     uint32_t fg = role_color(PF_ROLE_DEFAULT, PF_FACE_HAS_FG, 0x000000FF);
@@ -877,12 +1029,14 @@ const pf_display *pf_window_redisplay(pf_window *w) {
     pf_layout_begin_frame(w->cache);
     float body_h = w->height - w->mode_line_h;
     uint32_t fringe = role_color(PF_ROLE_FRINGE, PF_FACE_HAS_BG, 0);
-    if (!w->native && !w->canvas) {
+    if (!w->native && !w->canvas && !w->term) {
         pf_display_rect(d, 0, w->header_h, w->fringe_left, body_h - w->header_h, fringe);
         pf_display_rect(d, w->width - w->divider - w->fringe_right, w->header_h, w->fringe_right,
                         body_h - w->header_h, fringe);
     }
-    if (w->canvas) {
+    if (w->term) {
+        draw_terminal(w, d, body_h, fg);
+    } else if (w->canvas) {
         pf_canvas_env env = {w->cache, w->fonts, default_font_of(w)};
         pf_canvas_render(w->canvas, d, &env, 0, w->header_h);
     } else if (s && !w->native) {

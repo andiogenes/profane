@@ -29,6 +29,10 @@
           %proc-spawn %proc-pid %proc-write %proc-eof %proc-signal %proc-resize %proc-consumed
           %proc-release
           %fs-stat %fs-readlink %fs-owner %fs-copy %fs-rename %fs-mkdir %fs-remove
+          %trm-new %trm-free %trm-resize %trm-rows %trm-cols %trm-version %trm-feed %trm-output
+          %trm-set-colors %trm-key %trm-text %trm-paste %trm-scroll-view %trm-view-offset
+          %trm-scrollback %trm-cursor %trm-title %trm-bells %trm-alt-screen %trm-mouse-mode %trm-dump
+          %trm-set-window %trm-window-size
           %face-define %face-role-set %buf-put-prop %buf-get-prop %display-set-line-spacing)
   (import (chezscheme))
 
@@ -67,6 +71,30 @@
   (define-native %fs-rename "pf_fs_rename" (u8* size_t u8* size_t) int)
   (define-native %fs-mkdir "pf_fs_mkdir" (u8* size_t int) int)
   (define-native %fs-remove "pf_fs_remove" (u8* size_t) int)
+  (define-native %trm-new "pf_trm_new" (int int int) unsigned-32)
+  (define-native %trm-free "pf_trm_free" (unsigned-32) int)
+  (define-native %trm-resize "pf_trm_resize" (unsigned-32 int int) int)
+  (define-native %trm-rows "pf_trm_rows" (unsigned-32) int)
+  (define-native %trm-cols "pf_trm_cols" (unsigned-32) int)
+  (define-native %trm-version "pf_trm_version" (unsigned-32) integer-64)
+  (define-native %trm-feed "pf_trm_feed" (unsigned-32 u8* size_t) int)
+  (define-native %trm-output "pf_trm_output" (unsigned-32 u8* size_t) integer-64)
+  (define-native %trm-set-colors "pf_trm_set_colors" (unsigned-32 unsigned-32 unsigned-32 u8*) int)
+  (define-native %trm-key "pf_trm_key" (unsigned-32 u8* size_t) int)
+  (define-native %trm-text "pf_trm_text" (unsigned-32 u8* size_t) int)
+  (define-native %trm-paste "pf_trm_paste" (unsigned-32 u8* size_t) int)
+  (define-native %trm-scroll-view "pf_trm_scroll_view" (unsigned-32 int) int)
+  (define-native %trm-view-offset "pf_trm_view_offset" (unsigned-32) int)
+  (define-native %trm-scrollback "pf_trm_scrollback" (unsigned-32) int)
+  (define-native %trm-cursor "pf_trm_cursor" (unsigned-32 int) int)
+  (define-native %trm-title "pf_trm_title" (unsigned-32 u8* size_t) integer-64)
+  (define-native %trm-bells "pf_trm_bells" (unsigned-32) integer-64)
+  (define-native %trm-alt-screen "pf_trm_alt_screen" (unsigned-32) int)
+  (define-native %trm-mouse-mode "pf_trm_mouse_mode" (unsigned-32) int)
+  (define-native %trm-dump "pf_trm_dump" (unsigned-32 u8* size_t) integer-64)
+  (define-native %trm-set-window "pf_trm_set_window"
+    (unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32) int)
+  (define-native %trm-window-size "pf_trm_window_size" (unsigned-32 int) int)
   (define-native %buf-new "pf_buf_new" (u8* size_t) unsigned-32)
   (define-native %buf-free "pf_buf_free" (unsigned-32) int)
   (define-native %buf-chars "pf_buf_chars" (unsigned-32) integer-64)

@@ -12,6 +12,7 @@ set(PF_NATIVE_SOURCES
   embed/pf_display_ffi.c
   embed/pf_handles.c
   embed/pf_input.c
+  embed/pf_term_ffi.c
   embed/pf_window_ffi.c
   fs/pf_fs.c
   layout/pf_layout.c
@@ -19,6 +20,7 @@ set(PF_NATIVE_SOURCES
   render/pf_display.c
   text/pf_props.c
   text/pf_text.c
+  term/pf_term.c
   text/pf_utf8.c)
 
 add_library(pf_core STATIC
@@ -34,10 +36,11 @@ target_include_directories(pf_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/layout"
   "${CMAKE_CURRENT_SOURCE_DIR}/process"
   "${CMAKE_CURRENT_SOURCE_DIR}/render"
+  "${CMAKE_CURRENT_SOURCE_DIR}/term"
   "${CMAKE_CURRENT_SOURCE_DIR}/text")
 target_compile_options(pf_core PRIVATE ${PROFANE_WARNINGS})
 # Public headers stay Chez-free; only pf_scheme.c includes scheme.h.
-target_link_libraries(pf_core PUBLIC chez::kernel)
+target_link_libraries(pf_core PUBLIC chez::kernel vterm)
 
 # Executables that embed Chez link this so every native entry point is present (the linker
 # would otherwise drop objects nothing in C references) and resolvable by Scheme via dlsym.
@@ -53,5 +56,7 @@ target_include_directories(pf_native PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/layout"
   "${CMAKE_CURRENT_SOURCE_DIR}/process"
   "${CMAKE_CURRENT_SOURCE_DIR}/render"
+  "${CMAKE_CURRENT_SOURCE_DIR}/term"
   "${CMAKE_CURRENT_SOURCE_DIR}/text")
+target_link_libraries(pf_native PRIVATE vterm)
 target_compile_options(pf_native PRIVATE ${PROFANE_WARNINGS})

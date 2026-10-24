@@ -1,11 +1,11 @@
 (import (chezscheme) (srfi :64) (profane native) (profane buffer) (profane var) (profane keymap)
         (profane command) (profane command-loop) (profane mode) (profane window) (profane display)
         (profane theme) (profane themes) (profane tab-bar) (profane ace-window) (profane canvas)
-        (profane minibuffer) (profane complete) (profane simple) (profane transient))
+        (profane minibuffer) (profane complete) (profane simple) (profane transient) (profane vterm))
 
 (for-each invoke-library '((profane simple) (profane window) (profane display) (profane themes)
                            (profane tab-bar) (profane ace-window) (profane canvas)
-                           (profane minibuffer) (profane complete)))
+                           (profane minibuffer) (profane complete) (profane vterm)))
 (load-theme 'profane-light)
 
 (test-begin "init")
@@ -85,6 +85,9 @@
   (type "other-one")
   (keys "RET")
   (test-eq "RET keeps it" other (window-buffer w)))
+
+;; the shell vterm and shell-here run
+(test-equal "fish is the shell" "/opt/homebrew/bin/fish" (var-ref 'explicit-shell-file-name))
 
 (delete-headless-frame! f)
 (test-end "init")

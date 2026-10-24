@@ -36,3 +36,6 @@
 ;;; Buffer menu: C-x C-b lists the buffers in this window, C-x 4 C-x C-b in another one.
 (define-key! (global-map) "C-x C-b" 'buffer-menu)
 (define-key! (global-map) "C-x 4 C-x C-b" 'list-buffers)
+
+;;; The shell vterm and shell-here run (Emacs: vterm-shell and explicit-shell-file-name).
+(var-set! 'explicit-shell-file-name "/opt/homebrew/bin/fish")

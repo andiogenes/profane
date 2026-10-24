@@ -9,7 +9,7 @@
 ;;; next key sequence only.
 
 (library (profane command-loop)
-  (export handle-key handle-text last-input-text pending-keys self-insert-amalgamation
+  (export handle-key handle-text last-input-text last-input-key pending-keys self-insert-amalgamation
           set-transient-map exit-transient-map! clear-transient-map! transient-map-active?
           set-input-buffer-function! set-key-reader!
           command-busy? resume-busy! abort-busy! command-wait! command-wake!)
@@ -28,6 +28,15 @@
   ;; it; changing the buffer or C-g deactivates it. The mark itself stays set.
   (defvar mark-active #f "Whether the region between point and the mark is active (highlighted)."
     '(local))
+
+  ;; A mode that takes over the keyboard (a terminal) sets these buffer-locally. key-filter is
+  ;; called with the first key of every sequence: a command symbol it returns runs instead of the
+  ;; keymaps, #f lets them have the key. Typed text that no keymap binds runs text-input-command.
+  (defvar key-filter #f "Procedure from a key to a command to run for it, or #f for the keymaps." '(local))
+  (defvar text-input-command 'self-insert-command "Command run for typed text no keymap binds." '(local))
+
+  (define last-key #f)
+  (define (last-input-key) last-key)
 
   (define (push-press-and-hold! keys)
     (let ([bv (string->utf8
@@ -308,12 +317,17 @@
   (define (process-key key)
     (select-window-buffer)
     (when (current-message) (message #f))
+    (set! last-key key)
     (cond
       [key-reader
        (let ([reader key-reader])
          (set-key-reader! #f)
          (guard (c [else (report 'key-reader c)])
            (reader key)))]
+      [(and (null? pending) (not transient) (var-ref 'key-filter) ((var-ref 'key-filter) key))
+       => (lambda (command)
+            (%set-prefix-arg! #f)
+            (run-command command))]
       [(and (null? pending) (not transient) (prefix-arg-key key)) (void)]
       [(and (pair? pending) (equal? key "C-g"))
        (set-pending! '())
@@ -363,4 +377,4 @@
        ;; A mode may bind a plain character (dired's n, m, d): the command runs instead of
        ;; inserting it. Everything else is typed.
        (let ([b (and (= (string-length text) 1) (key-binding (list (char-key (string-ref text 0)))))])
-         (run-command (if (symbol? b) b 'self-insert-command)))])))
+         (run-command (if (symbol? b) b (var-ref 'text-input-command))))])))

@@ -16,6 +16,7 @@ typedef enum pf_handle_kind {
     PF_HANDLE_FRAME = 3,
     PF_HANDLE_CANVAS = 4,
     PF_HANDLE_PROCESS = 5,
+    PF_HANDLE_TERM = 6,
 } pf_handle_kind;
 
 pf_handle pf_handle_new(pf_handle_kind kind, void *object); /* 0 if out of memory or slots */

@@ -77,7 +77,13 @@
                  (bg-hl-line . "#e8edf3") (bg-highlight . "#d9e6f7") (bg-region . "#c6dbf5")
                  (bg-paren-match . "#b5d3f0") (bg-paren-mismatch . "#f4b9b9")
                  (bg-mode-line . "#c9d3e2") (bg-mode-line-inactive . "#eceff4")
-                 (bg-tab-bar . "#e1e5ec") (border . "#7d8899"))))
+                 (bg-tab-bar . "#e1e5ec") (border . "#7d8899")
+                 ;; the 16 ANSI colors of terminals
+                 (term-black . "#000000") (term-red . red) (term-green . green) (term-yellow . yellow)
+                 (term-blue . blue) (term-magenta . magenta) (term-cyan . cyan) (term-white . "#a0a0a0")
+                 (term-bright-black . "#595959") (term-bright-red . "#d04040") (term-bright-green . "#2f8f2f")
+                 (term-bright-yellow . "#9a7a00") (term-bright-blue . "#3a5fd0") (term-bright-magenta . "#a84c8a")
+                 (term-bright-cyan . "#2a82ad") (term-bright-white . "#d0d0d0"))))
       (define-theme 'profane-dark
         (theme 'dark
                '((bg . "#0e1220") (fg . "#ffffff") (fg-dim . "#a3a9b8") (cursor . fg)
@@ -86,7 +92,12 @@
                  (bg-hl-line . "#1c2336") (bg-highlight . "#26314b") (bg-region . "#2c3b5c")
                  (bg-paren-match . "#31466d") (bg-paren-mismatch . "#6b2b33")
                  (bg-mode-line . "#2b3654") (bg-mode-line-inactive . "#171c2c")
-                 (bg-tab-bar . "#141929") (border . "#5c6888"))))
+                 (bg-tab-bar . "#141929") (border . "#5c6888")
+                 (term-black . "#3a4057") (term-red . red) (term-green . green) (term-yellow . yellow)
+                 (term-blue . blue) (term-magenta . magenta) (term-cyan . cyan) (term-white . "#c8ccd8")
+                 (term-bright-black . "#6b7390") (term-bright-red . "#ffb3b6") (term-bright-green . "#a0eaa0")
+                 (term-bright-yellow . "#f5df9a") (term-bright-blue . "#b0d0ff") (term-bright-magenta . "#f9c0ef")
+                 (term-bright-cyan . "#a0e8f5") (term-bright-white . "#ffffff"))))
       '(profane-light profane-dark)))
 
   ;; ---- UI style presets (plan §6): which chrome is on. minimal is the default. ----

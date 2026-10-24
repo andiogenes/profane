@@ -105,6 +105,11 @@ int pf_frame_cursor_at(const pf_frame *f, float x, float y);
 int pf_frame_set_window_canvas(pf_frame *f, pf_window *w, pf_canvas *c);
 /* Detaches C from every window showing it. */
 void pf_frame_detach_canvas(pf_frame *f, pf_canvas *c);
+
+/* Makes window W show terminal T (see pf_window_set_terminal); T NULL makes it a text window.
+ * Returns -1 if W is not in F. pf_frame_detach_terminal does so for every window showing T. */
+int pf_frame_set_window_terminal(pf_frame *f, pf_window *w, pf_term *t, const uint32_t faces[4]);
+void pf_frame_detach_terminal(pf_frame *f, pf_term *t);
 /* Text size in face FACE, as pop-ups draw it. */
 void pf_frame_text_extent(pf_frame *f, const uint32_t *cps, size_t n, uint32_t face, float *width,
                           float *height);

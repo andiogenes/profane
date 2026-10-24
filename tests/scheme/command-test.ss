@@ -272,5 +272,29 @@
 (test-eqv "typed text with a binding runs the command" 2 bound-ran)
 (test-equal "and other text is still inserted" "q" (buffer-string))
 
+;; a mode can take over the keyboard: key-filter picks the command for a key, text-input-command
+;; takes unbound text
+(define taken '())
+(register-command! 'test-take
+  (lambda () (set! taken (cons (list (last-input-key) (last-input-text)) taken))) "")
+(register-command! 'test-take-text (lambda () (set! taken (cons (list 'text (last-input-text)) taken))) "")
+(set-buffer (generate-new-buffer "taken"))
+(var-set! 'key-filter (lambda (key) (and (not (member key '("C-x" "M-x" "C-g"))) 'test-take)))
+(var-set! 'text-input-command 'test-take-text)
+(handle-key "C-a")
+(handle-key "<up>")
+(handle-text "hi")
+(test-equal "keys the filter takes, and text" '(("C-a" "") ("<up>" "") (text "hi")) (map (lambda (e) (if (eq? (car e) 'text) e (list (car e) ""))) (reverse taken)))
+(set! taken '())
+(handle-key "C-x")
+(test-equal "an excepted key starts a sequence as usual" '("C-x") (pending-keys))
+(handle-key "C-x")
+(test-equal "and the key after it is not filtered" '() taken)
+(test-eq "it ran the keymap's command" 'exchange-point-and-mark (last-command))
+(var-set! 'key-filter #f)
+(var-set! 'text-input-command 'self-insert-command)
+(handle-text "z")
+(test-equal "without them text is inserted again" "z" (buffer-string))
+
 (test-end "command")
 (test-exit)

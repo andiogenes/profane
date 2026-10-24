@@ -19,6 +19,14 @@ void pf_app_beep(void) {
     NSBeep();
 }
 
+static void PFRedisplayAllViews(void) {
+    for (NSWindow *w in NSApp.windows) {
+        if ([w.contentView isKindOfClass:ProfaneView.class]) {
+            [(ProfaneView *)w.contentView redisplay];
+        }
+    }
+}
+
 /* Runs the next time slice of a command that outlived its first (see (profane command-loop)). It
  * is a main-queue block, so the event loop runs between slices and C-g can reach Scheme. The
  * view is redrawn from time to time, so a long command shows its progress. */
@@ -29,11 +37,7 @@ void pf_app_schedule_resume(void) {
         CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
         if (now - last > 0.05) {
             last = now;
-            for (NSWindow *w in NSApp.windows) {
-                if ([w.contentView isKindOfClass:ProfaneView.class]) {
-                    [(ProfaneView *)w.contentView redisplay];
-                }
-            }
+            PFRedisplayAllViews();
         }
     });
 }
@@ -43,6 +47,9 @@ void pf_app_schedule_resume(void) {
 static void pf_app_async_wake(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         pf_scheme_call("pf-async", NULL, 0, NULL);
+        /* Events change what is shown (search results, a terminal's output): draw it now, not at
+         * the next key. A redisplay with nothing new submits no frame. */
+        PFRedisplayAllViews();
     });
 }
 

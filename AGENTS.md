@@ -37,7 +37,9 @@ under "Traps" below.
 ## Commands
 
 Build system is CMake + Ninja. Chez Scheme is a submodule (`subprojects/chez`, pinned to a release tag) built
-once per build tree by `cmake/Chez.cmake` (~90 s); after bumping it, delete `build/chez`.
+once per build tree by `cmake/Chez.cmake` (~90 s); after bumping it, delete `build/chez`. libvterm is a
+submodule too (`subprojects/libvterm`, v0.3.3), built as a static library by `cmake/Libvterm.cmake` (perl
+generates two tables).
 
 ```sh
 git submodule update --init --recursive                 # first checkout
@@ -233,6 +235,7 @@ clang-format -i <files>                                 # format C / ObjC (brew 
 | Keychain secrets | `PFMacOS.m`, `(profane secrets)` (§8k) |
 | File system calls, dired | `core/fs/pf_fs.*`, `(profane fs)`, `(profane dired)` (§8k) |
 | Sidebar file tree, buffer menu | `(profane sidebar)`, `(profane buffer-menu)` (§8k) |
+| Terminal emulator (libvterm), vterm, shell-here | `core/term/pf_term.*`, `pf_window_set_terminal`, `(profane vterm)` (§8k) |
 | Child processes and ptys | `core/process/pf_process.*`, `(profane process)` (§8k) |
 | Scheme libraries | `scheme/profane/*.sls`: async, buffer, window, tab-bar, ace-window, transpose-frame, var, hook, keymap, face, command, mode, command-loop, simple, minibuffer, complete, canvas, eval, display, theme, themes, native, repl |
 | Boot, C→Scheme entry points (`pf-key`, `pf-insert-text`, `pf-startup`, `pf-redisplay`, …), init files | `scheme/boot.ss`, `scheme/init.ss` |

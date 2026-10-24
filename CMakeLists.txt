@@ -29,6 +29,7 @@ endif()
 set(PROFANE_WARNINGS -Wall -Wextra -Wpedantic -Wno-gnu-zero-variadic-macro-arguments)
 
 include(cmake/Chez.cmake)
+include(cmake/Libvterm.cmake)
 
 enable_testing()
 

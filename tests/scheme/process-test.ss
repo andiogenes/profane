@@ -86,6 +86,13 @@
     (start-process "x" '("no-such-program-pf")) #f))
 (test-eqv "its token was released" 0 (length (process-list)))
 
+;; ---- binary output arrives raw ----
+(define raw '())
+(await (process-promise
+        (start-process "bin" (sh "printf '\\303\\251\\000x'")
+                       `((binary . #t) (filter . ,(lambda (p bv) (set! raw (append raw (bytevector->u8-list bv)))))))))
+(test-equal "bytes, not text (a NUL and a split character included)" '(#xC3 #xA9 0 #x78) raw)
+
 ;; ---- pty ----
 (define tty "")
 (define pty (start-process "pty" (sh "test -t 0 && echo tty; stty size; read x; echo got:$x")

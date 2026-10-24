@@ -15,7 +15,8 @@ Scope is shaped by the owner's actual Emacs usage (andiogenes/.emacs.d).
 | Scripting | Chez Scheme 10.x (threaded, `tarm64osx`), R6RS libraries + R7RS shim; vendored as a submodule at `subprojects/chez` (v10.4.1), built via CMake ExternalProject |
 | Elisp compatibility | None. Emacs-familiar names, own Scheme API; owner's config gets ported |
 | Git | libgit2 for reads, `git` CLI for all mutations |
-| Async | GCD + CFRunLoop, FSEvents, kqueue; Scheme `await` on one-shot continuations; engines for preemption/`C-g` |
+| Async | Events posted from reader threads and timers to one main-thread queue; Scheme promises and `await` (a command parks its engine); engines for preemption/`C-g`; FSEvents and GCD queues join with the items that need them (§8k) |
+| Terminal | libvterm (neovim's fork, MIT) vendored as a submodule at `subprojects/libvterm` (v0.3.3), built by `cmake/Libvterm.cmake` (needs perl to generate two tables); drawn as a window kind from a cell grid, not as buffer text (§8k) |
 | Org | "Org-lite": notes and outlines on unchanged `.org` files; no agenda/babel/export |
 | UI style | Quiet by default: `(ui-style 'minimal)` default, opt-in `'rich` preset; one design-token system drives all UI |
 | Widgets | Public low-level canvas API + mid-level retained widget toolkit in Scheme; host for arbitrary AppKit views |
@@ -837,6 +838,58 @@ Decisions:
   RET`, `g`, `q` and `C-x C-b` through real key events; the tree was 252 points wide at 1x). **Not verified**: how any of it
   looks (the glyph `▸▾` in the code font, faces), the sidebar with several tabs (it lives in the current tab's layout),
   resizing it with the mouse, very large trees, git submodules.
+
+**Item 7: vterm and shell-here** (`core/term/pf_term.*`, `pf_window_set_terminal`, `(profane vterm)`; libvterm submodule).
+Decisions:
+
+- **A terminal window kind, not buffer text and not a canvas.** The libvterm screen and a scrollback ring live in the C core
+  (`pf_term`); a window with a terminal attached (`pf_window_set_terminal`, like a canvas window) draws the cell grid straight
+  into display items: background runs, the cursor, one glyph per cell in the regular/bold/italic/bold-italic face's font
+  (each cell is shaped alone through the layout cache, so wide and fallback glyphs never shift a neighbor), underline and
+  strike rects. No renderer change was needed. Reasons: truecolor TUIs would need thousands of registered faces as text
+  properties, and every screen update would go through the piece tree and the layout cache; canvases are an authoring API
+  with retained ops and hit regions. The scrollback (default 5000 lines, compact 16-byte cells, trailing blanks dropped,
+  none from the alternate screen) is in C; `S-<prior>`/`S-<next>` scroll it.
+- **Copy mode** (`C-c C-t`) puts history and screen into the buffer as plain read-only text, so search, region and `M-w` work as
+  anywhere, and returns to the live grid on the next `C-c C-t`. This is where the buffer approach's text operations come from.
+- **Keyboard takeover** (two new buffer-local variables in the command loop, usable by any mode): `key-filter` (a procedure
+  from the first key of a sequence to a command, or #f for the keymaps) and `text-input-command` (what unbound typed text
+  runs); `last-input-key` tells the command which key. vterm sends every key to the program except
+  `vterm-keymap-exceptions` (`C-c C-x C-u C-g M-x M-o M-g C-y M-y M-:`; the owner's `M-o` and `M-g` prefix included);
+  typed text, input-method text included, goes to the program as UTF-8. Under `C-c`: `C-c C-c/C-d/C-z/C-g/C-l` send that
+  control key; `C-q` sends the next key as it is. `C-y`/`M-y` paste (bracketed when the program asked).
+- **Processes feed it raw bytes**: `start-process` gained `(binary . #t)` (filters get bytevectors, no decoding), so
+  libvterm's own UTF-8 parser sees split characters. What the terminal says back (key encodings, answers to queries such as
+  device attributes) is written to the program's pty after every feed and key.
+- **Size**: before every redisplay (`pre-redisplay-hook`) each window shows its session's terminal (or text, in copy mode) and
+  the terminal takes the size of the selected window showing it (else the first), telling the program (`TIOCSWINSZ`).
+  Buffers killed behind a live terminal are cleaned up there too (the program is killed, the terminal freed).
+- **Colors** come from the theme: `term-black` ... `term-bright-white` palette roles (added to both built-in themes; the six
+  hues reuse the theme's own) plus `fg`/`bg`; they are pushed when a terminal is made and on every theme load.
+- **Shell**: `explicit-shell-file-name` (default `$SHELL`, else `/bin/zsh`); the owner's `init.ss` sets it to
+  `/opt/homebrew/bin/fish` (their Emacs sets it to zsh for comint and `vterm-shell` to fish; profane has one variable for
+  both, as agreed). The program gets `TERM=xterm-256color`, `COLORTERM=truecolor`, `INSIDE_PROFANE=1`, runs in the buffer's
+  `default-directory`. `vterm` (`*vterm*`, reused; a prefix argument opens another) and `shell-here` (`*shell*<dir/>`, one per
+  directory, reused) switch to the terminal in the selected window (Emacs's `shell` also uses the same window, whatever its
+  docstring says about a new one). When the program exits the buffer is killed (`vterm-kill-buffer-on-exit`; off: the exit
+  is shown in the terminal).
+- **Also fixed (affects earlier items)**: the macOS shell now redisplays after every async dispatch. Before, events from
+  processes and timers (search results, `consult-ripgrep`'s live list) changed state but were drawn only at the next key.
+- **Not done**: mouse (reporting to the program, selection, wheel scrolling, clicking links), focus events, the cursor blinking
+  (`blink` is reported but ignored), reflow on resize (the program repaints on SIGWINCH), bold-as-bright, DEC double-width
+  lines, sixel/images, OSC 52 clipboard, shell integration (directory tracking from the prompt), `vterm-send-next-key`
+  echoing, a title in the mode line (kept, `vterm-title`), a cursor row when the window is scrolled sideways.
+- **Verified**: `c.term` (output parsing, colors, 256/truecolor, reverse, wide characters, scrollback and the view, resize,
+  text dump, every kind of key encoding incl. application cursor mode, device-attribute answer, bracketed paste, title, bell,
+  mouse mode, alternate screen without history; clean under ASan/UBSan), `test_layout` (the terminal window's display list:
+  positions, colors, background runs, box/hollow/none cursor, redisplay only on change), `command-test` (the keyboard
+  takeover), `process-test` (binary output), `vterm-test.ss` (44 checks with real pty programs: a prompt, keys and text incl.
+  non-ASCII, the excepted keys, yank, resizing with the window, copy mode, exit handling, killing the buffer kills the program,
+  reuse and prefix argument, `shell-here` per directory, a 200-line history and scrolling) and the running app: real fish
+  started by `M-x vterm`, its prompt (with the git branch) drawn into the terminal, `echo $fish_pid` typed with real key events.
+  **Not verified**: how it looks on screen (the Metal path was not looked at: only the display list is tested), key-to-pixel
+  latency in a terminal, full-screen programs (vim, htop, less) on the real renderer, a very fast output flood (`yes`),
+  fish's own key bindings beyond the shown prompt, the Russian layout (plain keys go as typed text, so letters follow the layout).
 
 ## 9. Milestones
 

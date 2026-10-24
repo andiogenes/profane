@@ -401,7 +401,89 @@ static void test_faces(void) {
     pf_layout_cache_free(cache);
 }
 
+/* A terminal window draws the cell grid: backgrounds, the cursor, glyphs in cell colors. */
+static void test_terminal_window(void) {
+    pf_layout_cache *cache = pf_layout_cache_new(fake, 256, 8);
+    pf_window_style s = style();
+    pf_window *w = pf_window_new(cache, &s);
+    pf_window_set_size(w, 200, 100, 1);
+    int rows, cols;
+    pf_window_terminal_size(w, &rows, &cols);
+    PF_CHECK(rows == 5 && cols == 20); /* 100 / 20 lines, 200 / 10 cells */
+
+    pf_face regular = {0}, bold = {0};
+    pf_face_set(20, &regular);
+    pf_face_set(21, &bold);
+    uint32_t faces[4] = {20, 21, 20, 21};
+    pf_term *t = pf_term_new(rows, cols, 10);
+    uint32_t ansi[16] = {0};
+    ansi[1] = 0xCC0000;
+    ansi[4] = 0x0000CC;
+    pf_term_set_colors(t, 0x112233, 0xFFFFFF, ansi);
+    const char *text = "ab\x1b[31mc\x1b[44m\x1b[1md\x1b[0m e";
+    pf_term_feed(t, text, strlen(text));
+    pf_window_set_terminal(w, t, faces);
+    PF_CHECK(pf_window_terminal(w) == t);
+
+    const pf_display *d = pf_window_redisplay(w);
+    PF_CHECK(d != NULL);
+    const pf_display_item *it = pf_display_items(d);
+    /* one background run for "d" (default backgrounds are not painted), the box cursor, 5 glyphs
+     * (a b c d e) and the cursor cell's glyph, if any: the cursor is on the blank after "e" */
+    PF_CHECK_EQ_SIZE(count_kind(d, PF_DISPLAY_GLYPH), 5);
+    float x_of[256];
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        if (it[i].kind == PF_DISPLAY_GLYPH) {
+            x_of[it[i].u.glyph.glyph] = it[i].x;
+            if (it[i].u.glyph.glyph == 'a') {
+                PF_CHECK(it[i].color == 0x112233FF && NEAR(it[i].y, 12)); /* default fg, baseline */
+            }
+            if (it[i].u.glyph.glyph == 'c') {
+                PF_CHECK(it[i].color == 0xCC0000FF);
+            }
+        }
+    }
+    PF_CHECK(NEAR(x_of['a'], 0) && NEAR(x_of['b'], 10) && NEAR(x_of['c'], 20) && NEAR(x_of['d'], 30) &&
+             NEAR(x_of['e'], 50)); /* one cell per column, the blank between d and e kept */
+    const pf_display_item *bg = find_rect(d, 0x0000CCFF, 0);
+    PF_CHECK(bg && NEAR(bg->x, 30) && NEAR(bg->y, 0) && NEAR(bg->u.rect.w, 10) && NEAR(bg->u.rect.h, 20));
+    const pf_display_item *cur = find_rect(d, 0xFF0000FF, 0); /* the cursor role's background */
+    PF_CHECK(cur && NEAR(cur->x, 60) && NEAR(cur->y, 0) && NEAR(cur->u.rect.w, 10));
+    float rect[4];
+    PF_CHECK(pf_window_cursor_rect(w, rect) == 0 && NEAR(rect[0], 60) && NEAR(rect[3], 20));
+    pf_display_release(d);
+
+    /* nothing changed: no new frame; output, a resize or the cursor shape do */
+    PF_CHECK(pf_window_redisplay(w) == NULL);
+    pf_term_feed(t, "\r\nxy", 5);
+    d = pf_window_redisplay(w);
+    PF_CHECK(d != NULL);
+    PF_CHECK_EQ_SIZE(count_kind(d, PF_DISPLAY_GLYPH), 7);
+    pf_display_release(d);
+
+    /* a hollow cursor outlines the cell (a non-selected window) */
+    pf_window_set_option(w, PF_WINDOW_CURSOR, PF_CURSOR_HOLLOW);
+    d = pf_window_redisplay(w);
+    PF_CHECK(d != NULL && count_color(d, PF_DISPLAY_RECT, 0xFF0000FF) == 4);
+    pf_display_release(d);
+    pf_window_set_option(w, PF_WINDOW_CURSOR, PF_CURSOR_NONE);
+    d = pf_window_redisplay(w);
+    PF_CHECK(d != NULL && count_color(d, PF_DISPLAY_RECT, 0xFF0000FF) == 0 && pf_window_cursor_rect(w, rect) == -1);
+    pf_display_release(d);
+
+    /* a terminal window has no text positions */
+    PF_CHECK(pf_window_pos_rect(w, 0, rect) == -1);
+
+    /* back to a text window */
+    pf_window_set_terminal(w, NULL, faces);
+    PF_CHECK(pf_window_terminal(w) == NULL);
+    pf_term_free(t);
+    pf_window_free(w);
+    pf_layout_cache_free(cache);
+}
+
 int main(void) {
+    test_terminal_window();
     test_layout();
     test_window();
     test_editing_modes();

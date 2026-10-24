@@ -5,7 +5,8 @@
 ;;; Options (an alist): cwd, env (("NAME" . "value") ...: added to the environment), pty (#t: run on a
 ;;; terminal), rows/cols (the pty size), merge-stderr (#t: one output stream), buffer (output goes
 ;;; to its end unless there is a filter), filter ((filter process string): stdout), stderr-filter
-;;; (defaults to filter; with neither, stderr also goes to the buffer), sentinel ((sentinel process
+;;; (defaults to filter; with neither, stderr also goes to the buffer), binary (#t: the filters get
+;;; the raw bytes, a bytevector, undecoded; for a terminal), sentinel ((sentinel process
 ;;; event): the process changed state; event is "finished\n", "exited abnormally with code 1\n",
 ;;; "killed\n", ...). Output arrives on the main thread between commands, decoded as UTF-8 (a
 ;;; character split across reads is kept whole). The reader stops while the editor has not caught
@@ -26,7 +27,7 @@
   (define-record-type process
     (fields name handle pid (mutable state) (mutable code) (mutable signal) buffer
             (mutable filter) (mutable stderr-filter) (mutable sentinel) (mutable token)
-            promise (mutable out-tail) (mutable err-tail))
+            promise (mutable out-tail) (mutable err-tail) binary?)
     (nongenerative profane-process))
 
   ;; Where programs are looked for by executable-find. An app started from the Dock gets a minimal
@@ -122,11 +123,18 @@
               (insert-at-end! (process-buffer p) string))))))
 
   (define (on-output p stderr? data)
+    (if (process-binary? p)
+        (let ([filter (if stderr? (or (process-stderr-filter p) (process-filter p)) (process-filter p))])
+          (when filter
+            (guard (c [else (report 'process-filter c)]) (filter p data))))
+        (on-text-output p stderr? data))
+    (%proc-consumed (process-handle p) (bytevector-length data)))
+
+  (define (on-text-output p stderr? data)
     (let ([all (bv-append (if stderr? (process-err-tail p) (process-out-tail p)) data)])
       (let-values ([(head tail) (split-incomplete all)])
         (if stderr? (process-err-tail-set! p tail) (process-out-tail-set! p tail))
-        (deliver! p stderr? (utf8->string head))))
-    (%proc-consumed (process-handle p) (bytevector-length data)))
+        (deliver! p stderr? (utf8->string head)))))
 
   (define (signal-name n)
     (case n
@@ -185,7 +193,7 @@
       (let ([p (make-process name handle (%proc-pid handle) 'run #f 0 (opt options 'buffer #f)
                              (opt options 'filter #f) (opt options 'stderr-filter #f)
                              (opt options 'sentinel #f) token (make-promise)
-                             (bytevector) (bytevector))])
+                             (bytevector) (bytevector) (and (opt options 'binary #f) #t))])
         (set-box! p-box p)
         (hashtable-set! processes token p)
         p)))

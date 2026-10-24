@@ -9,6 +9,7 @@
 #include "pf_handles.h"
 #include "pf_layout.h"
 #include "pf_strip.h"
+#include "pf_term.h"
 
 /* A window shows one buffer: it scrolls to keep point visible and renders the visible lines
  * into a display list through the layout cache. Lines are truncated at the window edge (no
@@ -128,6 +129,17 @@ void pf_window_set_region(pf_window *w, size_t start, size_t end);
  * size the canvas to the body. A canvas window draws no fringes or cursor. */
 void pf_window_set_canvas(pf_window *w, pf_canvas *canvas);
 pf_canvas *pf_window_canvas(const pf_window *w);
+
+/* Terminal window kind: the body shows TERM's cell grid (colors, attributes, cursor) instead of
+ * text, from the body's top-left, one cell per column and row of the window's style. FACES are
+ * the face ids for regular, bold, italic and bold-italic text (their fonts; a face with none
+ * uses the default font); the cursor takes the cursor role's background. NULL TERM makes it a
+ * text window again. Not owned: detach it before freeing the terminal. A terminal window draws
+ * no fringes; the terminal is redrawn when its version moves. */
+void pf_window_set_terminal(pf_window *w, pf_term *term, const uint32_t faces[4]);
+pf_term *pf_window_terminal(const pf_window *w);
+/* How many rows and columns of terminal cells fit the body now. */
+void pf_window_terminal_size(const pf_window *w, int *rows, int *cols);
 
 /* Forces the next redisplay to render. */
 void pf_window_invalidate(pf_window *w);

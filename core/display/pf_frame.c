@@ -511,3 +511,22 @@ void pf_frame_detach_canvas(pf_frame *f, pf_canvas *c) {
         }
     }
 }
+
+int pf_frame_set_window_terminal(pf_frame *f, pf_window *w, pf_term *t, const uint32_t faces[4]) {
+    entry *e = find(f, w);
+    if (!e) {
+        return -1;
+    }
+    pf_window_set_terminal(w, t, faces);
+    f->dirty = 1;
+    return 0;
+}
+
+void pf_frame_detach_terminal(pf_frame *f, pf_term *t) {
+    for (size_t i = 0; i < f->count; i++) {
+        if (pf_window_terminal(f->entries[i].w) == t) {
+            pf_window_set_terminal(f->entries[i].w, NULL, NULL);
+            f->dirty = 1;
+        }
+    }
+}

@@ -1,0 +1,182 @@
+(import (chezscheme) (srfi :64) (profane native) (profane buffer) (profane var) (profane keymap)
+        (profane command) (profane command-loop) (profane mode) (profane window)
+        (profane display) (profane theme) (profane themes) (profane tab-bar)
+        (profane minibuffer) (profane complete) (profane simple) (profane files) (profane fs)
+        (profane async) (profane process) (profane vterm))
+
+(for-each invoke-library '((profane simple) (profane window) (profane display) (profane themes)
+                           (profane tab-bar) (profane minibuffer) (profane complete)
+                           (profane files) (profane vterm)))
+(load-theme 'profane-light)
+
+(test-begin "vterm")
+
+(define (keys . ks) (for-each (lambda (k) (for-each handle-key (kbd k))) ks))
+(define (type s) (string-for-each (lambda (c) (handle-text (string c))) s))
+(define (contains? s sub)
+  (let ([n (string-length sub)])
+    (let loop ([i 0]) (cond [(> (+ i n) (string-length s)) #f] [(string=? (substring s i (+ i n)) sub) #t] [else (loop (+ i 1))]))))
+;; pumps process output and redisplay preparation until PRED holds
+(define (settle! pred)
+  (let loop ([n 0])
+    (cond [(pred) #t]
+          [(> n 300) #f]
+          [else (async-poll! 20) (redisplay-prepare!) (loop (+ n 1))])))
+(define (shows? b text) (settle! (lambda () (contains? (vterm-text b) text))))
+(define (write-file! p text) (call-with-output-file p (lambda (port) (put-string port text)) 'replace))
+(define (run name) ((command-procedure name)))
+(define (terminal-shown? w) (not (window-pos-rect w 0))) ; text windows have text positions
+
+(define dir (format "/tmp/pf-vterm-~a" (time-nanosecond (current-time))))
+(make-directory dir)
+;; a "shell" for the tests: prints a prompt, then echoes (the pty echoes typed keys too)
+(define fake-shell (string-append dir "/fakesh"))
+(write-file! fake-shell "#!/bin/sh\nprintf 'ready> '\nexec cat\n")
+(system (string-append "chmod +x " fake-shell))
+;; one that fills the history first
+(define long-shell (string-append dir "/longsh"))
+(write-file! long-shell "#!/bin/sh\nseq 1 200\nprintf 'end> '\nexec cat\n")
+(system (string-append "chmod +x " long-shell))
+
+(define f (select-frame (make-headless-frame 800 600)))
+(define main (selected-window))
+(define start (generate-new-buffer "start"))
+(set-window-buffer! main start)
+(with-current-buffer start (var-set! 'default-directory (string-append dir "/")))
+(var-set! 'explicit-shell-file-name fake-shell)
+
+;; ---- opening a terminal ----
+(run 'vterm)
+(define term (current-buffer))
+(test-equal "named *vterm*" "*vterm*" (buffer-name term))
+(test-eq "in vterm-mode" 'vterm-mode (var-ref 'major-mode))
+(test-assert "read-only" (buffer-read-only?))
+(test-assert "a terminal buffer" (vterm-buffer? term))
+(test-assert "the program's prompt arrives" (shows? term "ready> "))
+(test-assert "the window shows the grid, not text" (terminal-shown? main))
+(test-equal "sized to the window (576 points of 20, 800 of 10, less the mode line)" '(27 . 80) (vterm-size term))
+(test-assert "a process runs" (= 1 (length (process-list))))
+
+;; ---- keys and text go to the program ----
+(keys "h" "i" "RET")
+(test-assert "keys reach the program (echoed by the tty, then by cat)" (shows? term "hi"))
+(type "yo")
+(test-assert "typed text too" (shows? term "yo"))
+(type "é привет")
+(test-assert "non-ASCII text" (shows? term "é привет"))
+(keys "C-a")
+(test-assert "C-a is sent, not run as move-beginning-of-line" (not (eq? (last-command) 'move-beginning-of-line)))
+(test-assert "the buffer itself stays empty" (string=? (buffer-string) ""))
+
+;; the editor keeps some keys
+(keys "C-x")
+(test-equal "C-x starts a key sequence" '("C-x") (pending-keys))
+(keys "C-g")
+(test-equal "C-g is the editor's" "Quit" (current-message))
+(keys "M-x")
+(test-assert "M-x opens the minibuffer" (minibuffer-active?))
+(keys "C-g")
+
+;; yank pastes
+(kill-new "pasted")
+(keys "C-y")
+(test-assert "C-y pastes the kill" (shows? term "pasted"))
+
+;; ---- resizing follows the window ----
+(split-window main 'right)
+(redisplay-prepare!)
+(test-assert "about half the width (less the divider)" (<= 38 (cdr (vterm-size term)) 40))
+(delete-other-windows main)
+(redisplay-prepare!)
+(test-assert "and back" (= 80 (cdr (vterm-size term))))
+
+;; ---- copy mode ----
+(keys "C-c" "C-t")
+(test-assert "copy mode" (vterm-copy-mode? term))
+(test-assert "the text is in the buffer" (contains? (buffer-string) "ready> "))
+(redisplay-prepare!)
+(test-assert "the window shows text again" (not (terminal-shown? main)))
+(test-assert "read-only still" (guard (c [else #t]) (insert "x") #f))
+(keys "C-c" "C-t")
+(redisplay-prepare!)
+(test-assert "back to the terminal" (and (not (vterm-copy-mode? term)) (terminal-shown? main)))
+(test-equal "the buffer is empty again" "" (buffer-string))
+
+;; ---- the program ends: the buffer goes ----
+(keys "C-c" "C-c")
+(test-assert "C-c C-c interrupts it, and the buffer is killed" (settle! (lambda () (not (buffer-live? term)))))
+(test-assert "no process left" (null? (process-list)))
+(test-assert "the window shows another buffer" (buffer-live? (window-buffer main)))
+
+;; ---- keeping the buffer when asked ----
+(var-set! 'vterm-kill-buffer-on-exit #f)
+(run 'vterm)
+(define kept (current-buffer))
+(shows? kept "ready> ")
+(keys "C-c" "C-d")
+(test-assert "the exit is shown" (shows? kept "Process exited"))
+(test-assert "and the buffer lives" (buffer-live? kept))
+(var-set! 'vterm-kill-buffer-on-exit #t)
+(kill-buffer kept)
+(redisplay-prepare!)
+
+;; ---- killing a buffer kills its program ----
+(run 'vterm)
+(define doomed (current-buffer))
+(shows? doomed "ready> ")
+(test-assert "running" (= 1 (length (process-list))))
+(switch-to-buffer start)
+(kill-buffer doomed)
+(test-assert "the program is killed with the buffer" (settle! (lambda () (null? (process-list)))))
+
+;; ---- a prefix argument opens another, and vterm switches to the existing one ----
+(run 'vterm)
+(define first-term (current-buffer))
+(switch-to-buffer start)
+(run 'vterm)
+(test-eq "vterm goes to the existing *vterm*" first-term (current-buffer))
+(switch-to-buffer start)
+(keys "C-u" "M-x")
+(type "vterm")
+(keys "RET")
+(test-assert "with a prefix argument, a new one" (not (eq? (current-buffer) first-term)))
+(test-equal "numbered" "*vterm*<2>" (buffer-name (current-buffer)))
+(kill-buffer (current-buffer))
+(kill-buffer first-term)
+(settle! (lambda () (null? (process-list))))
+
+;; ---- shell-here: one shell per directory ----
+(switch-to-buffer start)
+(run 'shell-here)
+(define here (current-buffer))
+(test-equal "named by the directory" (string-append "*shell*<" dir "/>") (buffer-name here))
+(switch-to-buffer start)
+(run 'shell-here)
+(test-eq "the existing shell is reused" here (current-buffer))
+(make-directory (string-append dir "/sub"))
+(with-current-buffer start (var-set! 'default-directory (string-append dir "/sub/")))
+(switch-to-buffer start)
+(run 'shell-here)
+(test-assert "another directory, another shell" (not (eq? here (current-buffer))))
+(test-eqv "two programs" 2 (length (process-list)))
+(for-each kill-buffer (list (current-buffer) here))
+(settle! (lambda () (null? (process-list))))
+
+;; ---- history, scrolling ----
+(var-set! 'explicit-shell-file-name long-shell)
+(switch-to-buffer start)
+(run 'vterm)
+(define long (current-buffer))
+(test-assert "200 lines arrive" (shows? long "end> "))
+(test-eqv "at the live screen" 0 (vterm-scroll-offset long))
+(keys "S-<prior>")
+(test-assert "S-<prior> scrolls back a page" (> (vterm-scroll-offset long) 20))
+(keys "S-<next>")
+(test-eqv "and forward" 0 (vterm-scroll-offset long))
+(test-assert "the history is in the text" (contains? (vterm-text long) "1\n2\n3\n"))
+(kill-buffer long)
+(settle! (lambda () (null? (process-list))))
+
+(system (string-append "rm -rf " dir))
+(test-end "vterm")
+(test-exit)
