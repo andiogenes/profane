@@ -32,6 +32,16 @@ void pf_motion_set_reduced(int r) {
     reduced = r != 0;
 }
 
+static int cursor_on;
+
+void pf_motion_set_cursor(int on) {
+    cursor_on = on != 0;
+}
+
+int pf_motion_cursor(void) {
+    return cursor_on && pf_motion_level() > PF_MOTION_OFF;
+}
+
 int pf_motion_level(void) {
     return reduced ? PF_MOTION_OFF : level;
 }

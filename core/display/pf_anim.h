@@ -23,6 +23,11 @@ int pf_spring_settled(const pf_spring *s, float eps);
 enum { PF_MOTION_OFF = 0, PF_MOTION_SUBTLE = 1, PF_MOTION_FULL = 2 };
 void pf_motion_set_level(int level);
 void pf_motion_set_reduced(int reduced);
+/* Per-feature switches, for what the level allows: the animated cursor (pf_window_tick). Off by
+ * default; Scheme's `animate-cursor` sets it. */
+void pf_motion_set_cursor(int on);
+int pf_motion_cursor(void); /* on, and the level is not off */
+
 /* The level in effect: OFF while Reduce Motion is on. */
 int pf_motion_level(void);
 

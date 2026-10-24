@@ -837,7 +837,7 @@ int pf_window_tick(pf_window *w, double now) {
     double dt = w->cur_time == 0 ? 1.0 / 120 : now - w->cur_time;
     w->cur_time = now;
     w->dirty = 1;
-    if (dt > 0.05 || pf_motion_level() == 0) {
+    if (dt > 0.05 || !pf_motion_cursor()) {
         /* A late frame (the main thread was busy) or motion switched off: arrive now. */
         pf_spring_snap(&w->cur_x, w->cur_x.target);
         pf_spring_snap(&w->cur_y, w->cur_y.target);
@@ -993,7 +993,7 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
             uint32_t cc = role_color(PF_ROLE_CURSOR, PF_FACE_HAS_BG, fg);
             float lh = st->line_height, px = 1.0f / w->scale;
             float ax = cx, ay = top; /* where the box is drawn */
-            if (shown && w->cursor_kind == PF_CURSOR_BOX && pf_motion_level() > 0) {
+            if (shown && w->cursor_kind == PF_CURSOR_BOX && pf_motion_cursor()) {
                 cursor_animate(w, cx, top, &ax, &ay);
             } else {
                 w->cur_init = 0;

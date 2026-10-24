@@ -994,7 +994,7 @@ diff, commit, push/pull), 5 ediff. Items 1 and 2 are done; item 3 is started (it
   queues one more redisplay about 1/120 s later as a plain main-queue block, so keys and the REPL run between
   frames. A tick more than 50 ms after the last (the main thread was busy) drops the animation: it arrives at once.
   Input is never delayed by animation; under load the animation is what is lost.
-- Animated cursor (subtle and up): the box glides to a new row or a far cell (omega 45, about 100 ms). Typing and
+- Animated cursor (`animate-cursor`, default `#f`; needs `ui-motion` subtle or full): the box glides to a new row or a far cell (omega 45, about 100 ms). Typing and
   moves of up to two cells along a row snap, so the cursor never trails the text being edited; scrolling, resizing
   and hscroll snap too. The character under the box is redrawn in the background color only once it has arrived.
   The IME rect and `pf_window_cursor_rect` report the target. Hollow cursors do not animate.

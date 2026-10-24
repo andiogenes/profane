@@ -682,7 +682,14 @@ static void test_cursor_animation(void) {
     pf_display_release(d);
     PF_CHECK(!pf_window_animating(w));
 
+    /* A level without the cursor switch (the default) does not animate it either. */
     pf_motion_set_level(PF_MOTION_SUBTLE);
+    d = frame_at(w, buf, point, 0);
+    pf_display_release(d);
+    d = frame_at(w, buf, point, 25);
+    PF_CHECK(NEAR(find_rect(d, 0xFF0000FF, 0)->y, 40) && !pf_window_animating(w));
+    pf_display_release(d);
+    pf_motion_set_cursor(1);
     d = frame_at(w, buf, point, 0);
     pf_display_release(d);
 
@@ -732,6 +739,7 @@ static void test_cursor_animation(void) {
     PF_CHECK(NEAR(find_rect(d, 0xFF0000FF, 0)->y, 40) && !pf_window_animating(w));
     pf_display_release(d);
     pf_motion_set_reduced(0);
+    pf_motion_set_cursor(0);
     pf_motion_set_level(PF_MOTION_OFF);
 
     pf_window_free(w);

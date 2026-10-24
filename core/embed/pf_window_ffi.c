@@ -367,6 +367,11 @@ int pf_motion_set_level_ffi(int level) {
     return pf_motion_level();
 }
 
+int pf_motion_set_cursor_ffi(int on) {
+    pf_motion_set_cursor(on);
+    return pf_motion_cursor();
+}
+
 int pf_frm_cursor_at(pf_handle frame, float x, float y) {
     pf_frame *f = frame_of(frame);
     return f ? pf_frame_cursor_at(f, x, y) : INVALID;

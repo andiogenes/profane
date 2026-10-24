@@ -39,12 +39,17 @@ int main(void) {
     PF_CHECK(pf_motion_level() == PF_MOTION_SUBTLE);
     pf_motion_set_level(PF_MOTION_FULL);
     PF_CHECK(pf_motion_level() == PF_MOTION_FULL);
+    PF_CHECK(!pf_motion_cursor()); /* off by default */
+    pf_motion_set_cursor(1);
+    PF_CHECK(pf_motion_cursor());
     pf_motion_set_reduced(1);
+    PF_CHECK(!pf_motion_cursor());
     PF_CHECK(pf_motion_level() == PF_MOTION_OFF);
     pf_motion_set_reduced(0);
     pf_motion_set_level(99);
     PF_CHECK(pf_motion_level() == PF_MOTION_FULL);
     pf_motion_set_level(-3);
-    PF_CHECK(pf_motion_level() == PF_MOTION_OFF);
+    PF_CHECK(pf_motion_level() == PF_MOTION_OFF && !pf_motion_cursor());
+    pf_motion_set_cursor(0);
     return PF_TEST_RESULT();
 }

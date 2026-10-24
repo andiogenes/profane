@@ -73,6 +73,7 @@ int64_t pf_win_move_rows(pf_handle win, size_t pos, int64_t delta, float goal_x)
 int pf_win_set_line_marks(pf_handle win, const uint32_t *triples, size_t n);
 /* The motion level (pf_motion_set_level): 0 off, 1 subtle, 2 full. */
 int pf_motion_set_level_ffi(int level);
+int pf_motion_set_cursor_ffi(int on); /* the animated cursor (pf_motion_set_cursor) */
 /* The mouse cursor over frame point (X, Y) (pf_frame_cursor_at): 0 arrow, 1 pointer, 2 text. */
 int pf_frm_cursor_at(pf_handle frame, float x, float y);
 
