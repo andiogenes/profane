@@ -58,6 +58,40 @@ void pf_display_rect(pf_display *d, float x, float y, float w, float h, uint32_t
     it->u.rect.h = h;
 }
 
+void pf_display_round_rect(pf_display *d, float x, float y, float w, float h, float radius,
+                           float line, uint32_t color) {
+    if (w <= 0 || h <= 0 || (color & 0xFF) == 0) {
+        return;
+    }
+    float max = (w < h ? w : h) / 2;
+    pf_display_item *it = push(d);
+    it->kind = PF_DISPLAY_ROUND_RECT;
+    it->color = color;
+    it->x = x;
+    it->y = y;
+    it->u.round.w = w;
+    it->u.round.h = h;
+    it->u.round.radius = radius < 0 ? 0 : radius > max ? max : radius;
+    it->u.round.extra = line < 0 ? 0 : line;
+}
+
+void pf_display_shadow(pf_display *d, float x, float y, float w, float h, float radius, float blur,
+                       uint32_t color) {
+    if (w <= 0 || h <= 0 || blur <= 0 || (color & 0xFF) == 0) {
+        return;
+    }
+    float max = (w < h ? w : h) / 2;
+    pf_display_item *it = push(d);
+    it->kind = PF_DISPLAY_SHADOW;
+    it->color = color;
+    it->x = x;
+    it->y = y;
+    it->u.round.w = w;
+    it->u.round.h = h;
+    it->u.round.radius = radius < 0 ? 0 : radius > max ? max : radius;
+    it->u.round.extra = blur;
+}
+
 void pf_display_glyph(pf_display *d, uint32_t font, uint32_t glyph, float x, float baseline,
                       uint32_t color) {
     pf_display_item *it = push(d);

@@ -302,7 +302,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
                              ((c >> 8) & 0xFF) / 255.0, (c & 0xFF) / 255.0);
 }
 
-/* Geometry changed: resize the frame and the empty overlay, then redraw. */
+/* Geometry changed: resize the frame, then redraw. */
 - (void)rebuild {
     if (!self.window || !_metal) {
         return;
@@ -314,12 +314,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
     CGColorRelease(background);
 
     pf_frame_set_size(_frame, (float)size.width, (float)size.height, scale);
-    [self redisplay];
-
-    const pf_display *overlay =
-        pf_display_finish(pf_display_new((float)size.width, (float)size.height, scale, 0));
-    pf_renderer_submit(_metal.renderer, PF_LAYER_OVERLAY, overlay);
-    pf_display_release(overlay);
+    [self redisplay]; /* the resize also redraws the overlay (pop-ups) */
 }
 
 - (void)redisplay {
@@ -340,6 +335,12 @@ static CGColorRef create_cgcolor(uint32_t c) {
     if (d) {
         pf_renderer_submit(_metal.renderer, PF_LAYER_BASE, d);
         pf_display_release(d);
+    }
+    /* Pop-up surfaces: Scheme's canvases, redrawn by pf-redisplay above. */
+    const pf_display *overlay = pf_frame_redisplay_overlay(_frame);
+    if (overlay) {
+        pf_renderer_submit(_metal.renderer, PF_LAYER_OVERLAY, overlay);
+        pf_display_release(overlay);
     }
 }
 

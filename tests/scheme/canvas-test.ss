@@ -1,0 +1,111 @@
+(import (chezscheme) (srfi :64) (profane native) (profane buffer) (profane var) (profane keymap)
+        (profane command) (profane command-loop) (profane window) (profane display)
+        (profane theme) (profane themes) (profane tab-bar) (profane ace-window)
+        (profane canvas) (profane simple))
+
+(for-each invoke-library '((profane simple) (profane window) (profane display) (profane themes)
+                           (profane tab-bar) (profane ace-window) (profane canvas)))
+(load-theme 'profane-light)
+
+(test-begin "canvas")
+
+(define (keys . ks) (for-each (lambda (k) (for-each handle-key (kbd k))) ks))
+
+(define f (select-frame (make-headless-frame 800 600)))
+(define fh (%frame-handle f))
+(define (overlay) (%cvs-overlay-redisplay fh)) ; item count, -1 when unchanged
+
+(test-eqv "the first overlay is empty" 0 (overlay))
+(define c (make-canvas 100 50))
+(test-eqv "size" 100 (canvas-width c))
+(fill-rect! c 0 0 10 10 "#ff0000")
+(fill-rounded-rect! c 0 0 100 50 6 'bg)
+(stroke-rounded-rect! c 0 0 100 50 6 'border)
+(draw-shadow! c 0 2 100 50 6 8 #x00000040)
+(draw-text! c 4 4 "hi")
+(test-eqv "nothing shows until shown" -1 (overlay))
+(test-assert "not shown" (not (popup-shown? c)))
+(show-popup! c 20 30)
+(test-assert "shown" (popup-shown? c))
+(test-eqv "rect, 2 rounded rects, shadow, 2 glyphs" 6 (overlay))
+(test-eqv "unchanged: no new overlay" -1 (overlay))
+(fill-rect! c 0 0 1 1 #x000000ff)
+(test-eqv "a draw op redraws it" 7 (overlay))
+(show-popup! c 20 31)
+(test-eqv "moving it redraws" 7 (overlay))
+(clear-canvas! c)
+(test-eqv "clearing empties it" 0 (overlay))
+
+;; text extent: the fixed shaper has 10 pt cells and 20 pt lines
+(let-values ([(w h) (text-extent "abc")])
+  (test-equal "text extent" '(30.0 20.0) (list w h)))
+
+;; ---- hit regions ----
+(define clicks '())
+(add-hit-region! c 0 0 100 50 (lambda (x y) (set! clicks (cons (list 'back x y) clicks))))
+(add-hit-region! c 10 10 20 20 (lambda (x y) (set! clicks (cons (list 'button x y) clicks))) 'pointer)
+(show-popup! c 20 31)
+(test-assert "click on the topmost region" (canvas-click! 20 31))
+(test-equal "back region, canvas coordinates" '((back 0 0)) clicks)
+(set! clicks '())
+(canvas-click! (+ 20 15) (+ 31 15))
+(test-equal "button wins, in canvas coordinates" '((button 15 15)) clicks)
+(test-assert "outside" (not (canvas-click! 500 500)))
+(test-eq "canvas-at" c (canvas-at 25 40))
+(test-assert "nothing elsewhere" (not (canvas-at 600 500)))
+
+;; on-click! covers the whole canvas and survives redraws
+(define d (make-canvas 60 20))
+(define hit #f)
+(on-click! d (lambda (x y) (set! hit (list x y))))
+(show-popup! d 300 300)
+(canvas-click! 310 305)
+(test-equal "on-click!" '(10 5) hit)
+(clear-canvas! d)
+(set! hit #f)
+(canvas-click! 310 305)
+(test-assert "still there after clear" hit)
+
+;; ---- define-canvas: redrawn before the frame when invalidated ----
+(define draws 0)
+(define-canvas (meter cv w h)
+  (set! draws (+ draws 1))
+  (fill-rect! cv 0 0 w h "#00ff00"))
+(set-canvas-size! meter 40 10)
+(invalidate! meter)
+(show-popup! meter 0 0)
+(test-eqv "drawn when shown" 1 draws)
+(redisplay-prepare!)
+(test-eqv "not again while clean" 1 draws)
+(invalidate! meter)
+(redisplay-prepare!)
+(test-eqv "redrawn when invalidated" 2 draws)
+
+;; ---- popup background follows ui-popup-shadow ----
+(define p (make-canvas 80 40))
+(var-set! 'ui-popup-shadow #f)
+(test-eqv "no shadow, no margin" 0 (draw-popup-background! p 80 40))
+(clear-canvas! p)
+(var-set! 'ui-popup-shadow #t)
+(show-popup! p 0 0)
+(test-assert "shadow margin is the blur" (> (draw-popup-background! p 80 40) 0))
+(var-set! 'ui-popup-shadow #f)
+
+;; ---- deleting ----
+(delete-canvas! d)
+(test-assert "hidden when deleted" (not (canvas-click! 310 305)))
+(for-each (lambda (x) (hide-popup! x)) (list c meter p))
+
+;; ---- ace-window badges ----
+(define w1 (selected-window))
+(split-window w1) (split-window w1)
+(overlay)
+((command-procedure 'ace-window))
+(test-eqv "a badge per window: rounded rect, outline, digit" 9 (overlay))
+(keys "2")
+(test-eq "the key picks the window" (cadr (window-list)) (selected-window))
+(test-eqv "and the badges go" 0 (overlay))
+
+(delete-headless-frame! f)
+(test-end "canvas")
+(test-exit)

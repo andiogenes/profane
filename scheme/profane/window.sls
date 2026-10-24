@@ -692,7 +692,7 @@
   ;; a procedure of the window; or a list of elements. Formatting runs in the window's buffer.
 
   (defvar mode-line-format
-    '(" " mode-line-window-label mode-line-modified "  " mode-line-buffer-identification "   "
+    '(" " mode-line-modified "  " mode-line-buffer-identification "   "
       mode-line-position "   " mode-line-modes)
     "What mode lines show; #f for none. Buffer-local when set."
     '(local))

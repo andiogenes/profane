@@ -16,6 +16,12 @@ typedef struct entry {
     const pf_display *last; /* the window's newest list */
 } entry;
 
+typedef struct popup {
+    pf_canvas *canvas;
+    float x, y;
+    uint64_t seen; /* canvas version last drawn */
+} popup;
+
 struct pf_frame {
     pf_layout_cache *cache;
     pf_font_source fonts;
@@ -28,6 +34,9 @@ struct pf_frame {
     pf_strip tab_bar;
     uint64_t style_generation; /* face generation the window styles follow */
     int dirty;
+    popup *popups; /* bottom first */
+    size_t npopups, cappopups;
+    int overlay_dirty;
 };
 
 static void *xrealloc(void *p, size_t size) {
@@ -62,6 +71,7 @@ void pf_frame_free(pf_frame *f) {
         pf_window_free(f->entries[i].w);
     }
     free(f->entries);
+    free(f->popups);
     pf_strip_free(&f->tab_bar);
     free(f);
 }
@@ -116,6 +126,7 @@ void pf_frame_set_size(pf_frame *f, float width, float height, float scale) {
             pf_window_set_size(e->w, e->width, e->height, scale);
         }
         f->dirty = 1;
+        f->overlay_dirty = 1;
     }
 }
 
@@ -275,4 +286,103 @@ int pf_frame_cursor_rect(const pf_frame *f, float rect[4]) {
     rect[0] += e->x;
     rect[1] += e->y;
     return 0;
+}
+
+/* ---- pop-up surfaces ---- */
+
+static popup *find_popup(const pf_frame *f, const pf_canvas *c) {
+    for (size_t i = 0; i < f->npopups; i++) {
+        if (f->popups[i].canvas == c) {
+            return &f->popups[i];
+        }
+    }
+    return NULL;
+}
+
+void pf_frame_popup_show(pf_frame *f, pf_canvas *c, float x, float y) {
+    popup *p = find_popup(f, c);
+    if (!p) {
+        if (f->npopups == f->cappopups) {
+            f->cappopups = f->cappopups ? f->cappopups * 2 : 8;
+            f->popups = xrealloc(f->popups, f->cappopups * sizeof *f->popups);
+        }
+        p = &f->popups[f->npopups++];
+        p->canvas = c;
+        p->seen = 0;
+        p->x = p->y = 0;
+        f->overlay_dirty = 1;
+    }
+    if (p->x != x || p->y != y) {
+        p->x = x;
+        p->y = y;
+        f->overlay_dirty = 1;
+    }
+}
+
+int pf_frame_popup_hide(pf_frame *f, pf_canvas *c) {
+    popup *p = find_popup(f, c);
+    if (!p) {
+        return -1;
+    }
+    memmove(p, p + 1, (size_t)(f->popups + f->npopups - p - 1) * sizeof *p);
+    f->npopups--;
+    f->overlay_dirty = 1;
+    return 0;
+}
+
+int pf_frame_popup_shown(const pf_frame *f, const pf_canvas *c, float *x, float *y) {
+    popup *p = find_popup(f, c);
+    if (!p) {
+        return 0;
+    }
+    if (x) {
+        *x = p->x;
+    }
+    if (y) {
+        *y = p->y;
+    }
+    return 1;
+}
+
+static pf_canvas_env canvas_env(pf_frame *f) {
+    return (pf_canvas_env){f->cache, f->has_fonts ? &f->fonts : NULL, f->base_font};
+}
+
+void pf_frame_text_extent(pf_frame *f, const uint32_t *cps, size_t n, uint32_t face, float *width,
+                          float *height) {
+    pf_canvas_env env = canvas_env(f);
+    pf_canvas_text_extent(&env, cps, n, face, width, height);
+}
+
+const pf_display *pf_frame_redisplay_overlay(pf_frame *f) {
+    int changed = f->overlay_dirty;
+    for (size_t i = 0; i < f->npopups; i++) {
+        changed |= f->popups[i].seen != pf_canvas_version(f->popups[i].canvas);
+    }
+    if (!changed) {
+        return NULL;
+    }
+    f->overlay_dirty = 0;
+    pf_canvas_env env = canvas_env(f);
+    pf_display *d = pf_display_new(f->width, f->height, f->scale, 0);
+    for (size_t i = 0; i < f->npopups; i++) {
+        popup *p = &f->popups[i];
+        p->seen = pf_canvas_version(p->canvas);
+        pf_canvas_render(p->canvas, d, &env, p->x, p->y);
+    }
+    return pf_display_finish(d);
+}
+
+int64_t pf_frame_hit_test(const pf_frame *f, float x, float y, pf_canvas **canvas, int *cursor) {
+    for (size_t i = f->npopups; i-- > 0;) {
+        const popup *p = &f->popups[i];
+        int64_t id = pf_canvas_hit_test(p->canvas, x - p->x, y - p->y, cursor);
+        if (id >= 0) {
+            if (canvas) {
+                *canvas = p->canvas;
+            }
+            return id;
+        }
+    }
+    return -1;
 }

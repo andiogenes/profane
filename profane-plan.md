@@ -422,6 +422,20 @@ the renderer tags the frame answering each event and records when it was submitt
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
   minibuffer reads input in this window (below).
+- **Canvas** (`(profane canvas)`, `core/display/pf_canvas`; M2 item 6). A canvas is a retained op list (rect, rounded rect
+  filled or outlined, shadow, line, text) plus hit regions, shown as a **pop-up surface** on the overlay layer: the
+  frame keeps the pop-up stack (`pf_frame_popup_show`), composes it into one transparent display list when a canvas
+  version, position or the size changed (`pf_frame_redisplay_overlay`, submitted by `ProfaneView.redisplay`) and
+  answers `pf_frame_hit_test` topmost-first. The display list gained `ROUND_RECT` (fill or inside outline) and
+  `SHADOW` items, drawn by signed-distance functions in the quad shader (`PF_QUAD_ROUND_RECT/SHADOW`, parameters in
+  the `uv` field). Scheme: `make-canvas`, `fill-rect!`/`fill-rounded-rect!`/`stroke-rounded-rect!`/`draw-shadow!`/
+  `draw-line!`/`draw-text!`, `text-extent`, `add-hit-region!`, `on-click!`, `define-canvas` (redrawn from
+  `pre-redisplay-hook` once `invalidate!`d), `show-popup!`/`hide-popup!`, `canvas-click!`, and
+  `draw-popup-background!` (theme `bg`/`border`, `radius m`, and the `elevation` shadow when `ui-popup-shadow` is on).
+  Ace-window's labels are now badge pop-ups centered on their windows (the default mode line no longer shows
+  `mode-line-window-label`; the segment remains). *Left as seams:* paths/bezier, images, clip and transform (M7), canvas
+  windows and inline hosts, diagonal lines, and the mouse: the shell does not route mouse events yet, so hit regions
+  are reached through `canvas-click!` (item "mouse" in §7). Transients and avy labels build on this next.
 - **Minibuffer and completion** (`(profane minibuffer)`, `(profane complete)`; M2 item 5). *Divergence from §0:* input is
   callback-based (`(read-from-minibuffer prompt k)`, `(completing-read prompt collection k opt val ...)`), not a
   blocking `await`: keys arrive one at a time from the shell, so a suspended command would need a continuation that

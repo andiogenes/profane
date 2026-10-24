@@ -140,10 +140,11 @@ The order was agreed with the owner. Each item is a branch, cut from `m2-windows
    `tests/scheme/minibuffer-test.ss`. Left: file-name reading with directory keys, consult-style sources (imenu,
    ripgrep, find, yank, xref) and `completion-preselect 'nearest` on top of `completing-read`; popup completion
    (corfu) waits for the canvas (item 6). `C-g` still cannot interrupt a busy Scheme loop (engines).
-6. **`(profane canvas)` on the overlay layer** (plan §5.1): draw ops, hit regions, pop-up surfaces. Internal
-   pop-ups, transients and avy jump labels are built on it; move ace-window's labels onto the windows. The overlay
-   layer already exists (`PF_LAYER_OVERLAY`, transparent, ignores the mouse). Consume `ui-popup-shadow` and the
-   theme's `elevation` and `radius` tokens.
+6. **Done: `(profane canvas)` on the overlay layer** (`m2-canvas`, plan §8i): canvases, pop-up surfaces, hit
+   regions, rounded rect and shadow items, ace-window badges; `tests/c/test_canvas.c`, `tests/scheme/canvas-test.ss`.
+   Left: the mouse reaching `canvas-click!` (no mouse routing in `ProfaneView` yet), paths/images/clip/transform,
+   transients and avy jump labels (built on the canvas), and moving the minibuffer candidates and completion popups
+   onto it (corfu). The overlay's first frame is an empty list (set by the frame's first resize).
 7. **Native-view window kind (stub view):** a window whose body is left empty by the base layer, with an AppKit
    view in `ProfaneView.nativeHost` positioned from the display snapshot (plan §1, §4). Window rects come from
    `window-edges` / `pf_frame_place_window`.

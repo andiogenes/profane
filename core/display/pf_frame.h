@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "pf_canvas.h"
 #include "pf_display.h"
 #include "pf_layout.h"
 #include "pf_strip.h"
@@ -58,6 +59,25 @@ float pf_frame_strip_height(const pf_frame *f, uint32_t face, int box);
 /* Renders what changed and returns the composed list (caller releases), or NULL if nothing
  * did. */
 const pf_display *pf_frame_redisplay(pf_frame *f);
+
+/* ---- pop-up surfaces (the overlay layer) ----
+ * A shown canvas is drawn on the overlay at (X, Y), above earlier pop-ups. Canvases are not
+ * owned; hide one before freeing it. */
+
+/* Shows C at (X, Y), or moves it if shown. */
+void pf_frame_popup_show(pf_frame *f, pf_canvas *c, float x, float y);
+/* Returns -1 if C is not shown. */
+int pf_frame_popup_hide(pf_frame *f, pf_canvas *c);
+int pf_frame_popup_shown(const pf_frame *f, const pf_canvas *c, float *x, float *y);
+/* The overlay's list (caller releases) if a pop-up appeared, moved or redrew since the last
+ * call, else NULL. An overlay with no pop-up is an empty, transparent list. */
+const pf_display *pf_frame_redisplay_overlay(pf_frame *f);
+/* The topmost pop-up region at (X, Y): its region id (and CANVAS, its canvas, CURSOR its
+ * cursor shape), or -1 when the point is over no region. */
+int64_t pf_frame_hit_test(const pf_frame *f, float x, float y, pf_canvas **canvas, int *cursor);
+/* Text size in face FACE, as pop-ups draw it. */
+void pf_frame_text_extent(pf_frame *f, const uint32_t *cps, size_t n, uint32_t face, float *width,
+                          float *height);
 
 /* The selected window's cursor rect in frame coordinates (pf_window_cursor_rect). */
 int pf_frame_cursor_rect(const pf_frame *f, float rect[4]);

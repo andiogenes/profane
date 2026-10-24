@@ -14,6 +14,8 @@ typedef struct pf_display pf_display;
 typedef enum pf_display_kind {
     PF_DISPLAY_RECT,
     PF_DISPLAY_GLYPH,
+    PF_DISPLAY_ROUND_RECT, /* filled, or a RADIUS-rounded outline LINE points wide */
+    PF_DISPLAY_SHADOW,     /* a rounded box blurred by BLUR (a gaussian's sigma), for drop shadows */
 } pf_display_kind;
 
 typedef struct pf_display_item {
@@ -24,6 +26,11 @@ typedef struct pf_display_item {
         struct {
             float w, h;
         } rect;
+        struct {
+            float w, h;
+            float radius;
+            float extra; /* round rect: outline width (0: filled); shadow: blur sigma */
+        } round;
         struct {
             uint32_t font; /* pf_font_id */
             uint32_t glyph;
@@ -36,6 +43,14 @@ typedef struct pf_display_item {
 pf_display *pf_display_new(float width, float height, float scale, uint32_t clear);
 
 void pf_display_rect(pf_display *d, float x, float y, float w, float h, uint32_t color);
+/* A rounded rectangle, filled (LINE 0) or as an outline LINE points wide drawn inside it. */
+void pf_display_round_rect(pf_display *d, float x, float y, float w, float h, float radius,
+                           float line, uint32_t color);
+/* The shadow of a rounded box X, Y, W, H: COLOR (its alpha is the darkest point) fading out over
+ * BLUR points either side of the box edge (BLUR is the blur's reach, not a pixel kernel). The
+ * box itself is shadowed too: draw it on top. */
+void pf_display_shadow(pf_display *d, float x, float y, float w, float h, float radius, float blur,
+                       uint32_t color);
 void pf_display_glyph(pf_display *d, uint32_t font, uint32_t glyph, float x, float baseline,
                       uint32_t color);
 

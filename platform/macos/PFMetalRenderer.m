@@ -470,6 +470,14 @@ static MTLClearColor premultiplied(uint32_t c) {
         if (it->kind == PF_DISPLAY_RECT) {
             q.rect = simd_make_float4(it->x * s, it->y * s, it->u.rect.w * s, it->u.rect.h * s);
             q.mode = PF_QUAD_RECT;
+        } else if (it->kind == PF_DISPLAY_ROUND_RECT || it->kind == PF_DISPLAY_SHADOW) {
+            float w = it->u.round.w * s, h = it->u.round.h * s, r = it->u.round.radius * s;
+            float extra = it->u.round.extra * s;
+            /* A shadow's quad reaches 2 sigma past the box on every side, where it is faint. */
+            float pad = it->kind == PF_DISPLAY_SHADOW ? 2 * extra : 0;
+            q.rect = simd_make_float4(it->x * s - pad, it->y * s - pad, w + 2 * pad, h + 2 * pad);
+            q.uv = simd_make_float4(w / 2, h / 2, r, extra);
+            q.mode = it->kind == PF_DISPLAY_SHADOW ? PF_QUAD_SHADOW : PF_QUAD_ROUND_RECT;
         } else {
             float pen = it->x * s;
             float base = floorf(pen);

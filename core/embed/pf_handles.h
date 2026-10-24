@@ -14,10 +14,13 @@ typedef enum pf_handle_kind {
     PF_HANDLE_TEXT = 1,
     PF_HANDLE_WINDOW = 2,
     PF_HANDLE_FRAME = 3,
+    PF_HANDLE_CANVAS = 4,
 } pf_handle_kind;
 
 pf_handle pf_handle_new(pf_handle_kind kind, void *object); /* 0 if out of memory or slots */
 void *pf_handle_get(pf_handle handle, pf_handle_kind kind); /* NULL if invalid */
+/* The live handle of OBJECT (a linear search: for the rare reverse lookup), or 0. */
+pf_handle pf_handle_of(const void *object, pf_handle_kind kind);
 /* Invalidates HANDLE and returns its object (NULL if invalid); the caller frees the object. */
 void *pf_handle_free(pf_handle handle, pf_handle_kind kind);
 

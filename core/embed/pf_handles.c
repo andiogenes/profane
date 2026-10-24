@@ -32,6 +32,15 @@ static entry *lookup(pf_handle h, pf_handle_kind kind) {
     return e;
 }
 
+pf_handle pf_handle_of(const void *object, pf_handle_kind kind) {
+    for (uint32_t slot = 0; slot < count; slot++) {
+        if (entries[slot].kind == kind && entries[slot].object == object) {
+            return encode(slot, &entries[slot]);
+        }
+    }
+    return 0;
+}
+
 pf_handle pf_handle_new(pf_handle_kind kind, void *object) {
     uint32_t slot = free_hint;
     while (slot < count && entries[slot].kind != 0) {

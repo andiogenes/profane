@@ -16,6 +16,8 @@ enum {
     PF_QUAD_RECT = 0,
     PF_QUAD_GLYPH_GRAY = 1,
     PF_QUAD_GLYPH_COLOR = 2,
+    PF_QUAD_ROUND_RECT = 3, /* uv: half width, half height, radius, outline width (pixels) */
+    PF_QUAD_SHADOW = 4,     /* uv: half width, half height, radius, blur sigma (pixels) */
 };
 
 typedef struct PFQuadInstance {

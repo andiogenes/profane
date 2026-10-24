@@ -17,6 +17,10 @@
           %win-selected %win-set-buffer %win-top-line %win-set-top-line %win-body-lines
           %win-set-option %win-option %win-set-edges %win-set-mode-line %win-mode-line-height
           %win-hscroll %win-set-min-hscroll
+          %cvs-new %cvs-free %cvs-set-size %cvs-width %cvs-height %cvs-clear %cvs-fill-rect
+          %cvs-fill-round-rect %cvs-stroke-round-rect %cvs-shadow %cvs-line %cvs-text %cvs-add-hit
+          %cvs-hit-test %cvs-text-width %cvs-text-height %cvs-popup-show %cvs-popup-hide
+          %cvs-popup-shown %cvs-frame-hit %cvs-hit-canvas %cvs-hit-cursor %cvs-overlay-redisplay
           %input-set-prefix-pending
           %face-define %face-role-set %buf-put-prop %buf-get-prop %display-set-line-spacing)
   (import (chezscheme))
@@ -85,6 +89,36 @@
   (define-native %win-mode-line-height "pf_win_mode_line_height" (unsigned-32) double)
   (define-native %win-hscroll "pf_win_hscroll" (unsigned-32) double)
   (define-native %win-set-min-hscroll "pf_win_set_min_hscroll" (unsigned-32 float) int)
+  (define-native %cvs-new "pf_cvs_new" (float float) unsigned-32)
+  (define-native %cvs-free "pf_cvs_free" (unsigned-32) int)
+  (define-native %cvs-set-size "pf_cvs_set_size" (unsigned-32 float float) int)
+  (define-native %cvs-width "pf_cvs_width" (unsigned-32) double)
+  (define-native %cvs-height "pf_cvs_height" (unsigned-32) double)
+  (define-native %cvs-clear "pf_cvs_clear" (unsigned-32) int)
+  (define-native %cvs-fill-rect "pf_cvs_fill_rect"
+    (unsigned-32 float float float float unsigned-32) int)
+  (define-native %cvs-fill-round-rect "pf_cvs_fill_round_rect"
+    (unsigned-32 float float float float float unsigned-32) int)
+  (define-native %cvs-stroke-round-rect "pf_cvs_stroke_round_rect"
+    (unsigned-32 float float float float float float unsigned-32) int)
+  (define-native %cvs-shadow "pf_cvs_shadow"
+    (unsigned-32 float float float float float float unsigned-32) int)
+  (define-native %cvs-line "pf_cvs_line"
+    (unsigned-32 float float float float float unsigned-32) int)
+  (define-native %cvs-text "pf_cvs_text"
+    (unsigned-32 float float u8* size_t unsigned-32 unsigned-32) int)
+  (define-native %cvs-add-hit "pf_cvs_add_hit"
+    (unsigned-32 float float float float unsigned-32 int) int)
+  (define-native %cvs-hit-test "pf_cvs_hit_test" (unsigned-32 float float) integer-64)
+  (define-native %cvs-text-width "pf_cvs_text_width" (unsigned-32 u8* size_t unsigned-32) double)
+  (define-native %cvs-text-height "pf_cvs_text_height" (unsigned-32 unsigned-32) double)
+  (define-native %cvs-popup-show "pf_cvs_popup_show" (unsigned-32 unsigned-32 float float) int)
+  (define-native %cvs-popup-hide "pf_cvs_popup_hide" (unsigned-32 unsigned-32) int)
+  (define-native %cvs-popup-shown "pf_cvs_popup_shown" (unsigned-32 unsigned-32) int)
+  (define-native %cvs-frame-hit "pf_cvs_frame_hit" (unsigned-32 float float) integer-64)
+  (define-native %cvs-hit-canvas "pf_cvs_hit_canvas" () unsigned-32)
+  (define-native %cvs-hit-cursor "pf_cvs_hit_cursor" () int)
+  (define-native %cvs-overlay-redisplay "pf_cvs_overlay_redisplay" (unsigned-32) integer-64)
   (define-native %input-set-prefix-pending "pf_input_set_prefix_pending" (boolean) void)
   (define-native %face-define "pf_face_define"
     (unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32) void)
