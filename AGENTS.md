@@ -19,14 +19,20 @@ Layers (top to bottom):
 
 ## Current status
 
-M0, M1 and most of M2 are on `main` (origin `git@github.com:andiogenes/profane.git`). Decisions and measurements
-are in `profane-plan.md` §8a–§8j; read the section for an area before changing it. Work proceeds milestone by
+M0 to M3 are on `main` (origin `git@github.com:andiogenes/profane.git`). Decisions and measurements
+are in `profane-plan.md` §8a–§8k; read the section for an area before changing it. Work proceeds milestone by
 milestone (plan §9). Do not start work from a later milestone unless asked; when a task touches a later
 milestone's area, leave a seam, not an implementation.
 
 **M2** is feature-complete as planned (the M2 row of plan §9); what was left out on purpose is listed in plan §8j. Its
-owner-port gaps wait on other milestones: consult's imenu and xref (modes and tree-sitter, M5), ripgrep and find (M3),
-neotree and the buffer menu (listing and tree views).
+only remaining owner-port gaps are consult's imenu and xref (modes and tree-sitter, M5).
+
+**M3** (async and tools) is complete: the async queue and `await`, processes and ptys, `(profane macos)`, ripgrep and
+find, Keychain secrets, dired, the sidebar and buffer menu, vterm and `shell-here`, TLS sockets. Decisions, what was
+measured and what was not verified are in plan §8k, one entry per item plus "On-screen check of M3". The next
+milestone is M4 (soft wrap, fringe git marks, the motion system; the dogfooding milestone). Known M3 gaps, all in §8k:
+no mouse in terminals or in dired/sidebar/buffer menu, no FSEvents (listings refresh with `g`), the sidebar lacks
+file operations, and the login-shell PATH is not imported (an app started from the Dock may not find `rg`, `fd`, `git`).
 
 **Known gaps:** the full list, with what each waits for, is `profane-plan.md` §8j. Two things every agent must know:
 commands run in engines, so `C-g` interrupts a runaway command (see the Engines entry in §8i), but socket REPL
