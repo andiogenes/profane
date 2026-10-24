@@ -23,7 +23,7 @@
           selected-window select-window minibuffer-window window-minibuffer?
           window-point set-window-point! window-start-line set-window-start-line!
           window-body-lines window-hscroll set-window-hscroll! window-edges window-list next-window window-label set-window-label!
-          window-native set-window-native! native-view-kinds register-native-view-kind!
+          window-pos-rect window-visible-range window-native set-window-native! native-view-kinds register-native-view-kind!
           split? split-direction split-children split-weights split-parent
           split-window delete-window delete-other-windows balance-windows resize-window!
           switch-to-buffer other-buffer
@@ -271,6 +271,21 @@
       (window-use-time-set! w (tick!))
       (set-buffer (window-buffer w))
       w))
+
+  ;; (x y w h) of character POS in W, in W's own coordinates, or #f when it is not on screen.
+  (define (window-pos-rect w pos)
+    (let ([bv (make-bytevector 16)])
+      (and (zero? (%win-pos-rect (window-handle w) pos bv))
+           (map (lambda (i) (bytevector-ieee-single-native-ref bv (* 4 i))) '(0 1 2 3)))))
+
+  ;; The characters from the first line W shows to the end of its last: (values start end).
+  (define (window-visible-range w)
+    (let* ([b (window-buffer w)] [h (%buffer-handle b)]
+           [lines (%buf-lines h)]
+           [top (window-start-line w)]
+           [end-line (min lines (+ top (window-body-lines w) 1))])
+      (values (%buf-line-start h top)
+              (if (>= end-line lines) (%buf-chars h) (%buf-line-start h end-line)))))
 
   (define (window-start-line w) (%win-top-line (window-handle w)))
   (define (set-window-start-line! w line) (%win-set-top-line (window-handle w) (max 0 line)))

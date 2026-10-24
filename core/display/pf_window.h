@@ -100,6 +100,11 @@ uint32_t pf_window_native(const pf_window *w);
 /* The body's rect in window coordinates (points). */
 void pf_window_body_rect(const pf_window *w, float rect[4]);
 
+/* Where character POS (of the window's buffer) is on screen: its cell as X, Y, W, H in window
+ * coordinates, as the last layout put it. Returns -1 if POS is not in a visible line or is
+ * scrolled out sideways. Used for jump labels (avy) and the like. */
+int pf_window_pos_rect(pf_window *w, size_t pos, float rect[4]);
+
 /* The active region [START, END) in characters, drawn in the region face's background under the
  * text; START == END shows none. A newline inside the region shows as one extra cell, as in
  * Emacs. Callers show it in the selected window only. */

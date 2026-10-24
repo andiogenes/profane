@@ -11,7 +11,7 @@
 (library (profane command-loop)
   (export handle-key handle-text last-input-text pending-keys self-insert-amalgamation
           set-transient-map exit-transient-map! clear-transient-map! transient-map-active?
-          set-input-buffer-function!)
+          set-input-buffer-function! set-key-reader!)
   (import (chezscheme) (profane native) (profane buffer) (profane window) (profane keymap)
           (profane mode) (profane command) (profane hook) (profane var))
 
@@ -59,7 +59,15 @@
   ;; other-window under any keyboard layout.
   (define (set-pending! keys)
     (set! pending keys)
-    (%input-set-prefix-pending (or (pair? pending) (and transient #t))))
+    (%input-set-prefix-pending (or (pair? pending) (and transient #t) (and key-reader #t))))
+
+  ;; The next key (a key description, as handle-key gets it; typed text arrives one character
+  ;; at a time) goes to PROC instead of the keymaps, once: avy reads its characters this way.
+  ;; PROC may set a reader again. While one is set the shell sends plain keys as keys.
+  (define key-reader #f)
+  (define (set-key-reader! proc)
+    (set! key-reader proc)
+    (set-pending! pending))
 
   ;; Emacs set-transient-map: MAP is looked up first for the next key sequence, then dropped
   ;; and ON-EXIT called, whichever command (or none) the sequence ran. With PERSISTENT it stays
@@ -192,6 +200,11 @@
     (select-window-buffer)
     (when (current-message) (message #f))
     (cond
+      [key-reader
+       (let ([reader key-reader])
+         (set-key-reader! #f)
+         (guard (c [else (report 'key-reader c)])
+           (reader key)))]
       [(and (null? pending) (not transient) (prefix-arg-key key)) (void)]
       [(and (pair? pending) (equal? key "C-g"))
        (set-pending! '())
@@ -227,7 +240,7 @@
   (define (handle-text text)
     (select-window-buffer)
     (cond
-      [(or (pair? pending) transient)
+      [(or (pair? pending) transient key-reader)
        (for-each (lambda (c) (handle-key (char-key c))) (string->list text))]
       [(and arg-digits? (prefix-arg-key text)) (when (current-message) (message #f))]
       [else

@@ -24,7 +24,7 @@ are in `profane-plan.md` §8a–§8j; read the section for an area before changi
 milestone (plan §9). Do not start work from a later milestone unless asked; when a task touches a later
 milestone's area, leave a seam, not an implementation.
 
-**M2 still open** (plan §9, M2 row): avy (jump labels on the canvas); file-name reading with
+**M2 still open** (plan §9, M2 row): file-name reading with
 vertico's directory keys and `find-file`; mouse routing into `ProfaneView` (which also unblocks clickable canvases,
 cursor shapes, mouse selection and window resizing); window extras (`C-v`/`M-v`/recenter, per-window buffer
 history, header lines); electric-pair. Consult's imenu and xref wait for modes and tree-sitter (M5), ripgrep and

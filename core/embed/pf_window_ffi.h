@@ -57,6 +57,10 @@ double pf_frm_native_field(pf_handle frame, size_t i, int field);
 /* The active region [START, END) of WIN, in characters; START == END clears it. */
 int pf_win_set_region(pf_handle win, size_t start, size_t end);
 
+/* Where character POS is in WIN (pf_window_pos_rect): OUT receives four floats (x, y, w, h) in window
+ * coordinates. Returns 0, or -1 if it is not visible. */
+int pf_win_pos_rect(pf_handle win, size_t pos, uint8_t *out);
+
 pf_handle pf_win_selected(void); /* the selected frame's selected window, or 0 */
 int pf_win_set_buffer(pf_handle win, pf_handle buf, uint32_t point_marker);
 int64_t pf_win_top_line(pf_handle win);

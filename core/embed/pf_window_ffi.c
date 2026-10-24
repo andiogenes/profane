@@ -1,6 +1,7 @@
 #include "pf_window_ffi.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "pf_utf8.h"
 
@@ -320,6 +321,19 @@ int pf_win_set_region(pf_handle win, size_t start, size_t end) {
         return INVALID;
     }
     pf_window_set_region(w, start, end);
+    return 0;
+}
+
+int pf_win_pos_rect(pf_handle win, size_t pos, uint8_t *out) {
+    pf_window *w = window_of(win);
+    float r[4];
+    if (!w) {
+        return INVALID;
+    }
+    if (pf_window_pos_rect(w, pos, r) != 0) {
+        return -1;
+    }
+    memcpy(out, r, sizeof r);
     return 0;
 }
 

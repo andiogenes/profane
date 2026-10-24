@@ -422,6 +422,17 @@ the renderer tags the frame answering each event and records when it was submitt
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
   minibuffer reads input in this window (below).
+- **avy** (`(profane avy)`, M2). `avy-goto-word-1` (the owner's `C-x C-j`), `avy-goto-char`, `avy-goto-line`. The command
+  reads a character, collects the matching positions in the visible text of every window of the frame (ordered by
+  distance from point, the selected window first) and shows a label over each: a full-frame canvas pop-up on the overlay
+  layer (`red` rounded tag, text in the `bg` color), made of the keys in `avy-keys` (`a s d f g h j k l`; same-length
+  labels, longer when there are more candidates than keys). Typing a label jumps (selecting that window, mark left
+  behind); a key that is no label, `C-g` or `ESC` cancels; one candidate is jumped to at once. New pieces: the command
+  loop's `set-key-reader!` (the next key or typed character goes to a procedure; while set the shell sends plain keys as
+  keys, so labels work under a non-Latin layout), `pf_window_pos_rect` (a character's cell on screen, from the last
+  layout, -1 when not visible) with `window-pos-rect` and `window-visible-range` in Scheme. *Not yet:* avy's other
+  commands and actions (`avy-goto-char-2`, `avy-goto-char-timer`, copy/kill/move actions), labels decorated for
+  wrapped lines (there is no wrapping yet), and dimming the buffer behind the labels.
 - **Transients** (`(profane transient)`, M2). `define-transient` registers a menu command from groups of items: `action` (runs a
   command, symbol or procedure, then closes unless `stay`), `switch` (toggle, flag green when on) and `option` (reads a
   string in the minibuffer; empty clears). Keys are `kbd` sequences (`"- a"` is two keys). Opening shows a panel (a pop-up
@@ -461,8 +472,7 @@ the renderer tags the frame answering each event and records when it was submitt
   `edge-of-buffer` (end, or beginning with `C--`; the same key in the minibuffer selects the last/first candidate),
   `M-g b` `consult-buffer` (live preview, restored on quit), `M-g y` `consult-yank-from-kill-ring`, `vertico-count 5`.
   *Not ported yet, waiting for their features:* `M-g i` imenu and `M-g s` search (modes, tree-sitter, search core),
-  `M-g t` neotree and `C-x C-b` buffer menu (listing/tree views), `C-x C-j` avy (jump labels on the canvas),
-  vertico's directory keys (`RET`, `DEL`, `M-DEL` on file names; file-name reading), electric-pair, `C-x 4 C-x C-b`.
+  `M-g t` neotree and `C-x C-b` buffer menu (listing/tree views),   vertico's directory keys (`RET`, `DEL`, `M-DEL` on file names; file-name reading), electric-pair, `C-x 4 C-x C-b`.
   transpose-frame and tabs are unbound in the config (used by command name); the stock `C-x t` tab keys exist.
 - **Canvas windows** (M2, after item 7). `pf_window_set_canvas` (through `pf_frame_set_window_canvas`) makes a window draw a canvas
   in its body instead of text, on the base layer from the body's top-left, so it sits under native views and the
@@ -543,7 +553,7 @@ the renderer tags the frame answering each event and records when it was submitt
 State at the end of the M2 work so far (everything in §8i is on `main`). Deliberately deferred work, each with what it
 waits for. Keep this list current: remove an entry when it is done, add one when something is left as a seam.
 
-**M2 items still open** (§9, M2 row): avy (`avy-goto-word-1`, jump labels on the canvas; the owner's `C-x C-j` waits on it); file-name reading with
+**M2 items still open** (§9, M2 row): file-name reading with
 vertico's directory keys (`RET`, `DEL`, `M-DEL` on paths) and `find-file`; mouse routing into `ProfaneView`, which
 also unblocks clickable canvases, cursor shapes, mouse selection and window resizing; window extras (`C-v`/`M-v`/
 recenter, per-window buffer history, header lines); electric-pair. The owner's port (`scheme/init.ss`) still lacks

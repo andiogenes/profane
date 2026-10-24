@@ -755,6 +755,42 @@ void pf_window_body_rect(const pf_window *w, float rect[4]) {
     rect[3] = w->height - w->mode_line_h;
 }
 
+int pf_window_pos_rect(pf_window *w, size_t pos, float rect[4]) {
+    pf_text *text = pf_handle_get(w->buf, PF_HANDLE_TEXT);
+    const pf_text_snapshot *s = text ? pf_text_current(text) : NULL;
+    if (!s || w->native || w->canvas) {
+        return -1;
+    }
+    const pf_window_style *st = &w->style;
+    size_t lines = pf_text_lines(s);
+    size_t line = pf_text_line_of(s, pos);
+    float body_h = w->height - w->mode_line_h - st->pad_top;
+    size_t visible = !w->mode_line.face           ? pf_window_body_lines(w)
+                     : st->line_height > 0 && body_h > 0 ? (size_t)ceilf(body_h / st->line_height)
+                                                       : 0;
+    if (line < w->top || line >= w->top + visible || line >= lines) {
+        return -1;
+    }
+    float right = w->width - w->divider - w->fringe_right;
+    float gutter = w->line_numbers ? (float)(count_digits(lines) + 2) * st->cell_width : 0;
+    float left = st->pad_left + w->fringe_left + gutter;
+    row r = layout_row(w, text, s, line, (size_t)-1, scaled_font(w, default_font_of(w)));
+    size_t idx = pos - r.start;
+    if (pos < r.start || idx > r.lay->nchars) {
+        return -1;
+    }
+    float x = left - w->hscroll + r.lay->caret_x[idx];
+    float cw = idx < r.lay->nchars ? r.lay->caret_x[idx + 1] - r.lay->caret_x[idx] : st->cell_width;
+    if (x < left - 0.5f || x + cw > right + 0.5f) {
+        return -1;
+    }
+    rect[0] = x;
+    rect[1] = st->pad_top + (float)(line - w->top) * st->line_height;
+    rect[2] = cw > 0 ? cw : st->cell_width;
+    rect[3] = st->line_height;
+    return 0;
+}
+
 const pf_display *pf_window_redisplay(pf_window *w) {
     pf_text *text = pf_handle_get(w->buf, PF_HANDLE_TEXT);
     const pf_text_snapshot *s = text ? pf_text_current(text) : NULL;

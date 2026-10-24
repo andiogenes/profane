@@ -8,13 +8,13 @@
 (import (profane repl) (profane buffer) (profane window) (profane var) (profane hook)
         (profane keymap) (profane face) (profane command) (profane mode) (profane command-loop)
         (profane simple) (profane display) (profane theme) (profane themes) (profane tab-bar)
-        (profane transpose-frame) (profane ace-window) (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient))
+        (profane transpose-frame) (profane ace-window) (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy))
 
 ;;; Chez invokes a library only when one of its variables is first used; libraries whose body
 ;;; registers commands, modes and bindings must be invoked explicitly.
 (for-each invoke-library '((profane simple) (profane window) (profane display) (profane themes)
                            (profane tab-bar) (profane transpose-frame) (profane ace-window)
-                           (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient)))
+                           (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy)))
 
 ;;; Defaults until the shell reports the macOS appearance: the light theme, the minimal style.
 (load-theme 'profane-light)

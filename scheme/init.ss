@@ -13,8 +13,11 @@
 ;;; One key for both ends of the buffer, and of a completion list.
 (define-key! (global-map) "C-M-v" 'edge-of-buffer)
 
+;;; avy: jump to a visible word by label.
+(define-key! (global-map) "C-x C-j" 'avy-goto-word-1)
+
 ;;; consult: buffers with preview, the kill ring. (imenu, ripgrep search and xref wait for
-;;; modes and tree-sitter; M-g t neotree and avy on C-x C-j for their packages.)
+;;; modes and tree-sitter; M-g t neotree for its package.)
 (define-key! (global-map) "M-g b" 'consult-buffer)
 (define-key! (global-map) "M-g y" 'consult-yank-from-kill-ring)
 
