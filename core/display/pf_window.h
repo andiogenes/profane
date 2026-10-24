@@ -100,6 +100,11 @@ uint32_t pf_window_native(const pf_window *w);
 /* The body's rect in window coordinates (points). */
 void pf_window_body_rect(const pf_window *w, float rect[4]);
 
+/* The active region [START, END) in characters, drawn in the region face's background under the
+ * text; START == END shows none. A newline inside the region shows as one extra cell, as in
+ * Emacs. Callers show it in the selected window only. */
+void pf_window_set_region(pf_window *w, size_t start, size_t end);
+
 /* Canvas window kind: the body (see pf_window_body_rect) shows CANVAS, drawn on the base layer
  * from (0, 0) at the body's top-left, instead of text; NULL makes it a text window again. Not
  * owned: detach it before freeing the canvas. Ops outside the body are not clipped yet, so

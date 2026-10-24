@@ -821,6 +821,17 @@
                                   (runs->bytevector runs) (length runs)
                                   (if face (face-id face) 0) box)))))))
 
+  ;; The active region (transient-mark-mode, see (profane command-loop)) shows in the selected
+  ;; window only, as in Emacs.
+  (define (update-region! w)
+    (let ([b (window-buffer w)])
+      (if (and (selected? w) (buffer-live? b) (not (window-minibuffer? w))
+               (variable-defined? 'mark-active)
+               (with-current-buffer b (and (var-ref 'mark-active) (mark) #t)))
+          (let ([m (with-current-buffer b (mark))] [p (buffer-point b)])
+            (%win-set-region (window-handle w) (min m p) (max m p)))
+          (%win-set-region (window-handle w) 0 0))))
+
   (define (update-text-scale! w)
     (let ([s (inexact (with-current-buffer (window-buffer w) (var-ref 'text-scale-factor)))])
       (unless (= s (window-scale w))
@@ -842,7 +853,8 @@
         (unless (or mini-active (buffer-live? (window-buffer (frame-minibuffer f))))
           (attach-buffer! (frame-minibuffer f) (echo-buffer)))
         (run-hooks 'pre-redisplay-hook f)
-        (for-each (lambda (w) (update-mode-line! w) (update-text-scale! w)) (window-list f)))))
+        (for-each (lambda (w) (update-mode-line! w) (update-text-scale! w) (update-region! w))
+                  (window-list f)))))
 
   ;; Fringes, mode line style and line spacing change the layout. (The calls make sure the
   ;; libraries defining them have run: Chez runs a library only once it is used.)

@@ -62,12 +62,16 @@
 
   ;; ---- mark and region ----
 
-  (define-command (set-mark-command) "Set the mark at point." (set-mark! (point)) (message "Mark set"))
+  (define-command (set-mark-command) "Set the mark at point and activate the region."
+    (set-mark! (point))
+    (var-set! 'mark-active #t)
+    (message "Mark set"))
 
   (define-command (exchange-point-and-mark)
     (let ([m (mark)])
       (unless m (error 'exchange-point-and-mark "no mark set in this buffer"))
       (set-mark! (point))
+      (var-set! 'mark-active #t)
       (goto-char m)))
 
   (define (region)
@@ -107,6 +111,7 @@
   (define-command (kill-ring-save)
     (let-values ([(lo hi) (region)])
       (kill-new (buffer-substring lo hi))
+      (var-set! 'mark-active #f)
       (message "Saved text")))
 
   (define-command (kill-line)
@@ -121,7 +126,10 @@
     (set-mark! (point))
     (insert (current-kill)))
 
-  (define-command (keyboard-quit) (message "Quit"))
+  (define-command (keyboard-quit)
+    "Deactivate the region."
+    (var-set! 'mark-active #f)
+    (message "Quit"))
 
   ;; ---- undo ----
 

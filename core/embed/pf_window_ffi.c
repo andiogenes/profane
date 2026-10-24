@@ -314,6 +314,15 @@ int pf_win_option(pf_handle win, int option) {
     return w ? pf_window_option_value(w, (pf_window_option)option) : INVALID;
 }
 
+int pf_win_set_region(pf_handle win, size_t start, size_t end) {
+    pf_window *w = window_of(win);
+    if (!w) {
+        return INVALID;
+    }
+    pf_window_set_region(w, start, end);
+    return 0;
+}
+
 int pf_win_set_edges(pf_handle win, float fringe_left, float fringe_right, float divider) {
     pf_window *w = window_of(win);
     if (!w) {

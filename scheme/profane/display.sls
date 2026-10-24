@@ -95,7 +95,7 @@
 
   ;; pf_face_role order (core/display/pf_face.h).
   (define roles '(default cursor line-number line-number-current-line hl-line
-                  show-paren-match show-paren-mismatch fringe vertical-border))
+                  show-paren-match show-paren-mismatch fringe vertical-border region))
 
   ;; ---- built-in faces ----
 

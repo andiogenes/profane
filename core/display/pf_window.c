@@ -55,6 +55,7 @@ struct pf_window {
     float fringe_left, fringe_right, divider;
     pf_strip mode_line;
     float mode_line_h;
+    size_t region_start, region_end; /* the active region, empty: none */
     uint32_t native; /* native view kind, 0: text */
     pf_canvas *canvas; /* canvas window: drawn instead of text */
     uint64_t shown_canvas_version;
@@ -603,6 +604,27 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
             pf_display_rect(d, left, top, right - left, st->line_height,
                             role_color(PF_ROLE_HL_LINE, PF_FACE_HAS_BG, 0));
         }
+        if (w->region_end > r.start && w->region_start <= r.end && w->region_start != w->region_end) {
+            /* The part of the region on this line; a newline inside it is one more cell. */
+            size_t from = w->region_start > r.start ? w->region_start - r.start : 0;
+            size_t to = w->region_end < r.end ? w->region_end - r.start : r.end - r.start;
+            if (r.pre) {
+                from += from >= r.k ? r.pre : 0;
+                to += to >= r.k ? r.pre : 0;
+            }
+            from = from < lay->nchars ? from : lay->nchars;
+            to = to < lay->nchars ? to : lay->nchars;
+            float rx = fmaxf(x0 + lay->caret_x[from], left);
+            float rr = x0 + lay->caret_x[to];
+            if (w->region_end > r.end && line + 1 < lines) {
+                rr += st->cell_width;
+            }
+            rr = fminf(rr, right);
+            if (rr > rx) {
+                pf_display_rect(d, rx, top, rr - rx, st->line_height,
+                                role_color(PF_ROLE_REGION, PF_FACE_HAS_BG, 0));
+            }
+        }
         if (paren.active) {
             size_t marks[2] = {paren.at, paren.other};
             uint32_t pc = paren.mismatch ? role_color(PF_ROLE_PAREN_MISMATCH, PF_FACE_HAS_BG, 0)
@@ -683,6 +705,22 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
                 w->cursor_valid = 1;
             }
         }
+    }
+}
+
+void pf_window_set_region(pf_window *w, size_t start, size_t end) {
+    if (start > end) {
+        size_t t = start;
+        start = end;
+        end = t;
+    }
+    if (start == end) {
+        start = end = 0;
+    }
+    if (w->region_start != start || w->region_end != end) {
+        w->region_start = start;
+        w->region_end = end;
+        w->dirty = 1;
     }
 }
 

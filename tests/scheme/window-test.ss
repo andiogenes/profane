@@ -241,6 +241,25 @@
   (test-eqv "C-u C-u deletes the picked window" 2 (length (window-list))))
 (keys "C-x 1")
 
+;; ---- the active region shows in the selected window only ----
+(let ([fh (%frame-handle f)] [w (selected-window)])
+  (delete-other-windows)
+  (switch-to-buffer (get-buffer-create "region-view"))
+  (insert "alpha beta gamma")
+  (goto-char 0)
+  (redisplay-prepare!)
+  (%frm-redisplay fh)
+  (goto-char 11)
+  (set-mark! 6)
+  (redisplay-prepare!)
+  (let ([plain (%frm-redisplay fh)])
+    (var-set! 'mark-active #t)
+    (redisplay-prepare!)
+    (test-eqv "the region adds one rectangle" (+ plain 1) (%frm-redisplay fh))
+    (var-set! 'mark-active #f)
+    (redisplay-prepare!)
+    (test-eqv "and deactivating removes it" plain (%frm-redisplay fh))))
+
 ;; ---- native-view windows ----
 (let* ([fh (%frame-handle f)] [ws (window-list)] [w (car ws)])
   (test-eqv "no native windows" 0 (%frm-native-count fh))

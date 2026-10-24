@@ -17,7 +17,7 @@
           line-beginning-position line-end-position line-number-at-pos forward-line count-lines
           marker? marker-buffer marker-position copy-marker set-marker! delete-marker!
           mark set-mark!
-          erase-buffer
+          erase-buffer buffer-edit-count
           undo-boundary undo redo buffer-disable-undo buffer-enable-undo
           buffer-modified? set-buffer-unmodified!
           find-file-noselect save-buffer
@@ -139,8 +139,16 @@
               [at (point)])
          (unless (zero? (%buf-insert (h 'insert) at bv (bytevector-length bv)))
            (error 'insert "out of memory"))
+         (note-edit!)
          (goto-char (+ at (string-length s)))))
      things))
+
+  ;; How many times the current buffer's text was changed (inserts, deletions, undo and redo):
+  ;; the command loop compares it before and after a command to deactivate the mark.
+  (define edit-counts (make-weak-eq-hashtable))
+  (define (note-edit!)
+    (let ([b (current-buffer)]) (hashtable-set! edit-counts b (+ 1 (hashtable-ref edit-counts b 0)))))
+  (define (buffer-edit-count) (hashtable-ref edit-counts (current-buffer) 0))
 
   (define (check-region who start end)
     (let ([start (position-of start)] [end (position-of end)])
@@ -151,6 +159,7 @@
 
   (define (delete-region start end)
     (let-values ([(lo hi) (check-region 'delete-region start end)])
+      (when (< lo hi) (note-edit!))
       (%buf-delete (h 'delete-region) lo hi)))
 
   (define delete-char
@@ -302,6 +311,7 @@
     (let ([pos (native (h who))])
       (when (< pos 0) (error who (if (eq? who 'undo) "no further undo information"
                                      "no further redo information")))
+      (note-edit!)
       (goto-char pos)))
 
   ;; Emacs buffer-disable-undo: stops recording and drops the history (internal buffers such

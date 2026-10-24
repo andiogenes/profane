@@ -22,6 +22,11 @@
   (defvar press-and-hold-keys '()
     "Plain keys that show macOS's accent picker when held (every other key repeats).")
 
+  ;; Emacs transient-mark-mode: C-SPC (or C-x C-x) makes the region active and windows show
+  ;; it; changing the buffer or C-g deactivates it. The mark itself stays set.
+  (defvar mark-active #f "Whether the region between point and the mark is active (highlighted)."
+    '(local))
+
   (define (push-press-and-hold! keys)
     (let ([bv (string->utf8
                (apply string-append
@@ -116,8 +121,12 @@
       (set! arg-pending #f)
       (set! arg-digits? #f)
       (%set-this-command! name)
-      (guard (c [else (report name c)])
-        (if proc (proc) (error name "no such command")))
+      (let ([edited-buffer (current-buffer)] [edits (buffer-edit-count)])
+        (guard (c [else (report name c)])
+          (if proc (proc) (error name "no such command")))
+        (when (and (buffer-live? edited-buffer)
+                   (with-current-buffer edited-buffer (not (= edits (buffer-edit-count)))))
+          (with-current-buffer edited-buffer (var-set! 'mark-active #f))))
       (%set-prefix-arg! #f)
       (%set-last-command! name)
       (guard (c [else (report 'post-command-hook c)])

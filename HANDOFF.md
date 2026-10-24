@@ -160,6 +160,10 @@ and the consult/corfu parts listed above; check §9 before choosing the next ite
 
 ## 7. Open items and known gaps
 
+- **Active region** is highlighted now (`mark-active`, transient-mark-mode behavior; plan §8i). Not done:
+  `highlight-nonselected-windows`, `shift-select-mode` (S-motion starting a region), `C-SPC C-SPC` (push mark without
+  activating), a mark ring, and `delete-selection-mode` (typing replaces the region). Branch `m2-region`, off `m2-eval`.
+
 - **Evaluating from the editor** exists (`M-:`, `C-x C-e`, `eval-region`, `eval-buffer`; plan §8i). Deferred, with
   why: `load-file` (file-name reading, M3); `C-g` interrupting a looping eval (engines, **needed before M4**, since
   a mistyped loop hangs the editor); `eval-defun`/`C-M-x` (defun motion, with modes in M5); `C-u C-x C-e`

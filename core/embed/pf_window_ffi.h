@@ -54,6 +54,9 @@ int64_t pf_frm_native_count(pf_handle frame);
  * 5 kind, 6 the window's handle. Returns -1e9 if out of range. */
 double pf_frm_native_field(pf_handle frame, size_t i, int field);
 
+/* The active region [START, END) of WIN, in characters; START == END clears it. */
+int pf_win_set_region(pf_handle win, size_t start, size_t end);
+
 pf_handle pf_win_selected(void); /* the selected frame's selected window, or 0 */
 int pf_win_set_buffer(pf_handle win, pf_handle buf, uint32_t point_marker);
 int64_t pf_win_top_line(pf_handle win);

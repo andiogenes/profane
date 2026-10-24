@@ -48,6 +48,7 @@ static const pf_font_source fonts = {NULL, fake_metrics, fake_scaled};
 #define ML_BG 0xCCCCCCFFu
 #define TAB_BG 0xDDDDDDFFu
 #define MARK 0x555555FFu
+#define REGION_BG 0xAACCFFFFu
 
 static void set_face(uint32_t id, uint32_t flags, uint32_t fg, uint32_t bg) {
     pf_face f = {.flags = flags, .fg = fg, .bg = bg};
@@ -63,6 +64,8 @@ static void faces(void) {
     pf_face_set_role(PF_ROLE_VERTICAL_BORDER, 3);
     set_face(4, PF_FACE_HAS_FG, MARK, 0);
     pf_face_set_role(PF_ROLE_FRINGE, 4); /* continuation marks in its foreground */
+    set_face(5, PF_FACE_HAS_BG, 0, REGION_BG);
+    pf_face_set_role(PF_ROLE_REGION, 5);
     set_face(10, PF_FACE_HAS_BG, 0, ML_BG); /* mode line */
     set_face(11, PF_FACE_HAS_BG, 0, TAB_BG); /* tab bar */
 }
@@ -237,6 +240,26 @@ int main(void) {
     PF_CHECK(!c || c->y >= 140); /* point is off to the left: no cursor drawn in w1 */
     pf_display_release(d);
     pf_window_set_min_hscroll(w1, 0);
+
+    /* The active region is drawn under the text, in the window it is set on. */
+    pf_window_set_region(w1, 1, 3); /* "aaa": the 2nd and 3rd characters */
+    d = pf_frame_redisplay(f);
+    const pf_display_item *rg = find_rect(d, REGION_BG);
+    PF_CHECK(rg && NEAR(rg->u.rect.w, 20) && NEAR(rg->y, 2)); /* below the top pad */
+    const pf_display_item *first = find_glyph(d, 'a');
+    PF_CHECK(rg && first && rg->x >= first->x + 9.9f); /* starts after the first character */
+    pf_display_release(d);
+    pf_window_set_region(w1, 2, 2); /* empty: none */
+    d = pf_frame_redisplay(f);
+    PF_CHECK(find_rect(d, REGION_BG) == NULL);
+    pf_display_release(d);
+    pf_window_set_region(w1, 3, 0); /* reversed and reaching the end: still drawn */
+    d = pf_frame_redisplay(f);
+    PF_CHECK(find_rect(d, REGION_BG) != NULL);
+    pf_display_release(d);
+    pf_window_set_region(w1, 0, 0);
+    d = pf_frame_redisplay(f);
+    pf_display_release(d);
 
     /* Native-view windows: the body is left empty and reported to the shell. */
     uint64_t gen0 = pf_frame_native_generation(f);

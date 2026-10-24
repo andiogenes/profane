@@ -422,6 +422,12 @@ the renderer tags the frame answering each event and records when it was submitt
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
   minibuffer reads input in this window (below).
+- **Active region** (fix after M2 item 8: marked regions were not highlighted). Emacs's transient-mark-mode: the buffer-local
+  `mark-active` (defined in `(profane command-loop)`) is turned on by `C-SPC` and `C-x C-x`, off by `C-g`, copying
+  (`M-w`) and by any change to the buffer in a command (a per-buffer edit count in `(profane buffer)`, compared around each
+  command; so typing, `C-w` and undo deactivate it). `M-<` / `M->` set the mark without activating it. The selected window
+  draws the region in the `region` face's background under the text (`pf_window_set_region`, role `PF_ROLE_REGION`;
+  a newline inside it shows as one extra cell); other windows show none, as in Emacs by default.
 - **Evaluating from the editor** (`(profane eval)`, after M2 item 8). `M-:` `eval-expression` (reads in the minibuffer, history
   `eval-expression`), `C-x C-e` `eval-last-sexp` (the expression before point, found by a small tokenizer that skips
   comments and knows strings, character literals and quote prefixes; inside a list it takes the inner form), `eval-region`
