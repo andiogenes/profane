@@ -8,7 +8,7 @@
 (import (profane repl) (profane buffer) (profane window) (profane var) (profane hook)
         (profane keymap) (profane face) (profane command) (profane mode) (profane command-loop)
         (profane simple) (profane display) (profane theme) (profane themes) (profane tab-bar)
-        (profane transpose-frame) (profane ace-window) (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy) (profane mouse) (profane files) (profane async))
+        (profane transpose-frame) (profane ace-window) (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy) (profane mouse) (profane files) (profane async) (profane process))
 
 ;;; Chez invokes a library only when one of its variables is first used; libraries whose body
 ;;; registers commands, modes and bindings must be invoked explicitly.

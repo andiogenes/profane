@@ -14,6 +14,7 @@ set(PF_NATIVE_SOURCES
   embed/pf_input.c
   embed/pf_window_ffi.c
   layout/pf_layout.c
+  process/pf_process.c
   render/pf_display.c
   text/pf_props.c
   text/pf_text.c
@@ -29,6 +30,7 @@ target_include_directories(pf_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/display"
   "${CMAKE_CURRENT_SOURCE_DIR}/embed"
   "${CMAKE_CURRENT_SOURCE_DIR}/layout"
+  "${CMAKE_CURRENT_SOURCE_DIR}/process"
   "${CMAKE_CURRENT_SOURCE_DIR}/render"
   "${CMAKE_CURRENT_SOURCE_DIR}/text")
 target_compile_options(pf_core PRIVATE ${PROFANE_WARNINGS})
@@ -46,6 +48,7 @@ target_include_directories(pf_native PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/display"
   "${CMAKE_CURRENT_SOURCE_DIR}/embed"
   "${CMAKE_CURRENT_SOURCE_DIR}/layout"
+  "${CMAKE_CURRENT_SOURCE_DIR}/process"
   "${CMAKE_CURRENT_SOURCE_DIR}/render"
   "${CMAKE_CURRENT_SOURCE_DIR}/text")
 target_compile_options(pf_native PRIVATE ${PROFANE_WARNINGS})

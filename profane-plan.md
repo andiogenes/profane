@@ -670,6 +670,35 @@ languages.
   running app headless: a timer's event arrived through the wake hook (no polling) and a command parked in `await` resumed
   on its own. Not verified: behavior under ASan/TSan (not run), a flood against a real window.
 
+**Item 2: processes and PTY** (`core/process/pf_process.*`, `(profane process)`). Decisions:
+
+- **One reader thread per process, no kqueue.** The thread owns the descriptors: it `poll`s stdout/stderr, writes the
+  queued stdin, notices the exit and reaps, then posts the exit event, always last. Plain POSIX, so the C test runs
+  anywhere (kqueue/dispatch sources were the plan's idea; threads are simpler and a few dozen processes cost nothing).
+  Output reaches Scheme as `pf_async` events (§8k item 1): stdout, stderr, exit (code or signal).
+- **Backpressure**: the reader stops reading while 256 KiB of output are unacknowledged (`pf_proc_consumed`, sent by Scheme
+  after each filter call), so a chatty child blocks in `write()` instead of filling the unbounded queue. Writes to the child
+  are queued and flushed by the reader (never block the editor).
+- **Exit does not wait for EOF**: a grandchild holding the pipe open (`sleep 3 &`) does not delay the exit event; what is
+  already in the pipe is drained first. The child is reaped with `waitid(WNOWAIT)` then `waitpid` under the process lock, so
+  a signal can never reach a reaped (reusable) pid.
+- **Spawn** is `fork` + `execvp` with an error pipe (a missing program or directory is an error at `start-process`, not
+  an exit). Pipes: own process group; pty: `posix_openpt`, new session, `TIOCSCTTY`; the window size is set from the *slave*
+  in the child (macOS drops a size set on the master before the slave opens). Descriptors above 2 are closed in the child,
+  signals unblocked and SIGPIPE restored; the editor ignores SIGPIPE (a write to a gone child is an error).
+  `env` options replace or add entries of the inherited environment; a pty gets `TERM=xterm-256color` unless given.
+- **Cleanup**: `atexit` hangs up (SIGHUP + SIGCONT to the group) every live child. Verified: a `sleep` child died on quit.
+- **Scheme API**: `start-process name argv [options]` with filter / stderr-filter / sentinel / buffer; incremental UTF-8
+  (a character split across reads is whole); default output goes to the buffer end, point follows only if it was there.
+  `process-promise`, `run-process` (promise of `(code stdout stderr)`), `signal-process`, `process-send-string`/`-eof`,
+  `process-resize!`. No process-mark, no process-level coding systems (UTF-8 only), no per-process plist: add with a user.
+- **Known limits**: aborting an `await` with `C-g` leaves its process running (engines drop without unwinding, §8i); the
+  caller keeps the process and can kill it. Filters and sentinels are not sliced (hooks rule).
+- **Verified**: `c.process` (streams, exit codes, merged stderr, cwd/env, exec errors, stdin/EOF, 3 MB out and 2 MB in,
+  SIGTERM, grandchild pipe, pty size/echo; also clean under ASan and TSan), `process-test.ss` (34 checks, incl. a 5 MB flood
+  delivered whole and `await` parking a command), and the running app (a `run-process` result through the wake hook). Not
+  verified: many simultaneous processes, interactive programs on the pty beyond `stty`/`read`.
+
 ## 9. Milestones
 
 | # | Milestone | Exit criteria |

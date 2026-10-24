@@ -26,6 +26,8 @@
           %input-set-prefix-pending %input-set-press-and-hold %input-set-busy
           %async-post %async-post-after %async-pop %async-data %async-wait %async-pending
           %async-wake-ack %async-rewake
+          %proc-spawn %proc-pid %proc-write %proc-eof %proc-signal %proc-resize %proc-consumed
+          %proc-release
           %face-define %face-role-set %buf-put-prop %buf-get-prop %display-set-line-spacing)
   (import (chezscheme))
 
@@ -48,6 +50,15 @@
   (define-native %async-pending "pf_async_pending" () integer-64)
   (define-native %async-wake-ack "pf_async_wake_ack" () void)
   (define-native %async-rewake "pf_async_rewake" () void)
+  (define-native %proc-spawn "pf_proc_spawn"
+    (u8* size_t u8* size_t u8* size_t int unsigned-64 unsigned-32 unsigned-32) integer-64)
+  (define-native %proc-pid "pf_proc_pid" (unsigned-32) integer-64)
+  (define-native %proc-write "pf_proc_write" (unsigned-32 u8* size_t) int)
+  (define-native %proc-eof "pf_proc_eof" (unsigned-32) int)
+  (define-native %proc-signal "pf_proc_signal" (unsigned-32 int) int)
+  (define-native %proc-resize "pf_proc_resize" (unsigned-32 unsigned-32 unsigned-32) int)
+  (define-native %proc-consumed "pf_proc_consumed" (unsigned-32 size_t) int)
+  (define-native %proc-release "pf_proc_release" (unsigned-32) int)
   (define-native %buf-new "pf_buf_new" (u8* size_t) unsigned-32)
   (define-native %buf-free "pf_buf_free" (unsigned-32) int)
   (define-native %buf-chars "pf_buf_chars" (unsigned-32) integer-64)
