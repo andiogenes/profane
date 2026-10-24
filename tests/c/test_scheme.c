@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "pf_input.h"
 #include "pf_repl.h"
 #include "pf_scheme.h"
 #include "pf_test.h"
@@ -72,6 +73,15 @@ int main(void) {
     hello = call_text("pf-hello-text", NULL, 0, &status);
     PF_CHECK_EQ_STR(hello, "redefined");
     free(hello);
+
+    /* press-and-hold-keys reaches the shell: off for every key unless Scheme lists it. */
+    PF_CHECK(pf_input_press_and_hold("e") == 0);
+    check_repl(1, "(var-set! 'press-and-hold-keys '(\"e\" \"a\" 5))\n", "(\"e\" \"a\" 5)\n");
+    PF_CHECK(pf_input_press_and_hold("e") == 1 && pf_input_press_and_hold("a") == 1);
+    PF_CHECK(pf_input_press_and_hold("b") == 0 && pf_input_press_and_hold("ea") == 0);
+    PF_CHECK(pf_input_press_and_hold("") == 0 && pf_input_press_and_hold(NULL) == 0);
+    check_repl(1, "(var-set! 'press-and-hold-keys '())\n", "()\n");
+    PF_CHECK(pf_input_press_and_hold("e") == 0);
 
     /* Startup scripts: the shipped init.ss binds the owner's keys; a failing user init.ss is
      * reported and does not stop startup. */

@@ -364,11 +364,21 @@ static CGColorRef create_cgcolor(uint32_t c) {
         return;
     }
     /* Plain keys go through the input method: it may insert text, compose, or ask for a
-     * command (-doCommandBySelector:). */
+     * command (-doCommandBySelector:). macOS reads the press-and-hold default as the key goes
+     * down, so it is set for this key: off (the key repeats) unless Scheme listed it. */
+    [self setPressAndHold:pf_input_press_and_hold(key.UTF8String) != 0];
     _interpreting = event;
     [self interpretKeyEvents:@[ event ]];
     _interpreting = nil;
     [self redisplay];
+}
+
+- (void)setPressAndHold:(BOOL)on {
+    static BOOL current = NO;
+    if (on != current) {
+        current = on;
+        [[NSUserDefaults standardUserDefaults] setBool:on forKey:@"ApplePressAndHoldEnabled"];
+    }
 }
 
 - (void)doCommandBySelector:(SEL)selector {

@@ -160,8 +160,11 @@ and the consult/corfu parts listed above; check §9 before choosing the next ite
 
 ## 7. Open items and known gaps
 
-- **Owner checks pending:** a real CJK input method (Japanese/Pinyin) in the window, i.e. composition underlined at
-  point, commit on Return. Also a real macOS dark-mode toggle: verified only via `(appearance-changed! 'dark)`
+- **Press-and-hold** is off so held keys repeat; `press-and-hold-keys` turns the accent picker back on per key. Owner
+  check: hold a key (it should repeat) and, after `(var-set! 'press-and-hold-keys '("e"))`, hold `e` (picker expected).
+  Branch `m2-press-and-hold`, cut from `m2-keymaps`.
+
+- **Owner checks pending:** (the CJK input method check is dropped: the owner does not use those languages.) A real macOS dark-mode toggle: verified only via `(appearance-changed! 'dark)`
   and `(load-theme 'profane-dark)`.
 - **Unexplained latency outlier:** one 100k-line benchmark run in item 2 had a single 899 ms commit sample. In item 4
   it showed again (≈900 ms max, 178 of 200 samples) in three back-to-back runs that the owner backgrounded while

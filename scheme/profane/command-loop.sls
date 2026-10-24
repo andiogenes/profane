@@ -12,9 +12,31 @@
   (export handle-key handle-text last-input-text pending-keys self-insert-amalgamation
           set-transient-map set-input-buffer-function!)
   (import (chezscheme) (profane native) (profane buffer) (profane window) (profane keymap)
-          (profane mode) (profane command) (profane hook))
+          (profane mode) (profane command) (profane hook) (profane var))
 
   (defhook post-command-hook)
+
+  ;; macOS shows an accent picker for a held letter instead of repeating it. profane turns that
+  ;; off, so held keys repeat; list here the plain keys (as named by the key description, "e")
+  ;; for which it should stay on. Chords never show it: they bypass the input method.
+  (defvar press-and-hold-keys '()
+    "Plain keys that show macOS's accent picker when held (every other key repeats).")
+
+  (define (push-press-and-hold! keys)
+    (let ([bv (string->utf8
+               (apply string-append
+                      (let loop ([ks keys])
+                        (cond [(null? ks) '()]
+                              [(string? (car ks)) (cons (car ks) (cons "\n" (loop (cdr ks))))]
+                              [else (loop (cdr ks))]))))])
+      (%input-set-press-and-hold bv (bytevector-length bv))))
+
+  (define press-and-hold-installed
+    (begin
+      (add-var-watcher! 'press-and-hold-keys
+                        (lambda (name value where) (push-press-and-hold! value)))
+      (push-press-and-hold! (var-ref 'press-and-hold-keys))
+      #t))
 
   ;; Where keys go: the selected window's buffer, unless this procedure returns a buffer (the
   ;; minibuffer, while it reads input).

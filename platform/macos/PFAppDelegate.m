@@ -33,6 +33,9 @@
     NSApp.activationPolicy =
         _headless ? NSApplicationActivationPolicyProhibited : NSApplicationActivationPolicyRegular;
     if (!_headless) {
+        /* Held keys repeat instead of opening the accent picker (press-and-hold); Scheme can turn
+         * the picker back on per key (press-and-hold-keys), see -[ProfaneView keyDown:]. */
+        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"ApplePressAndHoldEnabled"];
         NSApp.mainMenu = [self makeMainMenu];
     }
 }

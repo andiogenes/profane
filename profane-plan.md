@@ -422,6 +422,13 @@ the renderer tags the frame answering each event and records when it was submitt
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
   minibuffer reads input in this window (below).
+- **Press-and-hold** (fix after M2 item 8). macOS shows its accent picker for a held letter in any view that is an
+  `NSTextInputClient`, so held keys did not repeat. The app now sets `ApplePressAndHoldEnabled` to NO at launch and,
+  for each plain key sent through the input method, sets it for that key: on only if Scheme listed the key in
+  `press-and-hold-keys` (key names as the key description spells them, e.g. `"e"`; a watcher pushes the list to
+  `pf_input_set_press_and_hold`). The default lives in the app's own domain only. Chords never show the picker (they
+  bypass the input method), so listing one has no effect. *Unverified:* that macOS re-reads the default on each key
+  down, which the per-key switch relies on; if it does not, the list takes effect only at the next launch.
 - **Default and ported keymaps** (M2 item 8). Stock Emacs bindings live in the libraries (`(profane simple)` and friends); the
   owner's port of their `init.el` is `scheme/init.ss`, shipped in the bundle and loaded by `pf-startup` (`pf-load-init-files`)
   before the user's own `~/Library/Application Support/profane/init.ss` (`PROFANE_INIT` overrides; an error in either goes
