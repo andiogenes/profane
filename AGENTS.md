@@ -19,7 +19,7 @@ Layers (top to bottom):
 
 ## Current status
 
-M0 to M3 are on `main` (origin `git@github.com:andiogenes/profane.git`). Decisions and measurements
+M0 to M4 are on `main` locally, except what the last commits say; origin is `git@github.com:andiogenes/profane.git` and nothing after M3 has been pushed. Decisions and measurements
 are in `profane-plan.md` §8a–§8k; read the section for an area before changing it. Work proceeds milestone by
 milestone (plan §9). Do not start work from a later milestone unless asked; when a task touches a later
 milestone's area, leave a seam, not an implementation.
@@ -29,10 +29,16 @@ only remaining owner-port gaps are consult's imenu and xref (modes and tree-sitt
 
 **M3** (async and tools) is complete: the async queue and `await`, processes and ptys, `(profane macos)`, ripgrep and
 find, Keychain secrets, dired, the sidebar and buffer menu, vterm and `shell-here`, TLS sockets. Decisions, what was
-measured and what was not verified are in plan §8k, one entry per item plus "On-screen check of M3". The next
-milestone is M4 (soft wrap, fringe git marks, the motion system; the dogfooding milestone). Known M3 gaps, all in §8k:
+measured and what was not verified are in plan §8k, one entry per item plus "On-screen check of M3". Known M3 gaps, all in §8k:
 no mouse in terminals or in dired/sidebar/buffer menu, no FSEvents (listings refresh with `g`), the sidebar lacks
 file operations, and the login-shell PATH is not imported (an app started from the Dock may not find `rg`, `fd`, `git`).
+
+**M4** is built but has not been looked at on screen or dogfooded: soft wrap and `visual-line-mode` (§8l 1), fringe git
+marks via libgit2 (2), the motion system with a clip primitive (3; every animation is off by default, switches
+`animate-cursor`, `animate-scroll`, `animate-windows`, `animate-popups`, and `ui-motion`), Git v1 as a Magit-like
+porcelain on the CLI behind a read-backend registry (4: `C-x g`; plan §8m) and ediff (5; §8n). Everything after M3 is
+local: nothing has been pushed. Seams: libgit2 worker backend, askpass/passphrase prompts, fold/unfold animation,
+three-way ediff, FSEvents refresh. The next milestone is M5 (languages), unless the owner dogfoods M4 first.
 
 **Known gaps:** the full list, with what each waits for, is `profane-plan.md` §8j. Two things every agent must know:
 commands run in engines, so `C-g` interrupts a runaway command (see the Engines entry in §8i), but socket REPL

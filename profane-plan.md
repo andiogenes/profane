@@ -953,7 +953,7 @@ terminal's mouse and focus handling, listening sockets, a process-level coding s
 ## 8l. Editing surface and motion (M4)
 
 M4 items, one branch each (`m4-<topic>`): 1 soft wrap, 2 fringe git marks, 3 motion system, 4 Git v1 (status, stage,
-diff, commit, push/pull), 5 ediff. Items 1 and 2 are done; item 3 is started (its animated cursor is in, the rest is listed under it); 4 and 5 are not.
+diff, commit, push/pull), 5 ediff. Items 1 to 5 are done (item 3's fold/unfold waits for a folding feature; item 4's askpass and item 5's three-way merge are seams).
 
 **1. Soft wrap** (`m4-soft-wrap`).
 - `pf_window` has a wrap option (`PF_WINDOW_WRAP`: truncate, break at the last character that fits, break after
@@ -1119,6 +1119,28 @@ Steps, one commit each, tested against throwaway repos with the real `git`:
   backend's hunks.
 Step 4 (Git v1) is complete except ediff (item 5); credentials/askpass are a seam (§8m 4e).
 Refresh is manual (`g`) and after every git command profane runs; FSEvents (§8k) would make it automatic.
+
+## 8n. ediff (M4 item 5)
+
+`(profane ediff)`: `M-x ediff-buffers`, `ediff-files`, and `e` in the status buffer (work tree against the index for an
+unstaged file, the index against HEAD for a staged one; the index and HEAD versions are read-only temporary
+buffers). The selected window is split: A left, B right, both showing *copies* of the buffers (`*ediff A: …*`) with
+filler lines where one side has fewer lines, so every difference occupies the same rows and the two scroll together
+(a `pre-redisplay-hook` copies start line and row between the windows). Changed rows are tinted, the current
+difference stronger, and the words that changed inside it use `git-refine-lines`. The differences come from
+`git diff --no-index -U0` on two temporary files, so git is the only diff engine (`-w` for ignoring whitespace).
+Keys: `n SPC` / `p DEL` next and previous difference, `a` copy A's lines into B, `b` B's into A (the original buffer is
+edited, with an undo boundary; a read-only target refuses), `#` toggle whitespace, `!` compare again, `q` quit (views
+and temporary buffers are killed, the window layout is restored). Copying and `!` rebuild the views.
+Decisions and limits: the views are copies, so the originals keep their own faces and nothing has to be removed on
+quit, but typing in a view is not possible (edit the original and press `!`). Filler lines are `ediff-filler-width`
+(300) spaces in a tinted face, because the renderer paints backgrounds only under characters; a window wider than
+that shows the filler short. Line numbers are off in the views. A binary file is refused. Replacing the last line of a
+buffer without a trailing newline adds one. Not done: three-way comparison and merge (the plan's "2/3-way": only 2-way
+is here), directory comparison, ediff of regions, `ediff-revision` outside the status buffer, a control panel.
+Verified by `ediff-test.ss` (49 checks): alignment and fillers, faces and refined words, navigation, the windows
+following each other, both copy directions, undo, whitespace, quit, identical buffers, read-only targets, and `e` on
+unstaged and staged files. Not verified on screen.
 
 ## 9. Milestones
 
