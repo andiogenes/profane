@@ -85,6 +85,7 @@ struct pf_text {
     uint64_t versions;
     ustate *saved_state;
     uint64_t saved_version;
+    int undo_off;
 };
 
 static void *xmalloc(size_t size) {
@@ -411,6 +412,10 @@ static void ustate_free(ustate *u) {
  * Runs of typing (inserts continuing the last insert) and of deletions abutting the last one
  * coalesce into a single change. */
 static void undo_record(pf_text *t, change c) {
+    if (t->undo_off) {
+        node_release(c.sub);
+        return;
+    }
     if (!t->group_open) {
         t->ucur = ustate_new(t->ucur);
         t->group_open = 1;
@@ -444,6 +449,20 @@ static void undo_record(pf_text *t, change c) {
         }
     }
     u->ch[u->n++] = c;
+}
+
+void pf_text_set_undo(pf_text *t, int enabled) {
+    if (!enabled && !t->undo_off) {
+        /* The history stops matching the text once edits go unrecorded: drop it, as Emacs
+         * does. The modified flag is kept. */
+        int modified = pf_text_modified(t);
+        ustate_free(t->uroot);
+        t->uroot = t->ucur = ustate_new(NULL);
+        t->saved_state = modified ? NULL : t->ucur;
+        t->saved_version = t->ucur->version;
+    }
+    t->undo_off = !enabled;
+    t->group_open = 0;
 }
 
 /* Installs ROOT (consumed) as the result of change C: moves markers and records undo. */
@@ -496,6 +515,7 @@ pf_text *pf_text_new(const char *bytes, size_t len) {
     t->versions = 0;
     t->saved_state = t->uroot;
     t->saved_version = 0;
+    t->undo_off = 0;
     return t;
 }
 

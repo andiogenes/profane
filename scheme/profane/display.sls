@@ -7,8 +7,9 @@
 ;;; show-paren) are Emacs's built-in faces mapped to roles. Text properties live in the C core
 ;;; and move with edits; the `face` property holds a face (or #f), others hold any value.
 ;;;
-;;; Colors come from themes (profane theme); fonts from the default-font-* variables, the text
-;;; scale and per-face family/height/features.
+;;; Colors come from themes (profane theme); fonts from the default-font-* variables and
+;;; per-face family/height/features. Text scale is per buffer: windows draw a buffer's text at
+;;; its text-scale-factor (profane window pushes it), chrome is not scaled.
 
 (library (profane display)
   (export face-id put-text-property get-text-property remove-text-property color->rgba
@@ -42,10 +43,10 @@
   (defvar default-font-size 14 "Size of the default face's font, in points.")
   (defvar line-spacing 0 "Extra space between lines, in points.")
 
-  ;; Text scale: a factor on every font size (C-x C-= / C-x C-- / C-x C-0, trackpad pinch).
-  ;; Global for now; Emacs scales per buffer, which needs per-window default faces (M2 item 4).
-  (define scale 1.0)
-  (define (text-scale) scale)
+  ;; Text scale: a factor on the size of the current buffer's text (C-x C-= / C-x C-- /
+  ;; C-x C-0, trackpad pinch), as Emacs's text-scale-mode.
+  (defvar text-scale-factor 1.0 "Size of this buffer's text relative to its faces' fonts." '(local))
+  (define (text-scale) (var-ref 'text-scale-factor))
 
   ;; FAMILY may be system-ui (the macOS UI font, SF Pro); FEATURES like "calt=0,liga=0".
   (define (open-font family size bold? italic? features)
@@ -69,7 +70,7 @@
                (eq? (italic? slant) (italic? (face-attribute 'default 'slant)))
                (equal? features (face-attribute 'default 'features)))
           0 ; same font as the default face
-          (open-font family (* height scale (var-ref 'default-font-size)) (bold? weight)
+          (open-font family (* height (var-ref 'default-font-size)) (bold? weight)
                      (italic? slant) features))))
 
   (define (face-family name) (or (face-attribute name 'family) (var-ref 'default-font-family)))
@@ -94,7 +95,7 @@
 
   ;; pf_face_role order (core/display/pf_face.h).
   (define roles '(default cursor line-number line-number-current-line hl-line
-                  show-paren-match show-paren-mismatch))
+                  show-paren-match show-paren-mismatch fringe vertical-border))
 
   ;; ---- built-in faces ----
 
@@ -121,6 +122,16 @@
          (success () "Success.")
          (minibuffer-prompt () "Minibuffer prompts.")
          (variable-pitch ((family . "system-ui")) "Proportional text (docs, notes).")
+         (fringe () "The fringes (their background).")
+         (vertical-border () "The line between side-by-side windows (its foreground).")
+         (mode-line ((family . "system-ui")) "The selected window's mode line.")
+         (mode-line-inactive ((inherit . mode-line)) "Other windows' mode lines.")
+         (mode-line-buffer-id ((family . "system-ui") (weight . bold))
+                              "The buffer name in mode lines.")
+         (mode-line-highlight () "Highlighted mode line text (window labels).")
+         (tab-bar ((family . "system-ui")) "The tab bar.")
+         (tab-bar-tab ((inherit . tab-bar)) "The current tab.")
+         (tab-bar-tab-inactive ((inherit . tab-bar)) "Other tabs.")
          (fixed-pitch () "Monospaced text inside proportional text.")
          (font-lock-comment-face () "Comments.")
          (font-lock-doc-face ((inherit . font-lock-comment-face)) "Documentation.")
@@ -141,16 +152,16 @@
   ;; ---- text scale ----
 
   (define (set-text-scale! s)
-    (set! scale (max 0.5 (min 3.0 s)))
-    (push-all!)
-    (message "Text scale ~a%" (exact (round (* 100 scale)))))
+    (let ([s (max 0.5 (min 3.0 s))])
+      (var-set! 'text-scale-factor s)
+      (message "Text scale ~a%" (exact (round (* 100 s))))))
 
-  (define-command (text-scale-increase) (set-text-scale! (* scale 1.1)))
-  (define-command (text-scale-decrease) (set-text-scale! (/ scale 1.1)))
+  (define-command (text-scale-increase) (set-text-scale! (* (text-scale) 1.1)))
+  (define-command (text-scale-decrease) (set-text-scale! (/ (text-scale) 1.1)))
   (define-command (text-scale-reset) (set-text-scale! 1.0))
 
   ;; Trackpad pinch: MAGNIFICATION is the gesture's relative change.
-  (define (pinch-text-scale magnification) (set-text-scale! (* scale (+ 1 magnification))))
+  (define (pinch-text-scale magnification) (set-text-scale! (* (text-scale) (+ 1 magnification))))
 
   (define text-scale-bindings
     (begin

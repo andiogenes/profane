@@ -41,6 +41,7 @@ int64_t pf_buf_marker_pos(pf_handle buf, uint32_t marker); /* -1 for a stale mar
 int pf_buf_marker_set(pf_handle buf, uint32_t marker, size_t pos); /* -1 for a stale marker */
 
 int pf_buf_undo_boundary(pf_handle buf);
+int pf_buf_set_undo(pf_handle buf, int enabled); /* pf_text_set_undo */
 int64_t pf_buf_undo(pf_handle buf); /* where point belongs, or -1 if nothing to undo */
 int64_t pf_buf_redo(pf_handle buf);
 int pf_buf_modified(pf_handle buf); /* 1, 0, or -2 */

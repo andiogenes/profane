@@ -7,11 +7,13 @@
 
 (import (profane repl) (profane buffer) (profane window) (profane var) (profane hook)
         (profane keymap) (profane face) (profane command) (profane mode) (profane command-loop)
-        (profane simple) (profane display) (profane theme) (profane themes))
+        (profane simple) (profane display) (profane theme) (profane themes) (profane tab-bar)
+        (profane transpose-frame) (profane ace-window))
 
 ;;; Chez invokes a library only when one of its variables is first used; libraries whose body
 ;;; registers commands, modes and bindings must be invoked explicitly.
-(for-each invoke-library '((profane simple) (profane window) (profane display) (profane themes)))
+(for-each invoke-library '((profane simple) (profane window) (profane display) (profane themes)
+                           (profane tab-bar) (profane transpose-frame) (profane ace-window)))
 
 ;;; Defaults until the shell reports the macOS appearance: the light theme, the minimal style.
 (load-theme 'profane-light)
@@ -80,6 +82,9 @@
 (define (pf-appearance-changed which) (appearance-changed! (string->symbol which)))
 (define (pf-accent-changed color) (system-accent-changed! color))
 (define (pf-pinch magnification) (pinch-text-scale (string->number magnification)))
+
+;;; Called by the shell before each redisplay: layout, mode lines, echo area, tab bar.
+(define (pf-redisplay) (redisplay-prepare!))
 
 ;;; Called by the shell once its window exists: show *scratch*.
 (define (pf-startup)

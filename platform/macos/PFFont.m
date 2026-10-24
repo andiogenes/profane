@@ -166,6 +166,20 @@ pf_font_id pf_font_open_ex(const char *family, float size, int bold, int italic,
     return id;
 }
 
+pf_font_id pf_font_scaled(pf_font_id font, float factor) {
+    CTFontRef f = PFFontGet(font);
+    if (!f || !(factor > 0)) {
+        return 0;
+    }
+    CTFontRef scaled = CTFontCreateCopyWithAttributes(f, CTFontGetSize(f) * factor, NULL, NULL);
+    if (!scaled) {
+        return 0;
+    }
+    pf_font_id id = PFFontIdForCTFont(scaled);
+    CFRelease(scaled);
+    return id;
+}
+
 int pf_font_metrics_get(pf_font_id font, pf_font_metrics *out) {
     CTFontRef f = PFFontGet(font);
     if (!f) {

@@ -51,8 +51,11 @@
     (run-guarded
      (lambda ()
        (let ([actual (thunk)])
-         (report! (same? expected actual) name
-                  (format "expected ~s, got ~s" expected actual))))
+         ;; Formatted only on failure: values may be large or cyclic (records).
+         (if (same? expected actual)
+             (report! #t name #f)
+             (report! #f name (parameterize ([print-graph #t])
+                                (format "expected ~s, got ~s" expected actual))))))
      name))
 
   (define-syntax test-assert

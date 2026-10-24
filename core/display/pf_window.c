@@ -44,6 +44,14 @@ struct pf_window {
     pf_prop_run *props_buf;
     size_t props_cap;
     uint64_t shown_faces, shown_props; /* generations drawn by the last frame */
+    int cursor_kind; /* PF_CURSOR_* */
+    const pf_font_source *fonts;
+    float text_scale;
+    uint32_t scaled_from[32], scaled_to[32]; /* font -> its text-scaled copy */
+    size_t nscaled;
+    float fringe_left, fringe_right, divider;
+    pf_strip mode_line;
+    float mode_line_h;
 };
 
 static void *xrealloc(void *p, size_t size) {
@@ -62,6 +70,8 @@ pf_window *pf_window_new(pf_layout_cache *cache, const pf_window_style *style) {
     w->style = *style;
     w->scale = 1;
     w->dirty = 1;
+    w->cursor_kind = PF_CURSOR_BOX;
+    w->text_scale = 1;
     return w;
 }
 
@@ -75,6 +85,7 @@ void pf_window_free(pf_window *w) {
         free(w->fids);
         free(w->runs);
         free(w->props_buf);
+        pf_strip_free(&w->mode_line);
         free(w);
     }
 }
@@ -97,8 +108,81 @@ void pf_window_set_size(pf_window *w, float width, float height, float scale) {
     }
 }
 
+/* The font a face's characters are drawn in: its own or the default, text-scaled. */
+static uint32_t default_font_of(const pf_window *w) {
+    uint32_t f = pf_face_get(pf_face_role_id(PF_ROLE_DEFAULT))->font;
+    return f ? f : w->style.font;
+}
+
+static void update_mode_line_height(pf_window *w) {
+    w->mode_line_h = w->mode_line.face ? pf_strip_height(w->fonts, w->mode_line.face,
+                                                         default_font_of(w), w->mode_line.box)
+                                       : 0;
+}
+
 void pf_window_set_style(pf_window *w, const pf_window_style *style) {
     w->style = *style;
+    update_mode_line_height(w); /* faces may have changed too */
+    w->dirty = 1;
+}
+
+void pf_window_set_fonts(pf_window *w, const pf_font_source *fonts) {
+    w->fonts = fonts;
+    w->nscaled = 0;
+    update_mode_line_height(w);
+    w->dirty = 1;
+}
+
+void pf_window_set_text_scale(pf_window *w, float factor) {
+    if (factor > 0 && factor != w->text_scale) {
+        w->text_scale = factor;
+        w->nscaled = 0;
+        w->dirty = 1;
+    }
+}
+
+static uint32_t scaled_font(pf_window *w, uint32_t font) {
+    if (w->text_scale == 1.0f) {
+        return font;
+    }
+    for (size_t i = 0; i < w->nscaled; i++) {
+        if (w->scaled_from[i] == font) {
+            return w->scaled_to[i];
+        }
+    }
+    if (w->nscaled == sizeof w->scaled_from / sizeof *w->scaled_from) {
+        w->nscaled = 0;
+    }
+    uint32_t to = pf_font_source_scaled(w->fonts, font, w->text_scale);
+    w->scaled_from[w->nscaled] = font;
+    w->scaled_to[w->nscaled++] = to;
+    return to;
+}
+
+void pf_window_set_edges(pf_window *w, float fringe_left, float fringe_right, float divider) {
+    if (fringe_left != w->fringe_left || fringe_right != w->fringe_right ||
+        divider != w->divider) {
+        w->fringe_left = fringe_left;
+        w->fringe_right = fringe_right;
+        w->divider = divider;
+        w->dirty = 1;
+    }
+}
+
+void pf_window_set_mode_line(pf_window *w, const uint32_t *cps, size_t n,
+                             const pf_strip_run *runs, size_t nruns, uint32_t face, int box) {
+    if (pf_strip_set(&w->mode_line, cps, n, runs, nruns, face, box)) {
+        update_mode_line_height(w);
+        w->dirty = 1;
+    }
+}
+
+float pf_window_mode_line_height(const pf_window *w) {
+    return w->mode_line_h;
+}
+
+void pf_window_set_top_line(pf_window *w, size_t line) {
+    w->top = line;
     w->dirty = 1;
 }
 
@@ -121,6 +205,11 @@ int pf_window_cursor_rect(const pf_window *w, float rect[4]) {
 }
 
 int pf_window_set_option(pf_window *w, pf_window_option option, int on) {
+    if (option == PF_WINDOW_CURSOR) {
+        w->cursor_kind = on;
+        w->dirty = 1;
+        return 0;
+    }
     int *slot = option == PF_WINDOW_LINE_NUMBERS ? &w->line_numbers
                 : option == PF_WINDOW_HL_LINE    ? &w->hl_line
                 : option == PF_WINDOW_SHOW_PAREN ? &w->show_paren
@@ -137,6 +226,7 @@ int pf_window_option_value(const pf_window *w, pf_window_option option) {
     return option == PF_WINDOW_LINE_NUMBERS ? w->line_numbers
            : option == PF_WINDOW_HL_LINE    ? w->hl_line
            : option == PF_WINDOW_SHOW_PAREN ? w->show_paren
+           : option == PF_WINDOW_CURSOR     ? w->cursor_kind
                                             : -1;
 }
 
@@ -150,7 +240,7 @@ size_t pf_window_top_line(const pf_window *w) {
 
 size_t pf_window_body_lines(const pf_window *w) {
     float lh = w->style.line_height;
-    float usable = w->height - w->style.pad_top;
+    float usable = w->height - w->mode_line_h - w->style.pad_top;
     size_t n = lh > 0 && usable > 0 ? (size_t)floorf(usable / lh) : 0;
     return n ? n : 1;
 }
@@ -306,10 +396,11 @@ static void emit_glyphs(pf_display *d, const pf_line_layout *lay, float x0, floa
         if (sg->cluster < from_char || sg->cluster >= to_char) {
             continue;
         }
-        float x = x0 + sg->x;
-        if (x > right) {
-            continue; /* truncated at the window edge */
+        size_t k = sg->cluster < lay->nchars ? sg->cluster : lay->nchars - 1;
+        if (lay->nchars && x0 + lay->caret_x[k + 1] > right + 0.5f) {
+            continue; /* would cross the right edge: truncated, as in Emacs */
         }
+        float x = x0 + sg->x;
         uint32_t c = fids && sg->cluster < lay->nchars ? face_fg(fids[sg->cluster], color) : color;
         pf_display_glyph(d, sg->font, sg->glyph, x, baseline, c);
     }
@@ -317,8 +408,8 @@ static void emit_glyphs(pf_display *d, const pf_line_layout *lay, float x0, floa
 
 /* Background and underline rects for runs of characters whose face sets them. */
 static void emit_face_decorations(pf_display *d, const pf_line_layout *lay, const uint32_t *fids,
-                                  float x0, float top, float baseline, const pf_window_style *st,
-                                  float scale, uint32_t default_fg) {
+                                  float x0, float right, float top, float baseline,
+                                  const pf_window_style *st, float scale, uint32_t default_fg) {
     size_t n = lay->nchars;
     uint32_t def = pf_face_role_id(PF_ROLE_DEFAULT);
     for (size_t i = 0; i < n;) {
@@ -331,7 +422,7 @@ static void emit_face_decorations(pf_display *d, const pf_line_layout *lay, cons
             continue;
         }
         const pf_face *f = pf_face_get(fids[i]);
-        float x = x0 + lay->caret_x[i], wdt = lay->caret_x[j] - lay->caret_x[i];
+        float x = x0 + lay->caret_x[i], wdt = fminf(x0 + lay->caret_x[j], right) - x;
         if (f->flags & PF_FACE_HAS_BG) {
             pf_display_rect(d, x, top, wdt, st->line_height, f->bg);
         }
@@ -377,7 +468,7 @@ static size_t font_runs(pf_window *w, size_t n, uint32_t default_font) {
     size_t nruns = 0;
     for (size_t i = 0; i < n; i++) {
         uint32_t f = pf_face_get(w->fids[i])->font;
-        f = f ? f : default_font;
+        f = f ? scaled_font(w, f) : default_font;
         if (nruns && w->runs[nruns - 1].font == f) {
             w->runs[nruns - 1].len++;
         } else {
@@ -387,45 +478,19 @@ static size_t font_runs(pf_window *w, size_t n, uint32_t default_font) {
     return nruns;
 }
 
-const pf_display *pf_window_redisplay(pf_window *w) {
-    pf_text *text = pf_handle_get(w->buf, PF_HANDLE_TEXT);
-    const pf_text_snapshot *s = text ? pf_text_current(text) : NULL;
-    size_t point = 0;
-    if (text) {
-        point = pf_marker_pos(text, w->point_marker);
-        if (point == SIZE_MAX) {
-            point = 0;
-        }
-        keep_visible(w, s, point);
-    }
-    uint64_t faces = pf_face_generation();
-    uint64_t props = text ? pf_props_generation(pf_text_props(text)) : 0;
-    if (!w->dirty && s == w->shown && point == w->shown_point && w->top == w->shown_top &&
-        faces == w->shown_faces && props == w->shown_props) {
-        return NULL;
-    }
-    w->dirty = 0;
-    pf_text_snapshot_release(w->shown);
-    w->shown = s ? pf_text_snapshot_retain(s) : NULL;
-    w->shown_point = point;
-    w->shown_top = w->top;
-    w->shown_faces = faces;
-    w->shown_props = props;
-
+/* The buffer's visible lines: faces, hl-line, brackets, line numbers, text, cursor. */
+static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_snapshot *s,
+                      size_t point, uint32_t bg, uint32_t fg) {
     const pf_window_style *st = &w->style;
-    uint32_t bg = role_color(PF_ROLE_DEFAULT, PF_FACE_HAS_BG, 0xFFFFFFFF);
-    uint32_t fg = role_color(PF_ROLE_DEFAULT, PF_FACE_HAS_FG, 0x000000FF);
-    pf_display *d = pf_display_new(w->width, w->height, w->scale, bg);
-    w->cursor_valid = 0;
-    if (!s) {
-        return pf_display_finish(d);
-    }
-    uint32_t default_font = pf_face_get(pf_face_role_id(PF_ROLE_DEFAULT))->font;
-    default_font = default_font ? default_font : st->font;
-    pf_layout_begin_frame(w->cache);
+    uint32_t default_font = scaled_font(w, default_font_of(w));
     size_t lines = pf_text_lines(s), chars = pf_text_chars(s);
-    size_t visible = st->line_height > 0 ? (size_t)ceilf(w->height / st->line_height) + 1 : 1;
-    float right = w->width;
+    /* A partly visible last row is drawn only where the mode line, drawn later, covers its
+     * overflow. */
+    float body_h = w->height - w->mode_line_h - st->pad_top;
+    size_t visible = !w->mode_line.face           ? pf_window_body_lines(w)
+                     : st->line_height > 0 && body_h > 0 ? (size_t)ceilf(body_h / st->line_height)
+                                                       : 0;
+    float right = w->width - w->divider - w->fringe_right;
     size_t point_line = pf_text_line_of(s, point);
     paren_match paren = w->show_paren ? find_paren(w, s, point) : (paren_match){0};
     /* Gutter sized for the buffer's last line number, one cell of padding on each side. */
@@ -454,11 +519,11 @@ const pf_display *pf_window_redisplay(pf_window *w) {
         const pf_line_layout *lay = pf_layout_line_runs(w->cache, w->runs, nruns, w->cps, n);
         float top = st->pad_top + (float)row * st->line_height;
         float baseline = top + st->ascent;
-        float x0 = st->pad_left + gutter;
+        float x0 = st->pad_left + w->fringe_left + gutter;
 
         /* Backgrounds first: faces, the hl-line band (an overlay in Emacs, so above them), then
          * bracket highlights. */
-        emit_face_decorations(d, lay, w->fids, x0, top, baseline, st, w->scale, fg);
+        emit_face_decorations(d, lay, w->fids, x0, right, top, baseline, st, w->scale, fg);
         if (w->hl_line && line == point_line) {
             pf_display_rect(d, x0, top, right - x0, st->line_height,
                             role_color(PF_ROLE_HL_LINE, PF_FACE_HAS_BG, 0));
@@ -489,7 +554,7 @@ const pf_display *pf_window_redisplay(pf_window *w) {
                 ncps[i] = (uint32_t)num[i];
             }
             const pf_line_layout *nl = pf_layout_line(w->cache, default_font, ncps, (size_t)len);
-            float nx = st->pad_left + gutter - st->cell_width - nl->width; /* right-aligned */
+            float nx = x0 - st->cell_width - nl->width; /* right-aligned */
             pf_face_role role = line == point_line ? PF_ROLE_LINE_NUMBER_CURRENT
                                                    : PF_ROLE_LINE_NUMBER;
             emit_glyphs(d, nl, nx, baseline, right, role_color(role, PF_FACE_HAS_FG, fg), NULL, 0,
@@ -510,17 +575,71 @@ const pf_display *pf_window_redisplay(pf_window *w) {
             if (cw <= 0) {
                 cw = st->cell_width;
             }
-            pf_display_rect(d, x0 + cx, top, cw, st->line_height,
-                            role_color(PF_ROLE_CURSOR, PF_FACE_HAS_BG, fg));
+            uint32_t cc = role_color(PF_ROLE_CURSOR, PF_FACE_HAS_BG, fg);
+            float lh = st->line_height, px = 1.0f / w->scale;
+            if (w->cursor_kind == PF_CURSOR_BOX) {
+                pf_display_rect(d, x0 + cx, top, cw, lh, cc);
+                if (k < lay->nchars) {
+                    emit_glyphs(d, lay, x0, baseline, right, bg, NULL, k, k + 1);
+                }
+            } else if (w->cursor_kind == PF_CURSOR_HOLLOW) {
+                pf_display_rect(d, x0 + cx, top, cw, px, cc);
+                pf_display_rect(d, x0 + cx, top + lh - px, cw, px, cc);
+                pf_display_rect(d, x0 + cx, top, px, lh, cc);
+                pf_display_rect(d, x0 + cx + cw - px, top, px, lh, cc);
+            }
             w->cursor[0] = x0 + cx;
             w->cursor[1] = top;
             w->cursor[2] = cw;
-            w->cursor[3] = st->line_height;
+            w->cursor[3] = lh;
             w->cursor_valid = 1;
-            if (k < lay->nchars) {
-                emit_glyphs(d, lay, x0, baseline, right, bg, NULL, k, k + 1);
-            }
         }
     }
+}
+
+const pf_display *pf_window_redisplay(pf_window *w) {
+    pf_text *text = pf_handle_get(w->buf, PF_HANDLE_TEXT);
+    const pf_text_snapshot *s = text ? pf_text_current(text) : NULL;
+    size_t point = 0;
+    if (text) {
+        point = pf_marker_pos(text, w->point_marker);
+        if (point == SIZE_MAX) {
+            point = 0;
+        }
+        keep_visible(w, s, point);
+    }
+    uint64_t faces = pf_face_generation();
+    uint64_t props = text ? pf_props_generation(pf_text_props(text)) : 0;
+    if (!w->dirty && s == w->shown && point == w->shown_point && w->top == w->shown_top &&
+        faces == w->shown_faces && props == w->shown_props) {
+        return NULL;
+    }
+    w->dirty = 0;
+    pf_text_snapshot_release(w->shown);
+    w->shown = s ? pf_text_snapshot_retain(s) : NULL;
+    w->shown_point = point;
+    w->shown_top = w->top;
+    w->shown_faces = faces;
+    w->shown_props = props;
+
+    uint32_t bg = role_color(PF_ROLE_DEFAULT, PF_FACE_HAS_BG, 0xFFFFFFFF);
+    uint32_t fg = role_color(PF_ROLE_DEFAULT, PF_FACE_HAS_FG, 0x000000FF);
+    pf_display *d = pf_display_new(w->width, w->height, w->scale, bg);
+    w->cursor_valid = 0;
+    pf_layout_begin_frame(w->cache);
+    if (s) {
+        draw_text(w, d, text, s, point, bg, fg);
+    }
+
+    /* Chrome over the text: fringes, the divider, the mode line. */
+    float body_h = w->height - w->mode_line_h;
+    uint32_t fringe = role_color(PF_ROLE_FRINGE, PF_FACE_HAS_BG, 0);
+    pf_display_rect(d, 0, 0, w->fringe_left, body_h, fringe);
+    pf_display_rect(d, w->width - w->divider - w->fringe_right, 0, w->fringe_right, body_h,
+                    fringe);
+    pf_display_rect(d, w->width - w->divider, 0, w->divider, w->height,
+                    role_color(PF_ROLE_VERTICAL_BORDER, PF_FACE_HAS_FG, fg));
+    pf_strip_render(&w->mode_line, d, w->cache, w->fonts, default_font_of(w), 0, body_h,
+                    w->width - w->divider, w->mode_line_h, w->scale);
     return pf_display_finish(d);
 }

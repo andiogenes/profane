@@ -17,7 +17,9 @@
           line-beginning-position line-end-position line-number-at-pos forward-line count-lines
           marker? marker-buffer marker-position copy-marker set-marker! delete-marker!
           mark set-mark!
-          undo-boundary undo redo buffer-modified? set-buffer-unmodified!
+          erase-buffer
+          undo-boundary undo redo buffer-disable-undo buffer-enable-undo
+          buffer-modified? set-buffer-unmodified!
           find-file-noselect save-buffer
           ;; internal, for other (profane ...) libraries
           %buffer-handle %buffer-point-marker %buffer-locals)
@@ -177,6 +179,7 @@
                   (string-set! out (- i lo) (integer->char (%buf-char-at handle i))))))))))
 
   (define (buffer-string) (buffer-substring 0 (point-max)))
+  (define (erase-buffer) (delete-region 0 (point-max)))
 
   (define char-after
     (case-lambda
@@ -300,6 +303,11 @@
       (when (< pos 0) (error who (if (eq? who 'undo) "no further undo information"
                                      "no further redo information")))
       (goto-char pos)))
+
+  ;; Emacs buffer-disable-undo: stops recording and drops the history (internal buffers such
+  ;; as the echo area, whose text is replaced over and over).
+  (define (buffer-disable-undo) (%buf-set-undo (h 'buffer-disable-undo) #f) (void))
+  (define (buffer-enable-undo) (%buf-set-undo (h 'buffer-enable-undo) #t) (void))
 
   (define (undo) (undo-or-redo %buf-undo 'undo))
   (define (redo) (undo-or-redo %buf-redo 'redo))

@@ -12,8 +12,9 @@ NS_ASSUME_NONNULL_BEGIN
  * the overlay is transparent and never takes mouse events. */
 @interface ProfaneView : NSView
 
-/* The view's text window, as a pf_handle for Scheme; registered as the selected window. */
-@property (nonatomic, readonly) uint32_t windowHandle;
+/* The view's frame (its windows), as a pf_handle for Scheme; registered as the selected frame.
+ * Scheme creates and lays out the windows. */
+@property (nonatomic, readonly) uint32_t frameHandle;
 /* The renderer for this view's layers. */
 @property (nonatomic, readonly) pf_renderer *renderer;
 /* Subviews placed here sit between the base and overlay layers. */
@@ -21,8 +22,9 @@ NS_ASSUME_NONNULL_BEGIN
 /* Frames presented on screen so far; lets tests tell "drawn" from "never displayed". */
 @property (nonatomic, readonly) NSUInteger presentedFrames;
 
-/* Renders the window again if its buffer, point, size or style changed. Called after input
- * and from the idle observer (so edits from the REPL show up too). */
+/* Lets Scheme bring the chrome up to date (pf-redisplay: mode lines, echo area, tab bar, layout),
+ * then renders the windows that changed. Called after input and from the idle observer (so
+ * edits from the REPL show up too). */
 - (void)redisplay;
 
 /* -initWithFrame: returns nil when no Metal device is available. */

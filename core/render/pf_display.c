@@ -69,6 +69,15 @@ void pf_display_glyph(pf_display *d, uint32_t font, uint32_t glyph, float x, flo
     it->u.glyph.glyph = glyph;
 }
 
+void pf_display_append(pf_display *d, const pf_display *src, float dx, float dy) {
+    for (size_t i = 0; i < src->count; i++) {
+        pf_display_item *it = push(d);
+        *it = src->items[i];
+        it->x += dx;
+        it->y += dy;
+    }
+}
+
 const pf_display *pf_display_finish(pf_display *d) {
     d->frozen = 1;
     return d;

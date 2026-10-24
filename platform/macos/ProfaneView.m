@@ -16,9 +16,10 @@
 #include "pf_display.h"
 #include "pf_display_ffi.h"
 #include "pf_face.h"
-#include "pf_scheme.h"
+#include "pf_frame.h"
+#include "pf_input.h"
 #include "pf_layout.h"
-#include "pf_window.h"
+#include "pf_scheme.h"
 #include "pf_window_ffi.h"
 
 static const float kFontSize = 14.0f;
@@ -122,8 +123,19 @@ void pf_app_latency_reset(void) {
     }
 }
 
+static int font_metrics(void *ctx, uint32_t font, pf_font_metrics *out) {
+    (void)ctx;
+    return pf_font_metrics_get(font, out);
+}
+
+static uint32_t font_scaled(void *ctx, uint32_t font, float factor) {
+    (void)ctx;
+    return pf_font_scaled(font, factor);
+}
+
+static const pf_font_source font_source = {NULL, font_metrics, font_scaled};
+
 @implementation ProfaneView {
-    uint64_t _styleGeneration; /* face generation the window style was derived from */
     double _inputTime; /* timestamp of the event being handled, 0 if none */
     NSString *_marked; /* input-method composition, nil when none */
     NSRange _markedSelection;
@@ -133,7 +145,7 @@ void pf_app_latency_reset(void) {
     PFMetalRenderer *_metal;
     pf_font_id _font;
     pf_layout_cache *_cache;
-    pf_window *_window;
+    pf_frame *_frame;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame {
@@ -163,10 +175,9 @@ void pf_app_latency_reset(void) {
     main_renderer = _metal.renderer;
     _font = pf_font_open("JetBrains Mono", kFontSize);
     _cache = pf_layout_cache_new(PFCoreTextShaper(), kLayoutCacheLines, 8);
-    pf_window_style style = [self windowStyle];
-    _window = pf_window_new(_cache, &style);
-    _windowHandle = pf_win_register(_window);
-    pf_win_set_selected(_windowHandle);
+    _frame = pf_frame_new(_cache, &font_source, _font);
+    _frameHandle = pf_frm_register(_frame);
+    pf_frm_set_selected(_frameHandle);
     [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(systemColorsChanged:)
                                                name:NSSystemColorsDidChangeNotification
@@ -177,8 +188,8 @@ void pf_app_latency_reset(void) {
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self];
     [_metal stop];
-    pf_win_unregister(_windowHandle);
-    pf_window_free(_window);
+    pf_frm_unregister(_frameHandle);
+    pf_frame_free(_frame);
     pf_layout_cache_free(_cache);
 }
 
@@ -252,27 +263,6 @@ void pf_app_latency_reset(void) {
     _overlay.layer.contentsScale = scale;
 }
 
-/* Geometry from the default face's font (set by Scheme; the built-in font until then) and
- * line-spacing; colors come from faces (profane display). */
-- (pf_window_style)windowStyle {
-    uint32_t font = pf_face_get(pf_face_role_id(PF_ROLE_DEFAULT))->font;
-    if (!font) {
-        font = _font;
-    }
-    pf_font_metrics m = {0};
-    pf_font_metrics_get(font, &m);
-    /* Whole-point line boxes keep rows pixel-aligned at every scale. */
-    return (pf_window_style){
-        .font = font,
-        .ascent = roundf(m.ascent),
-        .descent = m.descent,
-        .line_height = ceilf(m.ascent + m.descent + m.leading + pf_display_line_spacing()),
-        .cell_width = m.advance,
-        .pad_left = 4,
-        .pad_top = 2,
-    };
-}
-
 /* The macOS accent color, for themes that use system-accent. */
 - (void)reportAccent {
     NSColor *c = [NSColor.controlAccentColor colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
@@ -312,7 +302,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
                              ((c >> 8) & 0xFF) / 255.0, (c & 0xFF) / 255.0);
 }
 
-/* Style or geometry changed: update the window and the empty overlay, then redraw. */
+/* Geometry changed: resize the frame and the empty overlay, then redraw. */
 - (void)rebuild {
     if (!self.window || !_metal) {
         return;
@@ -323,9 +313,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
     _base.layer.backgroundColor = background; /* shows under a resize until the next frame */
     CGColorRelease(background);
 
-    pf_window_style style = [self windowStyle];
-    pf_window_set_style(_window, &style);
-    pf_window_set_size(_window, (float)size.width, (float)size.height, scale);
+    pf_frame_set_size(_frame, (float)size.width, (float)size.height, scale);
     [self redisplay];
 
     const pf_display *overlay =
@@ -338,16 +326,13 @@ static CGColorRef create_cgcolor(uint32_t c) {
     if (!self.window || !_metal) {
         return;
     }
-    if (pf_face_generation() != _styleGeneration) {
-        /* Faces changed (theme, font, text scale): the default font and metrics may have too. */
-        _styleGeneration = pf_face_generation();
-        pf_window_style style = [self windowStyle];
-        pf_window_set_style(_window, &style);
-        CGColorRef background = create_cgcolor(pf_face_default_background());
+    pf_scheme_call("pf-redisplay", NULL, 0, NULL);
+    const pf_display *d = pf_frame_redisplay(_frame);
+    if (d) { /* shows under a resize until the next frame */
+        CGColorRef background = create_cgcolor(pf_display_clear(d));
         _base.layer.backgroundColor = background;
         CGColorRelease(background);
     }
-    const pf_display *d = pf_window_redisplay(_window);
     if (d && _inputTime > 0) {
         pf_renderer_mark_input(_metal.renderer, _inputTime);
     }
@@ -367,7 +352,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
 - (void)keyDown:(NSEvent *)event {
     _inputTime = event.timestamp;
     BOOL direct = NO;
-    NSString *key = PFKeyDescription(event, &direct);
+    NSString *key = PFKeyDescription(event, pf_input_prefix_pending() && !_marked, &direct);
     if (direct && !_marked) {
         send_string("pf-key", key);
         [self redisplay];
@@ -385,7 +370,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
     (void)selector;
     if (_interpreting) {
         BOOL direct;
-        send_string("pf-key", PFKeyDescription(_interpreting, &direct));
+        send_string("pf-key", PFKeyDescription(_interpreting, NO, &direct));
     }
 }
 
@@ -446,7 +431,10 @@ static CGColorRef create_cgcolor(uint32_t c) {
     if (_markedSelection.location >= len) {
         caret = n;
     }
-    pf_window_set_preedit(_window, cps, n, caret);
+    pf_window *w = pf_frame_selected(_frame);
+    if (w) {
+        pf_window_set_preedit(w, cps, n, caret);
+    }
     free(cps);
 }
 
@@ -484,7 +472,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
         *actual = range;
     }
     float r[4];
-    NSRect rect = pf_window_cursor_rect(_window, r) == 0 ? NSMakeRect(r[0], r[1], r[2], r[3])
+    NSRect rect = pf_frame_cursor_rect(_frame, r) == 0 ? NSMakeRect(r[0], r[1], r[2], r[3])
                                                          : NSMakeRect(0, 0, 0, 0);
     return [self.window convertRectToScreen:[self convertRect:rect toView:nil]];
 }

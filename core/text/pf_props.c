@@ -67,6 +67,9 @@ static void insert_at(run_list *l, size_t i, pf_prop_run run) {
 }
 
 static void remove_range(run_list *l, size_t i, size_t count) {
+    if (count == 0) {
+        return; /* the list may still be empty (NULL): no pointer arithmetic on it */
+    }
     memmove(l->r + i, l->r + i + count, (l->n - i - count) * sizeof *l->r);
     l->n -= count;
 }

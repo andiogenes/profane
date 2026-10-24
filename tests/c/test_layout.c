@@ -287,8 +287,10 @@ static void test_editing_modes(void) {
     }
     PF_CHECK(NEAR(it[i].x, 5 + 40 - 10 - 10)); /* "1" right-aligned before the last cell */
     PF_CHECK(it[i].color == 0x111111FF);
-    /* 11 rows fit: dimmed numbers are lines 2-9 (8 digits) and 10-11 (4 digits). */
-    PF_CHECK(count_color(d, PF_DISPLAY_GLYPH, 0x888888FF) == 8 + 4);
+    /* 10 rows fit (with no mode line to cover a partial row, only whole rows are drawn: a row
+     * below the window would land in the window under it). Dimmed numbers are lines 2-9 (8
+     * digits) and 10 (2 digits). */
+    PF_CHECK(count_color(d, PF_DISPLAY_GLYPH, 0x888888FF) == 8 + 2);
     for (i = 0; i < pf_display_count(d); i++) {
         if (it[i].kind == PF_DISPLAY_GLYPH && it[i].u.glyph.glyph == '(' && it[i].color == 0x000000FF) {
             PF_CHECK(NEAR(it[i].x, 45)); /* text starts after the gutter */

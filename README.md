@@ -2,7 +2,7 @@
 
 A GPU-accelerated, Emacs-like editor for macOS, scripted in Chez Scheme, with Magit-like Git porcelain.
 
-Status: M0 (skeleton) in progress. See [`profane-plan.md`](profane-plan.md) for decisions, architecture and milestones.
+Status: M0 and M1 done; M2 (core workflow) in progress. See [`profane-plan.md`](profane-plan.md) for decisions, architecture and milestones.
 
 ## Layout
 

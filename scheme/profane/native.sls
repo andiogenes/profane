@@ -9,9 +9,14 @@
   (export %buf-new %buf-free %buf-chars %buf-bytes %buf-lines %buf-insert %buf-delete
           %buf-range-bytes %buf-copy %buf-char-at %buf-line-start %buf-line-of
           %buf-marker-new %buf-marker-free %buf-marker-pos %buf-marker-set
-          %buf-undo-boundary %buf-undo %buf-redo %buf-modified %buf-mark-saved
-          %win-selected %win-set-buffer %win-top-line %win-body-lines
-          %win-set-option %win-option
+          %buf-undo-boundary %buf-set-undo %buf-undo %buf-redo %buf-modified %buf-mark-saved
+          %frm-selected %frm-set-selected %frm-new-headless %frm-free-headless %frm-width
+          %frm-height %frm-line-height %frm-cell-width %frm-strip-height %frm-set-tab-bar
+          %frm-redisplay %frm-window-new %frm-window-delete %frm-place-window
+          %frm-select-window %frm-set-text-scale
+          %win-selected %win-set-buffer %win-top-line %win-set-top-line %win-body-lines
+          %win-set-option %win-option %win-set-edges %win-set-mode-line %win-mode-line-height
+          %input-set-prefix-pending
           %face-define %face-role-set %buf-put-prop %buf-get-prop %display-set-line-spacing)
   (import (chezscheme))
 
@@ -43,16 +48,41 @@
   (define-native %buf-marker-pos "pf_buf_marker_pos" (unsigned-32 unsigned-32) integer-64)
   (define-native %buf-marker-set "pf_buf_marker_set" (unsigned-32 unsigned-32 size_t) int)
   (define-native %buf-undo-boundary "pf_buf_undo_boundary" (unsigned-32) int)
+  (define-native %buf-set-undo "pf_buf_set_undo" (unsigned-32 boolean) int)
   (define-native %buf-undo "pf_buf_undo" (unsigned-32) integer-64)
   (define-native %buf-redo "pf_buf_redo" (unsigned-32) integer-64)
   (define-native %buf-modified "pf_buf_modified" (unsigned-32) int)
   (define-native %buf-mark-saved "pf_buf_mark_saved" (unsigned-32) int)
+  (define-native %frm-selected "pf_frm_selected" () unsigned-32)
+  (define-native %frm-set-selected "pf_frm_set_selected" (unsigned-32) void)
+  (define-native %frm-new-headless "pf_frm_new_headless" (float float) unsigned-32)
+  (define-native %frm-free-headless "pf_frm_free_headless" (unsigned-32) int)
+  (define-native %frm-width "pf_frm_width" (unsigned-32) double)
+  (define-native %frm-height "pf_frm_height" (unsigned-32) double)
+  (define-native %frm-line-height "pf_frm_line_height" (unsigned-32 float) double)
+  (define-native %frm-cell-width "pf_frm_cell_width" (unsigned-32 float) double)
+  (define-native %frm-strip-height "pf_frm_strip_height" (unsigned-32 unsigned-32 boolean) double)
+  (define-native %frm-set-tab-bar "pf_frm_set_tab_bar"
+    (unsigned-32 u8* size_t u8* size_t unsigned-32 boolean) int)
+  (define-native %frm-redisplay "pf_frm_redisplay" (unsigned-32) integer-64)
+  (define-native %frm-window-new "pf_frm_window_new" (unsigned-32) unsigned-32)
+  (define-native %frm-window-delete "pf_frm_window_delete" (unsigned-32 unsigned-32) int)
+  (define-native %frm-place-window "pf_frm_place_window"
+    (unsigned-32 unsigned-32 float float float float boolean) int)
+  (define-native %frm-select-window "pf_frm_select_window" (unsigned-32 unsigned-32) int)
+  (define-native %frm-set-text-scale "pf_frm_set_text_scale" (unsigned-32 unsigned-32 float) int)
   (define-native %win-selected "pf_win_selected" () unsigned-32)
   (define-native %win-set-buffer "pf_win_set_buffer" (unsigned-32 unsigned-32 unsigned-32) int)
   (define-native %win-top-line "pf_win_top_line" (unsigned-32) integer-64)
+  (define-native %win-set-top-line "pf_win_set_top_line" (unsigned-32 size_t) int)
   (define-native %win-body-lines "pf_win_body_lines" (unsigned-32) integer-64)
-  (define-native %win-set-option "pf_win_set_option" (unsigned-32 int boolean) int)
+  (define-native %win-set-option "pf_win_set_option" (unsigned-32 int int) int)
   (define-native %win-option "pf_win_option" (unsigned-32 int) int)
+  (define-native %win-set-edges "pf_win_set_edges" (unsigned-32 float float float) int)
+  (define-native %win-set-mode-line "pf_win_set_mode_line"
+    (unsigned-32 u8* size_t u8* size_t unsigned-32 boolean) int)
+  (define-native %win-mode-line-height "pf_win_mode_line_height" (unsigned-32) double)
+  (define-native %input-set-prefix-pending "pf_input_set_prefix_pending" (boolean) void)
   (define-native %face-define "pf_face_define"
     (unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32) void)
   (define-native %face-role-set "pf_face_role_set" (int unsigned-32) void)

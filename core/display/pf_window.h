@@ -7,6 +7,7 @@
 #include "pf_display.h"
 #include "pf_handles.h"
 #include "pf_layout.h"
+#include "pf_strip.h"
 
 /* A window shows one buffer: it scrolls to keep point visible and renders the visible lines
  * into a display list through the layout cache. Lines are truncated at the window edge (no
@@ -25,12 +26,16 @@ typedef struct pf_window_style {
 /* The text property whose value is a face id (pf_face.h). */
 enum { PF_PROP_FACE = 1 };
 
-/* Per-window display features (Emacs's display-line-numbers, hl-line, show-paren). */
+/* Per-window display features (Emacs's display-line-numbers, hl-line, show-paren) and the
+ * cursor: PF_CURSOR_* values (a box by default; hollow in non-selected windows, as in Emacs). */
 typedef enum pf_window_option {
     PF_WINDOW_LINE_NUMBERS = 1,
     PF_WINDOW_HL_LINE = 2,
     PF_WINDOW_SHOW_PAREN = 3,
+    PF_WINDOW_CURSOR = 4,
 } pf_window_option;
+
+enum { PF_CURSOR_NONE = 0, PF_CURSOR_BOX = 1, PF_CURSOR_HOLLOW = 2 };
 
 typedef struct pf_window pf_window;
 
@@ -55,15 +60,36 @@ void pf_window_set_preedit(pf_window *w, const uint32_t *cps, size_t n, size_t c
  * -1 if point was not visible. Used to place input-method candidate windows. */
 int pf_window_cursor_rect(const pf_window *w, float rect[4]);
 
-/* Turns OPTION on or off; returns -1 for an unknown option. All start off. */
+/* Sets OPTION (on/off, or a PF_CURSOR_* value); returns -1 for an unknown option. Display
+ * features start off, the cursor as a box. */
 int pf_window_set_option(pf_window *w, pf_window_option option, int on);
 int pf_window_option_value(const pf_window *w, pf_window_option option);
+
+/* Fonts for metrics and text scaling (not owned; NULL: headless fallbacks). */
+void pf_window_set_fonts(pf_window *w, const pf_font_source *fonts);
+
+/* Text scale: buffer text is drawn in its faces' fonts at FACTOR times their size. The style
+ * (line height, ...) must be that of the scaled default font; the mode line is not scaled. */
+void pf_window_set_text_scale(pf_window *w, float factor);
+
+/* Fringes: blank columns at the left and right edges in the fringe face, outside the text
+ * area. DIVIDER: a vertical line at the right edge, for a window with a neighbor on its right
+ * (Emacs's vertical border). Points. */
+void pf_window_set_edges(pf_window *w, float fringe_left, float fringe_right, float divider);
+
+/* The mode line: one line at the bottom of the window (see pf_strip). FACE 0 removes it. */
+void pf_window_set_mode_line(pf_window *w, const uint32_t *cps, size_t n,
+                             const pf_strip_run *runs, size_t nruns, uint32_t face, int box);
+float pf_window_mode_line_height(const pf_window *w);
+
+/* Scrolls so LINE is the first one shown (redisplay still keeps point visible). */
+void pf_window_set_top_line(pf_window *w, size_t line);
 
 /* Forces the next redisplay to render. */
 void pf_window_invalidate(pf_window *w);
 
 size_t pf_window_top_line(const pf_window *w);
-/* Lines that fit completely. */
+/* Lines that fit completely above the mode line. */
 size_t pf_window_body_lines(const pf_window *w);
 
 #endif

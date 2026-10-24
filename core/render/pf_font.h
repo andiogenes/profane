@@ -28,6 +28,9 @@ pf_font_id pf_font_open_styled(const char *family, float size, int bold, int ita
 pf_font_id pf_font_open_ex(const char *family, float size, int bold, int italic,
                            const char *features);
 
+/* FONT at FACTOR times its size, same face and features (text scale). Returns 0 on failure. */
+pf_font_id pf_font_scaled(pf_font_id font, float factor);
+
 /* Returns 0, or -1 for an unknown id. */
 int pf_font_metrics_get(pf_font_id font, pf_font_metrics *out);
 

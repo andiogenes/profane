@@ -316,7 +316,8 @@ Layers: libgit2 reader (workers, ftype structs) → git CLI runner (`GIT_EDITOR`
   point visible, skips rendering when text snapshot, point, size and style are unchanged, and draws Emacs's filled
   box cursor. Lines are truncated (no soft wrap yet); at most 4096 characters per line are shaped.
 - Redisplay runs after Scheme work from the main run loop's idle observer, so REPL edits show up immediately.
-  Scheme picks what a window shows via `(profane window)`; the shell owns the window (one per frame in M1).
+  Scheme picks what a window shows via `(profane window)`; the shell owns the window (one per frame in M1;
+  M2 windows: §8i).
 
 ## 8d. Input and editing features (M1)
 
@@ -392,9 +393,61 @@ the renderer tags the frame answering each event and records when it was submitt
   highlight backgrounds ≥ 4.5:1, cursor ≥ 7:1.
 - **Typography**: code in `default-font-family` (JetBrains Mono), UI chrome and `variable-pitch` in `system-ui`
   (SF Pro); per-face OpenType `features` (e.g. ligatures off); `line-spacing`; text scale (`C-x C-=`/`C--`/`C-0`,
-  trackpad pinch) — global for now, per-buffer with M2's window work.
+  trackpad pinch) — per buffer since M2 windows (§8i).
 - **`ui-style`** presets `minimal` (default) and `rich` set chrome variables (`ui-fringe-width`, `ui-scroll-bars`,
   `ui-popup-shadow`, `ui-motion`, `ui-mode-line-style`) that the chrome reads as it lands.
+
+## 8i. Windows, mode lines, echo area, tabs (M2)
+
+- **Window tree in Scheme** (`(profane window)`): leaves are windows, splits divide their area `below` or `right`
+  among children by exact weights, so a frame resize keeps proportions. Splitting halves a window (a same-direction
+  parent gains a sibling, otherwise a new split replaces the window); deleting gives the space to the previous
+  sibling (the next if first) and collapses one-child splits, merging same-direction nesting. `balance-windows`
+  weighs children by their window count along the split. Emacs names and keys: `C-x 2/3/0/1/o/+/^/{/}`,
+  `C-x <left>/<right>`.
+- **C frame** (`core/display/pf_frame`): the shell owns one frame per `ProfaneView`; Scheme creates its windows and
+  places them (rects in points). Each window renders into its own list only when it changed; the frame appends
+  the cached lists at their origins (`pf_display_append`) and draws the tab bar. Window styles follow the default
+  face and each window's text scale. Headless frames (fixed-width shaper, no fonts) run the same code in Scheme
+  tests.
+- **Per-window point** as in Emacs: the selected window shows the buffer's point, others their own marker;
+  selection saves the old point into its window's marker first (a bug where `C-x 1` and tab switches restored a
+  stale point had regression tests added).
+- **Mode lines**: `mode-line-format` (buffer-local) is a list of strings, segments (procedures of the window,
+  `define-mode-line-segment`), variables, `(:face FACE ...)` and nested lists; Scheme formats them before each
+  redisplay and pushes text + face runs only when they changed. Drawn by the C strip renderer
+  (`core/display/pf_strip`) in `mode-line` / `mode-line-inactive` (SF Pro), flat or raised per
+  `ui-mode-line-style`; not text-scaled. Default: label, modified, buffer name, All/Top/Bot/NN%, (line,col), modes.
+- **Echo area**: the minibuffer window under the tree shows an undo-disabled echo buffer (`buffer-disable-undo`,
+  which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
+  `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
+  minibuffer (item 5) will read input in this window.
+- **Chrome**: fringes of `ui-fringe-width` (fringe face); a 1 pt divider (`vertical-border`) on windows with a
+  neighbor to the right; glyphs that would cross the right edge are not drawn (truncation). Without a mode line
+  under it a window draws only whole rows, since a partial row would land in the window below.
+- **Display modes** apply to every window; hl-line and show-paren follow the selected window, as in Emacs
+  (`global-hl-line-sticky-flag`). Non-selected windows show a hollow cursor (`cursor-in-non-selected-windows`).
+- **Text scale per buffer** (`text-scale-factor`, buffer-local): a window draws its buffer's faces in fonts scaled
+  by the platform (`pf_font_scaled`), with its line height to match.
+- **Tabs** (`(profane tab-bar)`): each tab keeps a window tree and selected window; hidden tabs' windows stay alive
+  (points, scroll) and are just not placed. The tab bar strip shows with more than one tab (`tab-bar-show` 1, so
+  the minimal preset shows none by default). `C-x t 2/0/1/o/O`; renaming by name waits for the minibuffer.
+- **ace-window**: digit labels in the mode lines and a one-shot transient map (`set-transient-map`, new in the
+  command loop); `C-u` swaps buffers, `C-u C-u` deletes. Labels drawn over the windows come with the canvas (item 6).
+  Unbound by default: the owner's binding comes with the keymap port (item 8). **transpose-frame**: transpose,
+  flip, flop, rotate (±90°, 180°) by rewriting the splits.
+- **Fix (input)**: a plain key after a prefix reached Scheme as text through the input method and was inserted
+  (`C-x u` typed "u", which the Scheme tests missed by calling `handle-key`). While a key sequence or transient map
+  is pending, the command loop sets a C flag (`pf_input`) and the shell sends the next plain key as a key named
+  from the ASCII-capable layout, so `C-x o` works under the Russian layout too; Scheme also treats such text as keys.
+- **Measured** (`tests/macos/latency.sh`, commit p50 / p95 / max in ms): one window 1.7 / 2.0 / 4.9; four windows
+  on the typed-in buffer (`LATENCY_WINDOWS=4`) 2.1 / 2.4 / 5.7; four windows on a 100k-line buffer 3.3 / 3.9 / 5.8.
+  Unchanged windows cost a list copy, not a render.
+- Sanitizers: ASan+UBSan clean (C, Scheme suites, app, real key input). UBSan is now fatal in that tree, and the
+  Scheme suites run there with the ASan runtime preloaded (they used to abort); it flagged pointer arithmetic on an
+  empty text-property run list (`pf_props.c`, item 2), fixed.
+- Not yet: mouse selection/resizing of windows, scrolling commands (`C-v`/`M-v`, recenter), header lines,
+  per-window buffer history (`next-buffer` cycles the buffer list), window configurations beyond tabs.
 
 ## 9. Milestones
 

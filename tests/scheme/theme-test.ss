@@ -35,7 +35,18 @@
                     (>= (contrast fg (face-attribute f 'background)) 4.5)))
      '(hl-line highlight region show-paren-match show-paren-mismatch))
     (test-assert (format "~a: cursor stands out >= 7:1" name)
-                 (>= (contrast (face-attribute 'cursor 'background) bg) 7))))
+                 (>= (contrast (face-attribute 'cursor 'background) bg) 7))
+    ;; Chrome: mode lines and tabs (active text >= 7:1, inactive >= 4.5:1), and the window
+    ;; divider against the text background (>= 3:1, WCAG's bar for UI components).
+    (for-each
+     (lambda (f+min)
+       (let ([f (car f+min)])
+         (test-assert (format "~a: ~a text >= ~a:1" name f (cdr f+min))
+                      (>= (contrast (face-attribute f 'foreground) (face-attribute f 'background))
+                          (cdr f+min)))))
+     '((mode-line . 7) (mode-line-inactive . 4.5) (tab-bar-tab . 7) (tab-bar-tab-inactive . 4.5)))
+    (test-assert (format "~a: divider >= 3:1" name)
+                 (>= (contrast (face-attribute 'vertical-border 'foreground) bg) 3))))
 
 (check-theme 'profane-light)
 (check-theme 'profane-dark)

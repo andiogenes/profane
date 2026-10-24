@@ -7,7 +7,7 @@
 #include "pf_test.h"
 
 static NSString *describe(unsigned short code, NSString *chars, NSString *ignoring,
-                          NSEventModifierFlags flags, BOOL *direct) {
+                          NSEventModifierFlags flags, BOOL in_sequence, BOOL *direct) {
     NSEvent *e = [NSEvent keyEventWithType:NSEventTypeKeyDown
                                   location:NSZeroPoint
                              modifierFlags:flags
@@ -18,16 +18,17 @@ static NSString *describe(unsigned short code, NSString *chars, NSString *ignori
                charactersIgnoringModifiers:ignoring
                                  isARepeat:NO
                                    keyCode:code];
-    return PFKeyDescription(e, direct);
+    return PFKeyDescription(e, in_sequence, direct);
 }
 
-#define CHECK_KEY(code, chars, ignoring, flags, expected, expect_direct)                           \
+#define CHECK_KEY_IN(seq, code, chars, ignoring, flags, expected, expect_direct)                   \
     do {                                                                                           \
         BOOL d_ = NO;                                                                              \
-        NSString *k_ = describe(code, chars, ignoring, flags, &d_);                                \
+        NSString *k_ = describe(code, chars, ignoring, flags, seq, &d_);                           \
         PF_CHECK_EQ_STR(k_.UTF8String, expected);                                                  \
         PF_CHECK(d_ == (expect_direct));                                                           \
     } while (0)
+#define CHECK_KEY(...) CHECK_KEY_IN(NO, __VA_ARGS__)
 
 int main(void) {
     @autoreleasepool {
@@ -55,6 +56,14 @@ int main(void) {
         CHECK_KEY(3, @"а", @"а", M, "M-f", YES);
         /* ...while plain typing keeps the active layout's character. */
         CHECK_KEY(0, @"ф", @"ф", 0, "ф", NO);
+
+        /* Regression: after a prefix (C-x) plain keys went through the input method as text,
+         * so "C-x u" inserted "u". In a sequence they are keys, from the ASCII-capable layout
+         * (C-x o under Russian is still other-window). */
+        CHECK_KEY_IN(YES, 31, @"o", @"o", 0, "o", YES);
+        CHECK_KEY_IN(YES, 31, @"щ", @"щ", 0, "o", YES);
+        CHECK_KEY_IN(YES, 30, @"}", @"}", S, "}", YES);
+        CHECK_KEY_IN(YES, 49, @" ", @" ", 0, "SPC", YES);
     }
     return PF_TEST_RESULT();
 }

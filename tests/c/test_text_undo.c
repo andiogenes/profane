@@ -164,6 +164,34 @@ static void test_modified(void) {
     pf_text_free(t);
 }
 
+/* With recording off (an echo area), edits leave no history, the earlier history is gone (it
+ * would graft "c" back into unrelated text), and markers still move. */
+static void test_undo_disabled(void) {
+    pf_text *t = pf_text_new("ab", 2);
+    insert(t, 2, "c");
+    pf_text_undo_boundary(t);
+    pf_text_set_undo(t, 0);
+    PF_CHECK(pf_text_modified(t)); /* kept */
+    pf_marker m = pf_marker_new(t, 1, 0);
+    pf_text_delete(t, 0, 3);
+    insert(t, 0, "message");
+    PF_CHECK_EQ_SIZE(pf_marker_pos(t, m), 0);
+    pf_text_undo_boundary(t);
+    PF_CHECK(pf_text_undo(t, NULL) == 0);
+    CHECK_TEXT(t, "message");
+    pf_text_mark_saved(t);
+    insert(t, 0, "more ");
+    PF_CHECK(!pf_text_modified(t));
+
+    pf_text_set_undo(t, 1);
+    insert(t, 0, "x");
+    pf_text_undo_boundary(t);
+    PF_CHECK(pf_text_modified(t));
+    PF_CHECK(pf_text_undo(t, NULL) == 1);
+    CHECK_TEXT(t, "more message");
+    pf_text_free(t);
+}
+
 static void test_markers_follow_undo(void) {
     pf_text *t = pf_text_new("hello world", 11);
     pf_marker w = pf_marker_new(t, 6, 0); /* at "world" */
@@ -273,6 +301,7 @@ int main(void) {
     test_undo_groups();
     test_undo_branches();
     test_modified();
+    test_undo_disabled();
     test_markers_follow_undo();
     test_snapshot_survives_undo();
     test_fuzz();

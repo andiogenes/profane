@@ -26,7 +26,7 @@ static NSString *_Nullable ascii_layout_char(unsigned short keycode, BOOL shift)
     return result;
 }
 
-NSString *PFKeyDescription(NSEvent *event, BOOL *direct) {
+NSString *PFKeyDescription(NSEvent *event, BOOL inSequence, BOOL *direct) {
     NSEventModifierFlags flags = event.modifierFlags;
     NSString *chars = event.charactersIgnoringModifiers;
     unichar c = chars.length ? [chars characterAtIndex:0] : 0;
@@ -53,8 +53,8 @@ NSString *PFKeyDescription(NSEvent *event, BOOL *direct) {
     }
     BOOL chord = (flags & (NSEventModifierFlagControl | NSEventModifierFlagOption |
                            NSEventModifierFlagCommand)) != 0;
-    *direct = chord || name != nil;
-    if (!name && chord) {
+    *direct = chord || name != nil || inSequence;
+    if (!name && (chord || inSequence)) {
         name = ascii_layout_char(event.keyCode, (flags & NSEventModifierFlagShift) != 0);
     }
     if (!name) {

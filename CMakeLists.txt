@@ -20,7 +20,9 @@ set(PROFANE_BUNDLE_ID "org.profane.editor" CACHE STRING "CFBundleIdentifier")
 
 option(PROFANE_SANITIZE "Build with AddressSanitizer + UBSan" OFF)
 if(PROFANE_SANITIZE)
-  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+  # UB reports are fatal, so sanitizer test runs fail on them instead of just printing.
+  add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=undefined
+                      -fno-omit-frame-pointer)
   add_link_options(-fsanitize=address,undefined)
 endif()
 

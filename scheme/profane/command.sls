@@ -12,7 +12,7 @@
           command-names command?
           current-prefix-arg prefix-numeric-value %set-prefix-arg!
           this-command last-command %set-this-command! %set-last-command!
-          message current-message %set-message-sink!)
+          message current-message %echo %set-message-sink!)
   (import (chezscheme) (profane buffer))
 
   (define-record-type cmd
@@ -65,13 +65,16 @@
   (define (%set-last-command! v) (set! last-command-value v))
 
   ;; ---- messages ----
-  ;; (message fmt arg ...) shows a line in the echo area (once windows have one) and appends it
-  ;; to *Messages*. (message #f) clears the echo area.
+  ;; (message fmt arg ...) shows a line in the echo area and appends it to *Messages*.
+  ;; (message #f) clears the echo area.
 
   (define echo #f)
   (define (current-message) echo)
-  (define sink (lambda (text) (void))) ; the echo area, installed by the display side
+  (define sink (lambda (text) (void))) ; the echo area, installed by (profane window)
   (define (%set-message-sink! proc) (set! sink proc))
+
+  ;; Shows TEXT in the echo area without logging it (keystroke echo such as "C-x-").
+  (define (%echo text) (set! echo text) (sink text))
 
   (define (message fmt . args)
     (if (not fmt)

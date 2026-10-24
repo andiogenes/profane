@@ -23,6 +23,10 @@ add_executable(test_layout c/test_layout.c)
 target_link_libraries(test_layout PRIVATE pf_core)
 add_test(NAME c.layout COMMAND test_layout)
 
+add_executable(test_frame c/test_frame.c)
+target_link_libraries(test_frame PRIVATE pf_core)
+add_test(NAME c.frame COMMAND test_frame)
+
 add_executable(test_scheme c/test_scheme.c)
 target_link_libraries(test_scheme PRIVATE pf_core_whole)
 target_compile_definitions(test_scheme PRIVATE
@@ -30,12 +34,22 @@ target_compile_definitions(test_scheme PRIVATE
   PF_TEST_SCHEME_DIR="${PROJECT_SOURCE_DIR}/scheme")
 add_test(NAME c.scheme COMMAND test_scheme)
 
-foreach(_t IN ITEMS test_utf8 test_text test_text_undo test_props test_display test_layout test_scheme)
+foreach(_t IN ITEMS test_utf8 test_text test_text_undo test_props test_display test_layout test_frame
+                   test_scheme)
   target_compile_options(${_t} PRIVATE ${PROFANE_WARNINGS})
 endforeach()
-set_tests_properties(c.utf8 c.text c.text_undo c.props c.display c.layout c.scheme PROPERTIES LABELS c)
+set_tests_properties(c.utf8 c.text c.text_undo c.props c.display c.layout c.frame c.scheme
+  PROPERTIES LABELS c)
 
-# Scheme suites (label: scheme), run by the standalone Chez against the source tree.
+# Scheme suites (label: scheme), run by the standalone Chez against the source tree. In a
+# sanitizer build the instrumented pf_native dylib needs the ASan runtime preloaded into the
+# (uninstrumented) scheme binary.
+set(_asan_preload "")
+if(PROFANE_SANITIZE)
+  execute_process(COMMAND ${CMAKE_C_COMPILER} -print-file-name=libclang_rt.asan_osx_dynamic.dylib
+    OUTPUT_VARIABLE _asan_rt OUTPUT_STRIP_TRAILING_WHITESPACE)
+  set(_asan_preload "DYLD_INSERT_LIBRARIES=${_asan_rt}")
+endif()
 file(GLOB _scheme_suites CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/scheme/*-test.ss")
 foreach(_suite IN LISTS _scheme_suites)
   get_filename_component(_name "${_suite}" NAME_WE)
@@ -44,7 +58,7 @@ foreach(_suite IN LISTS _scheme_suites)
       --libdirs "${PROJECT_SOURCE_DIR}/scheme:${CMAKE_CURRENT_SOURCE_DIR}/scheme/lib"
       --script "${_suite}")
   set_tests_properties(scheme.${_name} PROPERTIES LABELS scheme
-    ENVIRONMENT "PROFANE_NATIVE_LIB=$<TARGET_FILE:pf_native>")
+    ENVIRONMENT "PROFANE_NATIVE_LIB=$<TARGET_FILE:pf_native>;${_asan_preload}")
 endforeach()
 
 # Platform units needing Metal but no window (label: macos).

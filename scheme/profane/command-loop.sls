@@ -4,17 +4,41 @@
 ;;; keymaps (profane mode) bind it to a command or to nothing; prefix keys (C-x) wait for more.
 ;;; C-u / C-u C-u / C-u 12 / M-5 / C-- set the prefix argument of the next command. Each command
 ;;; runs in the selected window's buffer with an undo boundary before it, except inside a run
-;;; of up to self-insert-amalgamation typed characters. Errors beep and go to *Messages*.
+;;; of up to self-insert-amalgamation typed characters. Errors beep and go to *Messages*. New
+;;; input clears the echo area. A transient map (set-transient-map) takes precedence for the
+;;; next key sequence only.
 
 (library (profane command-loop)
-  (export handle-key handle-text last-input-text pending-keys self-insert-amalgamation)
-  (import (chezscheme) (profane buffer) (profane window) (profane keymap) (profane mode)
-          (profane command))
+  (export handle-key handle-text last-input-text pending-keys self-insert-amalgamation
+          set-transient-map)
+  (import (chezscheme) (profane native) (profane buffer) (profane window) (profane keymap)
+          (profane mode) (profane command))
 
   (define self-insert-amalgamation 20)
 
   (define pending '())          ; keys of an unfinished sequence
   (define (pending-keys) pending)
+  (define transient #f)         ; (keymap . on-exit) for the next key sequence, or #f
+
+  ;; The shell sends plain keys as keys (not text) while a sequence is under way, so C-x o is
+  ;; other-window under any keyboard layout.
+  (define (set-pending! keys)
+    (set! pending keys)
+    (%input-set-prefix-pending (or (pair? pending) (and transient #t))))
+
+  ;; Emacs set-transient-map: MAP is looked up first for the next key sequence, then dropped
+  ;; and ON-EXIT called, whichever command (or none) the sequence ran.
+  (define set-transient-map
+    (case-lambda
+      [(map) (set-transient-map map void)]
+      [(map on-exit) (set! transient (cons map on-exit)) (set-pending! pending)]))
+
+  (define (exit-transient!)
+    (when transient
+      (let ([on-exit (cdr transient)])
+        (set! transient #f)
+        (set-pending! pending)
+        (on-exit))))
   (define input-text "")
   (define (last-input-text) input-text)
   (define insert-run 0)
@@ -42,7 +66,9 @@
 
   ;; The binding of KEYS in the active keymaps: the first map binding it to anything wins.
   (define (key-binding keys)
-    (let loop ([maps (current-active-maps)])
+    (let loop ([maps (if transient
+                         (cons (car transient) (current-active-maps))
+                         (current-active-maps))])
       (and (pair? maps) (or (lookup-key (car maps) keys) (loop (cdr maps))))))
 
   (define (run-command name)
@@ -103,31 +129,42 @@
 
   (define (handle-key key)
     (select-window-buffer)
+    (when (current-message) (message #f))
     (cond
-      [(and (null? pending) (prefix-arg-key key)) (void)]
+      [(and (null? pending) (not transient) (prefix-arg-key key)) (void)]
       [(and (pair? pending) (equal? key "C-g"))
-       (set! pending '())
+       (set-pending! '())
        (set! arg-pending #f)
+       (exit-transient!)
        (message "Quit")]
       [else
        (let* ([keys (append pending (list key))]
               [b (key-binding keys)])
          (cond
-           [(keymap? b) (set! pending keys) (message "~a-" (key-description keys))]
-           [(symbol? b) (set! pending '()) (run-command b)]
+           [(keymap? b) (set-pending! keys) (%echo (format "~a-" (key-description keys)))]
+           [(symbol? b) (set-pending! '()) (exit-transient!) (run-command b)]
            [else
-            (set! pending '())
+            (set-pending! '())
             (set! arg-pending #f)
             (set! arg-digits? #f)
+            (exit-transient!)
             (%set-last-command! #f)
             (beep)
             (message "~a is undefined" (key-description keys))]))]))
 
+  ;; A key as the shell names it, for text that arrives in the middle of a key sequence.
+  (define (char-key c) (if (char=? c #\space) "SPC" (string c)))
+
   ;; Typed text; digits and "-" right after C-u go to the prefix argument (plain keys reach
-  ;; Scheme as text through the input method, not as keys).
+  ;; Scheme as text through the input method, not as keys). Inside a key sequence (after C-x,
+  ;; or with a transient map) text is keys: C-x u used to insert "u".
   (define (handle-text text)
     (select-window-buffer)
-    (unless (and arg-digits? (null? pending) (prefix-arg-key text))
-      (set! pending '())
-      (set! input-text text)
-      (run-command 'self-insert-command))))
+    (cond
+      [(or (pair? pending) transient)
+       (for-each (lambda (c) (handle-key (char-key c))) (string->list text))]
+      [(and arg-digits? (prefix-arg-key text)) (when (current-message) (message #f))]
+      [else
+       (when (current-message) (message #f))
+       (set! input-text text)
+       (run-command 'self-insert-command)])))

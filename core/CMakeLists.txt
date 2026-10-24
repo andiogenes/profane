@@ -2,10 +2,13 @@
 # be built as a dylib for Scheme tests run by the standalone `scheme` binary.
 set(PF_NATIVE_SOURCES
   display/pf_face.c
+  display/pf_frame.c
+  display/pf_strip.c
   display/pf_window.c
   embed/pf_buffer_ffi.c
   embed/pf_display_ffi.c
   embed/pf_handles.c
+  embed/pf_input.c
   embed/pf_window_ffi.c
   layout/pf_layout.c
   render/pf_display.c

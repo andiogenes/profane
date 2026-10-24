@@ -48,4 +48,14 @@ expect '(point)' '0' "M-< moves to the beginning"
 # Regression: an unpaired surrogate in typed text made -UTF8String return NULL and crashed.
 "$keys" $pid raw16:D83D
 expect '(char->integer (char-after (point-min)))' '65533' "lone surrogate becomes U+FFFD"
+# Regression: a plain key after a prefix went through the input method as text and was
+# inserted ("C-x u" typed "u"). Under a Russian layout "C-x o" must still be other-window.
+before=$(eval_ '(buffer-string)')
+"$keys" $pid C-x 2
+expect '(length (window-list))' '2' "C-x 2 splits the window"
+"$keys" $pid C-x o
+expect '(eq? (selected-window) (cadr (window-list)))' '#t' "C-x o selects the other window"
+expect '(buffer-string)' "$before" "and nothing was inserted"
+"$keys" $pid C-x 1
+expect '(length (window-list))' '1' "C-x 1"
 echo ok

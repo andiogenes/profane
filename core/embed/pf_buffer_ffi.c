@@ -133,6 +133,12 @@ int pf_buf_undo_boundary(pf_handle buf) {
     return 0;
 }
 
+int pf_buf_set_undo(pf_handle buf, int enabled) {
+    TEXT_OR(buf, INVALID);
+    pf_text_set_undo(t, enabled);
+    return 0;
+}
+
 int64_t pf_buf_undo(pf_handle buf) {
     TEXT_OR(buf, INVALID);
     size_t pos;

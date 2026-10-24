@@ -49,6 +49,12 @@ int pf_marker_set(pf_text *text, pf_marker marker, size_t pos); /* -1 if invalid
  * vars); it costs about as much memory as the text it deleted. */
 void pf_text_undo_boundary(pf_text *text);
 
+/* Stops (ENABLED 0) or resumes recording undo history. Stopping discards the history so far,
+ * which would no longer match the text (Emacs's buffer-disable-undo, for internal buffers such
+ * as the echo area). Edits made while recording is off cannot be undone and do not change the
+ * modified flag. On by default. */
+void pf_text_set_undo(pf_text *text, int enabled);
+
 /* Each returns 1 and sets *POS (if non-NULL) to where point belongs, or 0 if there is nothing
  * to undo/redo. Redo enters the most recently created or left branch. */
 int pf_text_undo(pf_text *text, size_t *pos);

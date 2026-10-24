@@ -39,6 +39,10 @@ void pf_display_rect(pf_display *d, float x, float y, float w, float h, uint32_t
 void pf_display_glyph(pf_display *d, uint32_t font, uint32_t glyph, float x, float baseline,
                       uint32_t color);
 
+/* Appends the items of frozen list SRC, moved by (DX, DY); its clear color is not drawn. Used to
+ * compose windows rendered on their own into one frame. */
+void pf_display_append(pf_display *d, const pf_display *src, float dx, float dy);
+
 /* Freezes the list; no further items may be added. Returns it with one reference. */
 const pf_display *pf_display_finish(pf_display *d);
 

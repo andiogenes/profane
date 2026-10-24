@@ -32,6 +32,10 @@ typedef struct pf_shaper {
     float (*cell_width)(void *ctx, uint32_t font);
 } pf_shaper;
 
+/* A portable fixed-width shaper: one glyph per character whose id is its code point, every
+ * advance 10 points, no fonts involved. For headless frames (Scheme tests). */
+pf_shaper pf_shaper_fixed(void);
+
 typedef struct pf_line_layout {
     const pf_shaped_glyph *glyphs;
     size_t nglyphs;

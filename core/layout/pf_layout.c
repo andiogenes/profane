@@ -278,3 +278,20 @@ pf_layout_stats pf_layout_cache_stats(const pf_layout_cache *c) {
     s.entries = c->count;
     return s;
 }
+
+static float fixed_shape(void *ctx, uint32_t font, const uint32_t *cps, size_t n, pf_shaped *out) {
+    (void)ctx;
+    for (size_t i = 0; i < n; i++) {
+        pf_shaped_push(out, font, cps[i], 10.0f * (float)i, (uint32_t)i);
+    }
+    return 10.0f * (float)n;
+}
+
+static float fixed_cell(void *ctx, uint32_t font) {
+    (void)ctx, (void)font;
+    return 10;
+}
+
+pf_shaper pf_shaper_fixed(void) {
+    return (pf_shaper){NULL, fixed_shape, fixed_cell};
+}

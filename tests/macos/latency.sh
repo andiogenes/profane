@@ -20,12 +20,16 @@ osascript -e "tell application \"System Events\" to set frontmost of (first proc
 sleep 0.5
 eval_() { "$client" --socket "$dir/repl.sock" --eval "$1"; }
 # Optional pre-fill: LATENCY_PREFILL_LINES lines of code-like text, typing then happens in the
-# middle of the buffer.
+# middle of the buffer. LATENCY_WINDOWS=N shows the buffer in N windows (split side by side and
+# below), all of which must redraw on each key.
 prefill="${LATENCY_PREFILL_LINES:-0}"
+windows="${LATENCY_WINDOWS:-1}"
 eval_ "(let ([line \"(define (f x) (+ x 1)) ; some text to shape\\n\"])
          (goto-char (point-max))
          (do ([i 0 (+ i 1)]) ((= i $prefill)) (insert line))
          (goto-char (quotient (point-max) 2))
+         (do ([i 1 (+ i 1)]) ((= i $windows))
+           (split-window (car (last-pair (window-list))) (if (odd? i) 'right 'below)))
          (latency-reset))" >/dev/null
 
 set --
