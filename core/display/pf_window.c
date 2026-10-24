@@ -55,6 +55,7 @@ struct pf_window {
     float fringe_left, fringe_right, divider;
     pf_strip mode_line;
     float mode_line_h;
+    uint32_t native; /* native view kind, 0: text */
     float hscroll, min_hscroll; /* points the text is scrolled left; scroll-left's minimum */
 };
 
@@ -682,6 +683,25 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
     }
 }
 
+void pf_window_set_native(pf_window *w, uint32_t kind) {
+    if (w->native != kind) {
+        w->native = kind;
+        w->cursor_valid = 0;
+        w->dirty = 1;
+    }
+}
+
+uint32_t pf_window_native(const pf_window *w) {
+    return w->native;
+}
+
+void pf_window_body_rect(const pf_window *w, float rect[4]) {
+    rect[0] = 0;
+    rect[1] = 0;
+    rect[2] = w->width - w->divider;
+    rect[3] = w->height - w->mode_line_h;
+}
+
 const pf_display *pf_window_redisplay(pf_window *w) {
     pf_text *text = pf_handle_get(w->buf, PF_HANDLE_TEXT);
     const pf_text_snapshot *s = text ? pf_text_current(text) : NULL;
@@ -714,10 +734,12 @@ const pf_display *pf_window_redisplay(pf_window *w) {
     pf_layout_begin_frame(w->cache);
     float body_h = w->height - w->mode_line_h;
     uint32_t fringe = role_color(PF_ROLE_FRINGE, PF_FACE_HAS_BG, 0);
-    pf_display_rect(d, 0, 0, w->fringe_left, body_h, fringe);
-    pf_display_rect(d, w->width - w->divider - w->fringe_right, 0, w->fringe_right, body_h,
-                    fringe);
-    if (s) {
+    if (!w->native) {
+        pf_display_rect(d, 0, 0, w->fringe_left, body_h, fringe);
+        pf_display_rect(d, w->width - w->divider - w->fringe_right, 0, w->fringe_right, body_h,
+                        fringe);
+    }
+    if (s && !w->native) {
         draw_text(w, d, text, s, point, bg, fg);
     }
 

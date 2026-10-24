@@ -145,9 +145,11 @@ The order was agreed with the owner. Each item is a branch, cut from `m2-windows
    Left: the mouse reaching `canvas-click!` (no mouse routing in `ProfaneView` yet), paths/images/clip/transform,
    transients and avy jump labels (built on the canvas), and moving the minibuffer candidates and completion popups
    onto it (corfu). The overlay's first frame is an empty list (set by the frame's first resize).
-7. **Native-view window kind (stub view):** a window whose body is left empty by the base layer, with an AppKit
-   view in `ProfaneView.nativeHost` positioned from the display snapshot (plan §1, §4). Window rects come from
-   `window-edges` / `pf_frame_place_window`.
+7. **Done: native-view window kind** (`m2-native-view`, plan §8i): `set-window-native!`, placements to the shell,
+   `PFNativeViews` with a stub view; tests in `test_frame.c` and `window-test.ss`. Left: real view kinds (web M8,
+   PDF), key and mouse routing into native views, focus handoff, and canvas windows as another window kind (see
+   the item 6 notes). The placement was checked in the running app by a window-ID capture, which does not include
+   the Metal layers while the window is covered; check it visually with the window in front.
 8. **Default and ported keymaps:** fetch the owner's `andiogenes/.emacs.d` and port its bindings, e.g. `M-[`/`M-]`
    and `C-M-v` edge-of-buffer (plan §2), into an `init.ss`-style default. Bind `ace-window` (unbound so far) and
    whatever the config uses for tabs and transpose-frame.

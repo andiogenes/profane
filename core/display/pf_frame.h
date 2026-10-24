@@ -60,6 +60,24 @@ float pf_frame_strip_height(const pf_frame *f, uint32_t face, int box);
  * did. */
 const pf_display *pf_frame_redisplay(pf_frame *f);
 
+/* ---- native-view windows ----
+ * A window of a native kind (pf_window_set_native, through the frame) leaves its body empty
+ * on the base layer; the shell puts a platform view of that kind there, above the base layer
+ * and below the overlay. */
+typedef struct pf_native_placement {
+    uint32_t tag;  /* the window's tag */
+    uint32_t kind; /* the shell's view kind */
+    float x, y, w, h; /* the body, frame coordinates */
+    int shown;     /* 0: its tab is hidden */
+} pf_native_placement;
+
+int pf_frame_set_window_native(pf_frame *f, pf_window *w, uint32_t kind);
+/* Bumped when a native window appears, goes, moves, resizes or hides. */
+uint64_t pf_frame_native_generation(const pf_frame *f);
+size_t pf_frame_native_count(const pf_frame *f);
+/* The I-th native window (in no particular order: key by tag); -1 if out of range. */
+int pf_frame_native_get(const pf_frame *f, size_t i, pf_native_placement *out);
+
 /* ---- pop-up surfaces (the overlay layer) ----
  * A shown canvas is drawn on the overlay at (X, Y), above earlier pop-ups. Canvases are not
  * owned; hide one before freeing it. */

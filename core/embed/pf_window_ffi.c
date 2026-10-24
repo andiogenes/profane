@@ -184,6 +184,35 @@ int64_t pf_frm_redisplay(pf_handle frame) {
     return n;
 }
 
+int pf_frm_set_window_native(pf_handle frame, pf_handle win, uint32_t kind) {
+    pf_frame *f = frame_of(frame);
+    pf_window *w = window_of(win);
+    return f && w ? pf_frame_set_window_native(f, w, kind) : INVALID;
+}
+
+int64_t pf_frm_native_count(pf_handle frame) {
+    pf_frame *f = frame_of(frame);
+    return f ? (int64_t)pf_frame_native_count(f) : INVALID;
+}
+
+double pf_frm_native_field(pf_handle frame, size_t i, int field) {
+    pf_frame *f = frame_of(frame);
+    pf_native_placement p;
+    if (!f || pf_frame_native_get(f, i, &p) != 0) {
+        return -1e9;
+    }
+    switch (field) {
+    case 0: return p.x;
+    case 1: return p.y;
+    case 2: return p.w;
+    case 3: return p.h;
+    case 4: return p.shown;
+    case 5: return p.kind;
+    case 6: return p.tag;
+    default: return -1e9;
+    }
+}
+
 pf_handle pf_frm_window_new(pf_handle frame) {
     pf_frame *f = frame_of(frame);
     if (!f) {

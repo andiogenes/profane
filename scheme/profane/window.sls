@@ -23,6 +23,7 @@
           selected-window select-window minibuffer-window window-minibuffer?
           window-point set-window-point! window-start-line set-window-start-line!
           window-body-lines window-hscroll set-window-hscroll! window-edges window-list next-window window-label set-window-label!
+          window-native set-window-native! native-view-kinds register-native-view-kind!
           split? split-direction split-children split-weights split-parent
           split-window delete-window delete-other-windows balance-windows resize-window!
           switch-to-buffer other-buffer
@@ -301,6 +302,31 @@
       (list-ref ws (mod (+ (index-of w ws) n) (length ws)))))
 
   (define (set-window-label! w label) (window-label-set! w label))
+
+  ;; ---- native-view windows ----
+  ;; A window of a native kind leaves its body to a platform view the shell places there (plan
+  ;; §1, §4); it keeps its buffer for the mode line. Kinds are the shell's view classes by
+  ;; number: stub is a placeholder view, web and PDF kinds register with their milestones.
+
+  (define view-kinds (list (cons 'stub 1)))
+  (define (native-view-kinds) (map car view-kinds))
+  (define (register-native-view-kind! name number)
+    (set! view-kinds (cons (cons name number) (remp (lambda (k) (eq? (car k) name)) view-kinds))))
+
+  (define native-of (make-weak-eq-hashtable)) ; window -> kind name
+
+  (define (window-native w) (hashtable-ref native-of w #f))
+
+  ;; KIND: a registered name, or #f for an ordinary text window.
+  (define (set-window-native! w kind)
+    (check-live 'set-window-native! w)
+    (let ([n (cond [(not kind) 0]
+                   [(assq kind view-kinds) => cdr]
+                   [else (error 'set-window-native! "no such native view kind" kind)])])
+      (when (window-minibuffer? w) (error 'set-window-native! "not for the minibuffer" w))
+      (%frm-set-window-native (frame-handle (window-frame w)) (window-handle w) n)
+      (if kind (hashtable-set! native-of w kind) (hashtable-delete! native-of w))
+      kind))
 
   ;; Puts NEW in OLD's place under OLD's parent (or at the root).
   (define (replace-node! f old new)

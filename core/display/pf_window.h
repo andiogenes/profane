@@ -90,6 +90,15 @@ void pf_window_set_min_hscroll(pf_window *w, float points);
 /* Scrolls so LINE is the first one shown (redisplay still keeps point visible). */
 void pf_window_set_top_line(pf_window *w, size_t line);
 
+/* Native-view window kind: a window whose body (everything but the mode line and divider) is
+ * left empty for a platform view the shell places there (WKWebView, PDF, ...). KIND 0 is an
+ * ordinary text window; others are the shell's view kinds. A native window draws no text,
+ * fringes or cursor. */
+void pf_window_set_native(pf_window *w, uint32_t kind);
+uint32_t pf_window_native(const pf_window *w);
+/* The body's rect in window coordinates (points). */
+void pf_window_body_rect(const pf_window *w, float rect[4]);
+
 /* Forces the next redisplay to render. */
 void pf_window_invalidate(pf_window *w);
 

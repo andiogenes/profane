@@ -241,6 +241,28 @@
   (test-eqv "C-u C-u deletes the picked window" 2 (length (window-list))))
 (keys "C-x 1")
 
+;; ---- native-view windows ----
+(let* ([fh (%frame-handle f)] [ws (window-list)] [w (car ws)])
+  (test-eqv "no native windows" 0 (%frm-native-count fh))
+  (test-eq "kinds" 'stub (car (native-view-kinds)))
+  (set-window-native! w 'stub)
+  (test-eq "the kind is remembered" 'stub (window-native w))
+  (test-eqv "one native window" 1 (%frm-native-count fh))
+  (test-eqv "kind number" 1.0 (%frm-native-field fh 0 5))
+  (test-eqv "its body is the window less the mode line"
+            (- (height-of w) (%win-mode-line-height (%window-handle w)))
+            (%frm-native-field fh 0 3))
+  (test-assert "an unknown kind is an error" (guard (c [else #t]) (set-window-native! w 'nope) #f))
+  (test-assert "not for the minibuffer"
+    (guard (c [else #t]) (set-window-native! (minibuffer-window) 'stub) #f))
+  (let ([before (%frm-native-field fh 0 3)])
+    (split-window w)
+    (test-eqv "still one" 1 (%frm-native-count fh))
+    (test-assert "it was resized with the split" (< (%frm-native-field fh 0 3) before)))
+  (set-window-native! w #f)
+  (test-eq "text again" #f (window-native w))
+  (test-eqv "none" 0 (%frm-native-count fh)))
+
 (delete-headless-frame! f)
 (test-end "window")
 (test-exit)

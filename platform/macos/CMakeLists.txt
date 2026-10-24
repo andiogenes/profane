@@ -40,6 +40,7 @@ add_executable(profane MACOSX_BUNDLE
   PFGlyphAtlas.m
   PFKeys.m
   PFMetalRenderer.m
+  PFNativeViews.m
   PFReplServer.m
   PFScheme.m
   PFShaper.m

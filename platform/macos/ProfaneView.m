@@ -17,6 +17,7 @@
 #include "pf_display_ffi.h"
 #include "pf_face.h"
 #include "pf_frame.h"
+#import "PFNativeViews.h"
 #include "pf_input.h"
 #include "pf_layout.h"
 #include "pf_scheme.h"
@@ -146,6 +147,7 @@ static const pf_font_source font_source = {NULL, font_metrics, font_scaled};
     pf_font_id _font;
     pf_layout_cache *_cache;
     pf_frame *_frame;
+    PFNativeViews *_nativeViews;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame {
@@ -158,7 +160,8 @@ static const pf_font_source font_source = {NULL, font_metrics, font_scaled};
     }
     NSRect bounds = self.bounds;
     _base = [[PFMetalLayerView alloc] initWithFrame:bounds device:device opaque:YES];
-    _nativeHost = [[NSView alloc] initWithFrame:bounds];
+    _nativeHost = [[PFNativeViewHost alloc] initWithFrame:bounds];
+    _nativeViews = [[PFNativeViews alloc] initWithHost:_nativeHost];
     _nativeHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     _overlay = [[PFMetalLayerView alloc] initWithFrame:bounds device:device opaque:NO];
     _overlay.passesMouse = YES;
@@ -322,6 +325,7 @@ static CGColorRef create_cgcolor(uint32_t c) {
         return;
     }
     pf_scheme_call("pf-redisplay", NULL, 0, NULL);
+    [_nativeViews syncWithFrame:_frame]; /* windows of native kinds: views over their bodies */
     const pf_display *d = pf_frame_redisplay(_frame);
     if (d) { /* shows under a resize until the next frame */
         CGColorRef background = create_cgcolor(pf_display_clear(d));

@@ -238,12 +238,42 @@ int main(void) {
     pf_display_release(d);
     pf_window_set_min_hscroll(w1, 0);
 
+    /* Native-view windows: the body is left empty and reported to the shell. */
+    uint64_t gen0 = pf_frame_native_generation(f);
+    PF_CHECK_EQ_SIZE(pf_frame_native_count(f), 0);
+    pf_window_set_edges(w2, 4, 4, 1);
+    PF_CHECK(pf_frame_set_window_native(f, w2, 1) == 0);
+    PF_CHECK(pf_frame_native_generation(f) != gen0);
+    d = pf_frame_redisplay(f);
+    PF_CHECK(d != NULL);
+    PF_CHECK(find_glyph(d, 'b') == NULL); /* no text from w2 (w1 shows 'a' only) */
+    PF_CHECK(find_glyph(d, 'a') != NULL);
+    pf_display_release(d);
+    PF_CHECK_EQ_SIZE(pf_frame_native_count(f), 1);
+    pf_native_placement np;
+    PF_CHECK(pf_frame_native_get(f, 0, &np) == 0 && np.tag == 8 && np.kind == 1 && np.shown);
+    float mlh = pf_window_mode_line_height(w2);
+    PF_CHECK(NEAR(np.x, 0) && NEAR(np.y, 140) && NEAR(np.w, 399) && NEAR(np.h, 140 - mlh));
+    PF_CHECK(pf_frame_native_get(f, 1, &np) == -1);
+    uint64_t gen1 = pf_frame_native_generation(f);
+    pf_frame_place_window(f, w2, 0, 140, 400, 100, 1);
+    PF_CHECK(pf_frame_native_generation(f) != gen1); /* moving or resizing re-places the view */
+    pf_frame_place_window(f, w2, 0, 140, 400, 100, 0);
+    PF_CHECK(pf_frame_native_get(f, 0, &np) == 0 && !np.shown);
+    pf_frame_place_window(f, w2, 0, 140, 400, 140, 1);
+    PF_CHECK(pf_frame_set_window_native(f, w2, 0) == 0 && pf_frame_native_count(f) == 0);
+    d = pf_frame_redisplay(f);
+    PF_CHECK(find_glyph(d, 'b') != NULL); /* a text window again */
+    pf_display_release(d);
+    pf_frame_set_window_native(f, w2, 1);
+
     /* Removing a window. */
     PF_CHECK(pf_frame_remove_window(f, w2) == 0);
     PF_CHECK(pf_frame_remove_window(f, w2) == -1);
     d = pf_frame_redisplay(f);
     PF_CHECK(find_glyph(d, 'c') == NULL);
     pf_display_release(d);
+    PF_CHECK_EQ_SIZE(pf_frame_native_count(f), 0); /* a removed native window is gone */
 
     pf_frame_free(f);
     pf_layout_cache_free(cache);

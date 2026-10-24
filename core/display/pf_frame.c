@@ -37,6 +37,7 @@ struct pf_frame {
     popup *popups; /* bottom first */
     size_t npopups, cappopups;
     int overlay_dirty;
+    uint64_t native_generation;
 };
 
 static void *xrealloc(void *p, size_t size) {
@@ -158,6 +159,9 @@ int pf_frame_remove_window(pf_frame *f, pf_window *w) {
     if (!e) {
         return -1;
     }
+    if (pf_window_native(e->w)) {
+        f->native_generation++;
+    }
     pf_display_release(e->last);
     pf_window_free(e->w);
     *e = f->entries[--f->count];
@@ -202,8 +206,53 @@ int pf_frame_place_window(pf_frame *f, pf_window *w, float x, float y, float wid
         e->shown = shown;
         pf_window_set_size(w, width, height, f->scale);
         f->dirty = 1;
+        if (pf_window_native(w)) {
+            f->native_generation++;
+        }
     }
     return 0;
+}
+
+int pf_frame_set_window_native(pf_frame *f, pf_window *w, uint32_t kind) {
+    entry *e = find(f, w);
+    if (!e) {
+        return -1;
+    }
+    if (pf_window_native(w) != kind) {
+        pf_window_set_native(w, kind);
+        f->native_generation++;
+        f->dirty = 1;
+    }
+    return 0;
+}
+
+uint64_t pf_frame_native_generation(const pf_frame *f) {
+    return f->native_generation;
+}
+
+size_t pf_frame_native_count(const pf_frame *f) {
+    size_t n = 0;
+    for (size_t i = 0; i < f->count; i++) {
+        n += pf_window_native(f->entries[i].w) != 0;
+    }
+    return n;
+}
+
+int pf_frame_native_get(const pf_frame *f, size_t i, pf_native_placement *out) {
+    for (size_t k = 0; k < f->count; k++) {
+        const entry *e = &f->entries[k];
+        if (!pf_window_native(e->w)) {
+            continue;
+        }
+        if (i-- == 0) {
+            float r[4];
+            pf_window_body_rect(e->w, r);
+            *out = (pf_native_placement){e->tag, pf_window_native(e->w), e->x + r[0], e->y + r[1],
+                                         r[2], r[3], e->shown};
+            return 0;
+        }
+    }
+    return -1;
 }
 
 int pf_frame_set_text_scale(pf_frame *f, pf_window *w, float factor) {

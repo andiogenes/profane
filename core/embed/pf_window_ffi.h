@@ -47,6 +47,13 @@ int pf_frm_place_window(pf_handle frame, pf_handle win, float x, float y, float 
 int pf_frm_select_window(pf_handle frame, pf_handle win);
 int pf_frm_set_text_scale(pf_handle frame, pf_handle win, float factor);
 
+/* Native-view windows (see pf_frame.h): KIND 0 makes WIN a text window again. */
+int pf_frm_set_window_native(pf_handle frame, pf_handle win, uint32_t kind);
+int64_t pf_frm_native_count(pf_handle frame);
+/* Field FIELD of the I-th native window's placement: 0-3 the body rect x, y, w, h, 4 shown,
+ * 5 kind, 6 the window's handle. Returns -1e9 if out of range. */
+double pf_frm_native_field(pf_handle frame, size_t i, int field);
+
 pf_handle pf_win_selected(void); /* the selected frame's selected window, or 0 */
 int pf_win_set_buffer(pf_handle win, pf_handle buf, uint32_t point_marker);
 int64_t pf_win_top_line(pf_handle win);

@@ -422,6 +422,15 @@ the renderer tags the frame answering each event and records when it was submitt
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
   minibuffer reads input in this window (below).
+- **Native-view windows** (M2 item 7). `pf_window_set_native(kind)` (through `pf_frame_set_window_native`) makes a window leave
+  its body (everything but the mode line and divider) empty on the base layer: no text, fringes or cursor. The frame
+  reports native windows to the shell as placements (`pf_frame_native_get`: window tag, kind, body rect in frame
+  coordinates, shown) with a generation that moves when one appears, goes, moves, resizes or hides. `PFNativeViews`
+  keeps one AppKit view per native window in `nativeHost` (flipped, so frame coordinates apply; it takes no events
+  of its own) and syncs after each `pf-redisplay`. Kind numbers are the shell's view classes; Scheme names them with
+  `register-native-view-kind!` (`stub` = 1 is a placeholder panel that takes no events). Scheme:
+  `(set-window-native! w 'stub)`, `(window-native w)`; a native window keeps its buffer for the mode line, and
+  hidden-tab windows hide their view. Keys still go to the editor: input routing into views (web, PDF) comes with them.
 - **Canvas** (`(profane canvas)`, `core/display/pf_canvas`; M2 item 6). A canvas is a retained op list (rect, rounded rect
   filled or outlined, shadow, line, text) plus hit regions, shown as a **pop-up surface** on the overlay layer: the
   frame keeps the pop-up stack (`pf_frame_popup_show`), composes it into one transparent display list when a canvas

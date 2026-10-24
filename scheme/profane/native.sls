@@ -14,6 +14,7 @@
           %frm-height %frm-line-height %frm-cell-width %frm-strip-height %frm-set-tab-bar
           %frm-redisplay %frm-window-new %frm-window-delete %frm-place-window
           %frm-select-window %frm-set-text-scale
+          %frm-set-window-native %frm-native-count %frm-native-field
           %win-selected %win-set-buffer %win-top-line %win-set-top-line %win-body-lines
           %win-set-option %win-option %win-set-edges %win-set-mode-line %win-mode-line-height
           %win-hscroll %win-set-min-hscroll
@@ -76,6 +77,9 @@
     (unsigned-32 unsigned-32 float float float float boolean) int)
   (define-native %frm-select-window "pf_frm_select_window" (unsigned-32 unsigned-32) int)
   (define-native %frm-set-text-scale "pf_frm_set_text_scale" (unsigned-32 unsigned-32 float) int)
+  (define-native %frm-set-window-native "pf_frm_set_window_native" (unsigned-32 unsigned-32 unsigned-32) int)
+  (define-native %frm-native-count "pf_frm_native_count" (unsigned-32) integer-64)
+  (define-native %frm-native-field "pf_frm_native_field" (unsigned-32 size_t int) double)
   (define-native %win-selected "pf_win_selected" () unsigned-32)
   (define-native %win-set-buffer "pf_win_set_buffer" (unsigned-32 unsigned-32 unsigned-32) int)
   (define-native %win-top-line "pf_win_top_line" (unsigned-32) integer-64)
