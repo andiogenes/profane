@@ -164,8 +164,10 @@ and the consult/corfu parts listed above; check §9 before choosing the next ite
   check: hold a key (it should repeat) and, after `(var-set! 'press-and-hold-keys '("e"))`, hold `e` (picker expected).
   Branch `m2-press-and-hold`, cut from `m2-keymaps`.
 
-- **Owner checks pending:** (the CJK input method check is dropped: the owner does not use those languages.) A real macOS dark-mode toggle: verified only via `(appearance-changed! 'dark)`
-  and `(load-theme 'profane-dark)`.
+- **Owner checks:** the CJK input method check is dropped (the owner does not use those languages). The live macOS
+  dark-mode toggle was checked on 2026-10-24 with the app running: Dark at launch, then Light, then Dark, each time
+  `current-appearance`, the theme and the default and mode-line face colors followed. Checked from Scheme state, not
+  pixels; a look at the window while toggling would still be worth a glance.
 - **Unexplained latency outlier:** one 100k-line benchmark run in item 2 had a single 899 ms commit sample. In item 4
   it showed again (≈900 ms max, 178 of 200 samples) in three back-to-back runs that the owner backgrounded while
   using the machine; the same configurations rerun with nothing else going on stayed under 6 ms max (five runs).
