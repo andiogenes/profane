@@ -23,7 +23,7 @@
           %cvs-hit-test %cvs-text-width %cvs-text-height %cvs-popup-show %cvs-popup-hide
           %cvs-popup-shown %cvs-frame-hit %cvs-hit-canvas %cvs-hit-cursor %cvs-overlay-redisplay
           %cvs-set-window %cvs-window-body %cvs-hit-x %cvs-hit-y
-          %input-set-prefix-pending %input-set-press-and-hold
+          %input-set-prefix-pending %input-set-press-and-hold %input-set-busy
           %face-define %face-role-set %buf-put-prop %buf-get-prop %display-set-line-spacing)
   (import (chezscheme))
 
@@ -136,6 +136,7 @@
   (define-native %cvs-hit-x "pf_cvs_hit_x" () double)
   (define-native %cvs-hit-y "pf_cvs_hit_y" () double)
   (define-native %input-set-prefix-pending "pf_input_set_prefix_pending" (boolean) void)
+  (define-native %input-set-busy "pf_input_set_busy" (boolean) void)
   (define-native %input-set-press-and-hold "pf_input_set_press_and_hold" (u8* size_t) void)
   (define-native %face-define "pf_face_define"
     (unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32 unsigned-32) void)

@@ -28,10 +28,11 @@ milestone's area, leave a seam, not an implementation.
 owner-port gaps wait on other milestones: consult's imenu and xref (modes and tree-sitter, M5), ripgrep and find (M3),
 neotree and the buffer menu (listing and tree views).
 
-**Known gaps:** the full list, with what each waits for, is `profane-plan.md` §8j. The one every agent must know:
-`C-g` cannot interrupt a busy Scheme loop (a mistyped `(let loop () (loop))` in `M-:` hangs the editor); it needs
-engines (plan §0) and is **required before M4**. Also: held keys repeat because press-and-hold is off
-(`press-and-hold-keys` turns it on per key), and macOS capture rules are under "Traps" below.
+**Known gaps:** the full list, with what each waits for, is `profane-plan.md` §8j. Two things every agent must know:
+commands run in engines, so `C-g` interrupts a runaway command (see the Engines entry in §8i), but socket REPL
+evaluations and hooks outside commands are not sliced, so don't evaluate an unbounded loop over `profane-client`; and
+held keys repeat because press-and-hold is off (`press-and-hold-keys` turns it on per key). macOS capture rules are
+under "Traps" below.
 
 ## Commands
 
@@ -158,6 +159,9 @@ clang-format -i <files>                                 # format C / ObjC (brew 
   (commands, bindings, modes, themes, hooks) must be invoked explicitly: `scheme/boot.ss` and each test do
   `(invoke-library '(profane simple))` etc. Add new registering libraries to that list in `boot.ss` and import
   and invoke them in any test that needs their commands (M-x in a test needs `(profane complete)`).
+- **Commands run in engines** (`(profane command-loop)`): a command may be suspended between slices and its
+  `with-current-buffer` is undone while it waits. Don't keep other global state that must stay set across a command
+  without restoring it on resume; abort drops a command without unwinding anything but `dynamic-wind` exits already run.
 - **Chez evaluates procedure arguments in any order.** `(string-append (feed!) (finish!))` ran the second first;
   sequence side effects with `let*`.
 - **`float` foreign arguments must be flonums.** Scheme wrappers coerce with `inexact` (see `(profane canvas)`);

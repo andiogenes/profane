@@ -17,6 +17,25 @@ void pf_app_beep(void) {
     NSBeep();
 }
 
+/* Runs the next time slice of a command that outlived its first (see (profane command-loop)). It
+ * is a main-queue block, so the event loop runs between slices and C-g can reach Scheme. The
+ * view is redrawn from time to time, so a long command shows its progress. */
+void pf_app_schedule_resume(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        pf_scheme_call("pf-resume", NULL, 0, NULL);
+        static CFAbsoluteTime last;
+        CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+        if (now - last > 0.05) {
+            last = now;
+            for (NSWindow *w in NSApp.windows) {
+                if ([w.contentView isKindOfClass:ProfaneView.class]) {
+                    [(ProfaneView *)w.contentView redisplay];
+                }
+            }
+        }
+    });
+}
+
 int PFSchemeBoot(void) {
     NSString *resources = NSBundle.mainBundle.resourcePath;
     NSString *bootDir = [resources stringByAppendingPathComponent:@"boot"];
@@ -24,6 +43,7 @@ int PFSchemeBoot(void) {
     static const pf_scheme_symbol symbols[] = {
         {"pf_app_quit", (void *)pf_app_quit},
         {"pf_app_beep", (void *)pf_app_beep},
+        {"pf_app_schedule_resume", (void *)pf_app_schedule_resume},
         {"pf_app_latency_report", (void *)pf_app_latency_report},
         {"pf_app_latency_reset", (void *)pf_app_latency_reset},
     };

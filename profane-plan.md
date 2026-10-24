@@ -436,6 +436,19 @@ the renderer tags the frame answering each event and records when it was submitt
   partner over itself skips it, a region is wrapped (kept inside), DEL between an empty pair deletes both, an opener
   is not paired before a word character and a quote not next to one; no syntax table yet, so a quote typed inside a
   string after a space pairs (M5), and RET between a pair does not open an extra line (no indentation yet).
+- **Engines: `C-g` interrupts a runaway command** (after M2). Every command, with its post-command work, runs in a Chez engine
+  with `command-slice-ticks` procedure calls (500000, a few ms) per slice. Nearly every command finishes in its first
+  slice and nothing changes. One that does not is *suspended* and `pf-key` returns: `pf_input_busy` goes up and Scheme asks
+  the shell (`pf_app_schedule_resume`, a main-queue block) for the next slice (`pf-resume`), so the event loop runs between
+  slices; the view is redrawn every 50 ms meanwhile. While suspended, `C-g` aborts the command, drops the typeahead and
+  says "Quit"; any other key or text waits in a queue and runs, in order, after the command ends; mouse events are
+  ignored. Engines suspend with their `dynamic-wind` exits run (a `with-current-buffer` is undone while the command waits and
+  re-entered on resume, with the buffer saved at suspension re-selected), so aborting is just dropping the engine. Commands
+  run by commands (M-x, avy, transient actions) share the outer slice. Verified: `command-test.ss` (slicing, typeahead, abort,
+  buffer state), `test_scheme.c` (the busy flag and `pf-resume`), and the running app (REPL answers in 2 ms while a command
+  spins at 98% CPU; a real `C-g` from `post_keys` ends it). Latency is unchanged: key-to-commit p95 2.05 ms with one window
+  (was 2.0) and 3.54 ms with four windows on a 100k-line buffer (was 3.9). A command running an expensive but finite
+  computation now spans several slices, which is harmless.
 - **File names** (`(profane files)`, M2). `expand-file-name` (`~`, relative names from a directory, `.`/`..`, repeated slashes, trailing
   slash kept), `abbreviate-file-name`, `file-name-directory`/`-nondirectory`, `directory-entries`, the buffer-local
   `default-directory` (else the visited file's directory, else `~/`), and `read-file-name`: `completing-read` over the
@@ -496,9 +509,9 @@ the renderer tags the frame answering each event and records when it was submitt
   comments and knows strings, character literals and quote prefixes; inside a list it takes the inner form), `eval-region`
   and `eval-buffer` (by `M-x`). Code runs in the interaction environment, as for the socket REPL; results and printed
   output go to the echo area and *Messages*, an error shows its message. *Deferred:* `load-file` (needs file-name
-  reading, M3), interrupting a looping evaluation with `C-g` (needs engines: it blocks the editor today), `C-u C-x C-e`
+  reading, M3), `C-u C-x C-e`
   inserting the value, `eval-print-last-sexp`, `eval-defun` (`C-M-x`, needs defun motion), a REPL buffer (comint-style,
-  with history and completion: with the REPL modes in M10). Needed before the M4 dogfood milestone: interruption.
+  with history and completion: with the REPL modes in M10). A looping evaluation can be interrupted with `C-g` (engines, above).
 - **Press-and-hold** (fix after M2 item 8). macOS shows its accent picker for a held letter in any view that is an
   `NSTextInputClient`, so held keys did not repeat. The app now sets `ApplePressAndHoldEnabled` to NO at launch and,
   for each plain key sent through the input method, sets it for that key: on only if Scheme listed the key in
@@ -557,7 +570,7 @@ the renderer tags the frame answering each event and records when it was submitt
   quit history`; collections may be procedures (dynamic/async sources). RET takes the selected candidate, M-RET the
   input as typed, TAB completes, C-n/C-p select, M-p/M-n history, C-g aborts. One minibuffer at a time. Commands: `M-x`,
   `C-x b`, `C-x k`, `C-x t RET`. New `post-command-hook`. Not yet: directory keys and file reading, consult sources,
-  `completion-preselect 'nearest` (the `preselect` option is the seam), interrupting a busy loop with `C-g` (engines).
+  `completion-preselect 'nearest` (the `preselect` option is the seam).
 - **Chrome**: fringes of `ui-fringe-width` (fringe face); a 1 pt divider (`vertical-border`) on windows with a
   neighbor to the right; glyphs that would cross the right edge are not drawn (truncation). Without a mode line
   under it a window draws only whole rows, since a partial row would land in the window below.
@@ -600,8 +613,11 @@ waits for. Keep this list current: remove an entry when it is done, add one when
 
 **Deferred, by area:**
 
-- `C-g` cannot interrupt a busy Scheme loop (a mistyped `(let loop () (loop))` in `M-:` hangs the editor): needs
-  engines (plan §0). **Required before M4.**
+- Interruption covers commands (and their post-command hooks) only. Not yet sliced: socket REPL evaluations (a looping
+  `profane-client --eval` still hangs the editor; kill the client), `pre-redisplay-hook` and other hooks run outside a
+  command, timers and callbacks from C. Nothing can interrupt a single long foreign call. Aborting drops a suspended
+  command without running its cleanup other than the `dynamic-wind` exits already run at suspension; user `guard`s cannot
+  catch the abort.
 - Evaluating: `load-file` (file-name reading, M3), `eval-defun`/`C-M-x` (defun motion, M5), `C-u C-x C-e`
   inserting the value, a REPL buffer with history and completion (M10).
 - Region: `delete-selection-mode`, `shift-select-mode`, a mark ring, `C-SPC C-SPC`, showing it in non-selected windows.

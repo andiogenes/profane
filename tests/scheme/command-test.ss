@@ -190,5 +190,73 @@
 (test-equal "a numeric argument inserts plainly" "(((" (buffer-string))
 (set-minor-mode! 'electric-pair-mode #f)
 
+;; ---- commands that outlive their slice (engines) ----
+(var-set! 'command-slice-ticks 3000)
+(define counted 0)
+(register-command! 'test-count
+  (lambda () (let loop ([i 0]) (set! counted i) (when (< i 60000) (loop (+ i 1))))) "")
+(register-command! 'test-spin (lambda () (let loop () (loop))) "")
+(define scratch-b (generate-new-buffer "engine-target"))
+(define other-b (generate-new-buffer "engine-other"))
+(register-command! 'test-wcb
+  (lambda () (with-current-buffer other-b (let loop ([i 0]) (when (< i 60000) (loop (+ i 1)))) (insert "x"))) "")
+(define-key! (global-map) "<f9>" 'test-count)
+(define-key! (global-map) "<f10>" 'test-spin)
+(define-key! (global-map) "<f11>" 'test-wcb)
+(define (finish!) (let loop ([n 0]) (when (and (command-busy?) (< n 100000)) (resume-busy!) (loop (+ n 1)))))
+
+(set-buffer scratch-b)
+(keys "<f9>")
+(test-assert "a long command is suspended after its slice" (command-busy?))
+(test-assert "partway" (< 0 counted 60000))
+(finish!)
+(test-assert "and finishes over more slices" (and (not (command-busy?)) (= counted 60000)))
+(test-eq "its post-command work ran" 'test-count (last-command))
+
+;; typeahead waits and runs in order, afterwards
+(erase-buffer)
+(keys "<f9>")
+(handle-text "a")
+(handle-key "C-f")
+(handle-text "b")
+(test-equal "nothing is inserted while it runs" "" (buffer-string))
+(finish!)
+(test-equal "the typeahead ran afterwards, in order" "ab" (buffer-string))
+
+;; C-g aborts and drops the typeahead
+(erase-buffer)
+(keys "<f10>")
+(test-assert "spinning" (command-busy?))
+(handle-text "zzz")
+(resume-busy!)
+(test-assert "still spinning after another slice" (command-busy?))
+(handle-key "C-g")
+(test-assert "C-g aborts it" (not (command-busy?)))
+(test-equal "says so" "Quit" (current-message))
+(test-equal "and throws the typeahead away" "" (buffer-string))
+(test-eqv "nothing left to resume" #f (begin (resume-busy!) (command-busy?)))
+(handle-text "ok")
+(test-equal "editing works again" "ok" (buffer-string))
+
+;; with-current-buffer is undone while suspended, and restored on resume
+(erase-buffer)
+(keys "<f11>")
+(test-assert "suspended inside with-current-buffer" (command-busy?))
+(test-eq "the current buffer is back to the original meanwhile" scratch-b (current-buffer))
+(finish!)
+(test-equal "the command inserted into the other buffer when it resumed" "x"
+  (with-current-buffer other-b (buffer-string)))
+(test-equal "and not here" "" (buffer-string))
+
+;; aborting inside with-current-buffer leaves the original current
+(keys "<f11>")
+(handle-key "C-g")
+(test-eq "abort leaves the buffer alone" scratch-b (current-buffer))
+
+;; ordinary commands never suspend
+(var-set! 'command-slice-ticks 500000)
+(keys "C-a")
+(test-assert "ordinary commands do not" (not (command-busy?)))
+
 (test-end "command")
 (test-exit)

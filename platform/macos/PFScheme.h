@@ -15,4 +15,7 @@ void pf_app_quit(void);
 /* Foreign entry: the system alert sound (unbound keys, failed commands). */
 void pf_app_beep(void);
 
+/* Foreign entry: calls pf-resume from the main queue (the next slice of a long command). */
+void pf_app_schedule_resume(void);
+
 NS_ASSUME_NONNULL_END

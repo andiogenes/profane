@@ -83,6 +83,25 @@ int main(void) {
     check_repl(1, "(var-set! 'press-and-hold-keys '())\n", "()\n");
     PF_CHECK(pf_input_press_and_hold("e") == 0);
 
+    /* A command that outlives its slice leaves the shell's busy flag up; pf-resume runs the next
+     * slice, and C-g (a key, the only one acted on meanwhile) ends it. */
+    PF_CHECK(pf_input_busy() == 0);
+    check_repl(1,
+               "(begin (register-command! 'spin (lambda () (let loop () (loop))) \"\")\n"
+               "       (define-key! (global-map) \"<f10>\" 'spin)\n"
+               "       (var-set! 'command-slice-ticks 20000)\n"
+               "       (handle-key \"<f10>\")\n"
+               "       (command-busy?))\n",
+               "#t\n");
+    PF_CHECK(pf_input_busy() == 1);
+    PF_CHECK(pf_scheme_call("pf-resume", NULL, 0, NULL) == 0);
+    PF_CHECK(pf_input_busy() == 1); /* still spinning */
+    check_repl(1, "(begin (handle-key \"a\") (command-busy?))\n", "#t\n"); /* queued, not run */
+    check_repl(1, "(begin (handle-key \"C-g\") (list (command-busy?) (current-message)))\n", "(#f \"Quit\")\n");
+    PF_CHECK(pf_input_busy() == 0);
+    PF_CHECK(pf_scheme_call("pf-resume", NULL, 0, NULL) == 0); /* nothing to resume: harmless */
+    check_repl(1, "(var-set! 'command-slice-ticks 500000)\n", "500000\n");
+
     /* Startup scripts: the shipped init.ss binds the owner's keys; a failing user init.ss is
      * reported and does not stop startup. */
     char user_init[] = "/tmp/pf-init-XXXXXX";

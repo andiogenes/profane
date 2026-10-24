@@ -68,6 +68,10 @@
 (define (pf-key key) (handle-key key))
 (define (pf-insert-text text) (handle-text text))
 
+;;; The next time slice of a command that outlived its first (see (profane command-loop)); the
+;;; shell calls this from its event loop until the command is done or aborted with C-g.
+(define (pf-resume) (resume-busy!))
+
 ;;; Key-to-pixel latency of the main view (see pf_renderer_latency): a printable report.
 (define (latency-report)
   (let* ([report (foreign-procedure "pf_app_latency_report" (u8* size_t) size_t)]
@@ -87,14 +91,15 @@
 ;;; Mouse events from the shell, as one string: "down|drag|up X Y CLICKS" (points, top-left
 ;;; origin) and "scroll X Y DX DY PRECISE". See (profane mouse).
 (define (pf-mouse text)
-  (let ([parts (let loop ([cs (string->list text)] [cur '()] [out '()])
+  (unless (command-busy?)
+   (let ([parts (let loop ([cs (string->list text)] [cur '()] [out '()])
                  (cond [(null? cs) (reverse (if (null? cur) out (cons (list->string (reverse cur)) out)))]
                        [(char=? (car cs) #\space) (loop (cdr cs) '() (if (null? cur) out (cons (list->string (reverse cur)) out)))]
                        [else (loop (cdr cs) (cons (car cs) cur) out)]))])
     (let ([kind (string->symbol (car parts))] [nums (map string->number (cdr parts))])
       (if (eq? kind 'scroll)
           (handle-scroll (car nums) (cadr nums) (caddr nums) (cadddr nums) (not (zero? (list-ref nums 4))))
-          (handle-mouse kind (car nums) (cadr nums) (caddr nums))))))
+          (handle-mouse kind (car nums) (cadr nums) (caddr nums)))))))
 
 ;;; Called by the shell before each redisplay: layout, mode lines, echo area, tab bar.
 (define (pf-redisplay) (redisplay-prepare!))

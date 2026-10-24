@@ -11,7 +11,8 @@
 (library (profane command-loop)
   (export handle-key handle-text last-input-text pending-keys self-insert-amalgamation
           set-transient-map exit-transient-map! clear-transient-map! transient-map-active?
-          set-input-buffer-function! set-key-reader!)
+          set-input-buffer-function! set-key-reader!
+          command-busy? resume-busy! abort-busy!)
   (import (chezscheme) (profane native) (profane buffer) (profane window) (profane keymap)
           (profane mode) (profane command) (profane hook) (profane var))
 
@@ -134,6 +135,83 @@
                          (current-active-maps))])
       (and (pair? maps) (or (lookup-key (car maps) keys) (loop (cdr maps))))))
 
+  ;; ---- commands that outlive their time slice ----
+  ;; Each command (with its post-command work) runs in a Chez engine that is allowed
+  ;; `command-slice-ticks` procedure calls at a time. Almost every command finishes in its first
+  ;; slice and nothing changes. One that does not is suspended and the call returns: the shell
+  ;; runs its event loop and calls resume-busy! (via pf-resume) for the next slice, so C-g, the
+  ;; one key still read meanwhile, can abort it (abort-busy!, plan §0). Other keys and text typed
+  ;; meanwhile wait in a queue and run, in order, once the command is done; C-g throws that
+  ;; typeahead away, as in Emacs. A suspended command's dynamic-wind exits have already run (with-
+  ;; current-buffer is undone), and abort just drops the rest of it. Commands run from inside a
+  ;; command (M-x, avy, transient actions) share its slice.
+  (defvar command-slice-ticks 500000
+    "Procedure calls a command may make before the editor checks for C-g (about a few ms).")
+
+  (define suspended #f)      ; the engine of a command waiting for its next slice, or #f
+  (define in-command #f)     ; a slice is running
+  (define saved-buffer #f)   ; the current buffer when the command was suspended
+  (define input-queue '())   ; (key . "C-x") and (text . "ab") typed while suspended, in order
+  (define resume-scheduled #f)
+
+  (define (command-busy?) (and suspended #t))
+
+  (define (schedule-resume!)
+    (unless resume-scheduled
+      (set! resume-scheduled #t)
+      (when (foreign-entry? "pf_app_schedule_resume")
+        ((foreign-procedure "pf_app_schedule_resume" () void)))))
+
+  (define (slice!)
+    (let ([e suspended] [was-busy (and suspended #t)])
+      (set! suspended #f)
+      (set! in-command #t)
+      (e (var-ref 'command-slice-ticks)
+         (lambda (ticks . vals)
+           (set! in-command #f)
+           (when was-busy (%input-set-busy #f))
+           (drain-queue!))
+         (lambda (e2)
+           (set! in-command #f)
+           (set! suspended e2)
+           (set! saved-buffer (current-buffer))
+           (%input-set-busy #t)
+           (schedule-resume!)))))
+
+  (define (run-in-engine thunk)
+    (if in-command
+        (thunk)
+        (begin (set! suspended (make-engine thunk)) (slice!))))
+
+  ;; The next slice of the suspended command, if any.
+  (define (resume-busy!)
+    (set! resume-scheduled #f)
+    (when suspended
+      (when (and saved-buffer (buffer-live? saved-buffer)) (set-buffer saved-buffer))
+      (slice!)))
+
+  ;; C-g while a command is suspended: drop it and the typeahead.
+  (define (abort-busy!)
+    (set! suspended #f)
+    (set! input-queue '())
+    (%input-set-busy #f)
+    (set-pending! '())
+    (set! arg-pending #f)
+    (set! arg-digits? #f)
+    (set! insert-run 0)
+    (%set-prefix-arg! #f)
+    (%set-last-command! #f)
+    (beep)
+    (message "Quit"))
+
+  (define (drain-queue!)
+    (let loop ()
+      (when (and (pair? input-queue) (not suspended))
+        (let ([event (car input-queue)])
+          (set! input-queue (cdr input-queue))
+          (if (eq? (car event) 'key) (process-key (cdr event)) (process-text (cdr event)))
+          (loop)))))
+
   (define (run-command name)
     (let ([proc (command-procedure name)])
       ;; A run ends at another command, after self-insert-amalgamation characters, or when the
@@ -149,15 +227,17 @@
       (set! arg-digits? #f)
       (%set-this-command! name)
       (let ([edited-buffer (current-buffer)] [edits (buffer-edit-count)])
-        (guard (c [else (report name c)])
-          (if proc (proc) (error name "no such command")))
-        (when (and (buffer-live? edited-buffer)
-                   (with-current-buffer edited-buffer (not (= edits (buffer-edit-count)))))
-          (with-current-buffer edited-buffer (var-set! 'mark-active #f))))
-      (%set-prefix-arg! #f)
-      (%set-last-command! name)
-      (guard (c [else (report 'post-command-hook c)])
-        (run-hooks 'post-command-hook))))
+        (run-in-engine
+         (lambda ()
+           (guard (c [else (report name c)])
+             (if proc (proc) (error name "no such command")))
+           (when (and (buffer-live? edited-buffer)
+                      (with-current-buffer edited-buffer (not (= edits (buffer-edit-count)))))
+             (with-current-buffer edited-buffer (var-set! 'mark-active #f)))
+           (%set-prefix-arg! #f)
+           (%set-last-command! name)
+           (guard (c [else (report 'post-command-hook c)])
+             (run-hooks 'post-command-hook)))))))
 
   ;; ---- prefix argument keys, handled by the loop itself ----
 
@@ -196,7 +276,13 @@
        #t]
       [else #f]))
 
+  ;; Keys arrive here; while a command is suspended only C-g is acted on, the rest is queued.
   (define (handle-key key)
+    (if (and suspended (not in-command))
+        (if (equal? key "C-g") (abort-busy!) (set! input-queue (append input-queue (list (cons 'key key)))))
+        (process-key key)))
+
+  (define (process-key key)
     (select-window-buffer)
     (when (current-message) (message #f))
     (cond
@@ -238,6 +324,11 @@
   ;; Scheme as text through the input method, not as keys). Inside a key sequence (after C-x,
   ;; or with a transient map) text is keys: C-x u used to insert "u".
   (define (handle-text text)
+    (if (and suspended (not in-command))
+        (set! input-queue (append input-queue (list (cons 'text text))))
+        (process-text text)))
+
+  (define (process-text text)
     (select-window-buffer)
     (cond
       [(or (pair? pending) transient key-reader)

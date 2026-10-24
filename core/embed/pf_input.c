@@ -13,6 +13,16 @@ int pf_input_prefix_pending(void) {
     return prefix_pending;
 }
 
+static int busy;
+
+void pf_input_set_busy(int b) {
+    busy = b != 0;
+}
+
+int pf_input_busy(void) {
+    return busy;
+}
+
 static char *hold_keys; /* "\ne\na\n": every key wrapped in newlines, so a lookup is a substring */
 
 void pf_input_set_press_and_hold(const char *keys, size_t len) {
