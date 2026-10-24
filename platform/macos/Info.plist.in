@@ -22,6 +22,8 @@
 	<string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>${CMAKE_OSX_DEPLOYMENT_TARGET}</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>profane runs the AppleScript you evaluate in it, which can control other apps.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>

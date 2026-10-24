@@ -228,6 +228,7 @@ clang-format -i <files>                                 # format C / ObjC (brew 
 | FFI veneers | `core/embed/pf_*_ffi.*`, `pf_handles.*`, `pf_scheme.*`, `pf_input.*` |
 | Metal renderer, glyph atlas, view stack, native views, keys/IME, fonts, shaper | `platform/macos/PF*.m`, `ProfaneView.m`, `Shaders.metal` (§8b, §8d, §8e) |
 | Async queue (events posted from other threads, timers) | `core/async/pf_async.*`, `(profane async)` (§8k) |
+| macOS services: pasteboard, open URL/file, AppleScript, other apps' window bounds | `platform/macos/PFMacOS.*`, `(profane macos)` (§8k) |
 | Child processes and ptys | `core/process/pf_process.*`, `(profane process)` (§8k) |
 | Scheme libraries | `scheme/profane/*.sls`: async, buffer, window, tab-bar, ace-window, transpose-frame, var, hook, keymap, face, command, mode, command-loop, simple, minibuffer, complete, canvas, eval, display, theme, themes, native, repl |
 | Boot, C→Scheme entry points (`pf-key`, `pf-insert-text`, `pf-startup`, `pf-redisplay`, …), init files | `scheme/boot.ss`, `scheme/init.ss` |

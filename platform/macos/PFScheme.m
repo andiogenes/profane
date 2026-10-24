@@ -2,6 +2,7 @@
 
 #import <AppKit/AppKit.h>
 
+#import "PFMacOS.h"
 #import "ProfaneView.h"
 
 #include "pf_async.h"
@@ -54,6 +55,13 @@ int PFSchemeBoot(void) {
         {"pf_app_quit", (void *)pf_app_quit},
         {"pf_app_beep", (void *)pf_app_beep},
         {"pf_app_schedule_resume", (void *)pf_app_schedule_resume},
+        {"pf_app_stash_copy", (void *)pf_app_stash_copy},
+        {"pf_app_pasteboard_string", (void *)pf_app_pasteboard_string},
+        {"pf_app_pasteboard_set", (void *)pf_app_pasteboard_set},
+        {"pf_app_pasteboard_count", (void *)pf_app_pasteboard_count},
+        {"pf_app_open_url", (void *)pf_app_open_url},
+        {"pf_app_applescript", (void *)pf_app_applescript},
+        {"pf_app_window_bounds", (void *)pf_app_window_bounds},
         {"pf_app_latency_report", (void *)pf_app_latency_report},
         {"pf_app_latency_reset", (void *)pf_app_latency_reset},
     };

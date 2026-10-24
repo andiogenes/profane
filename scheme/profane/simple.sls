@@ -3,7 +3,7 @@
 
 (library (profane simple)
   (export kill-ring kill-new current-kill)
-  (import (chezscheme) (profane buffer) (profane keymap) (profane command)
+  (import (chezscheme) (profane macos) (profane buffer) (profane keymap) (profane command)
           (profane command-loop) (profane var) (profane mode))
 
   (define (n) (prefix-numeric-value))
@@ -130,27 +130,60 @@
       (unless m (error 'region "the mark is not set now, so there is no region"))
       (values (min m (point)) (max m (point)))))
 
-  ;; ---- kill ring (within profane; the macOS pasteboard joins in M3, (profane macos)) ----
+  ;; ---- kill ring, joined with the macOS pasteboard (as Emacs's select-enable-clipboard) ----
+  ;; A kill is also put on the pasteboard; a yank first takes in what another app put there since
+  ;; (once: the change count tells). Both go through (profane macos), which has no pasteboard
+  ;; in the tests unless they install a fake one.
 
   (define kill-ring-max-registered
     (define-variable 'kill-ring-max 120 "Maximum length of the kill ring."))
+  (define select-enable-clipboard-registered
+    (define-variable 'select-enable-clipboard #t
+      "Whether kills go to the macOS pasteboard and yanks take in what other apps copied."))
   (define kills '())
   (define yank-index 0)
-  (define (kill-ring) kills)
+  (define clip-count #f) ; the pasteboard's change count when the ring last wrote or read it
 
-  (define (kill-new text)
+  (define (push-kill! text)
     (set! kills (cons text kills))
     (when (> (length kills) (var-ref 'kill-ring-max))
       (set! kills (list-head kills (var-ref 'kill-ring-max))))
     (set! yank-index 0))
 
+  (define (cut-to-pasteboard! text)
+    (when (var-ref 'select-enable-clipboard)
+      (let ([count (pasteboard-set! text)])
+        (when count (set! clip-count count)))))
+
+  (define (paste-from-pasteboard!)
+    (when (var-ref 'select-enable-clipboard)
+      (let ([count (pasteboard-change-count)])
+        (when (and count (not (eqv? count clip-count)))
+          (set! clip-count count)
+          (let ([text (pasteboard-string)])
+            (when (and text (not (string=? text ""))
+                       (or (null? kills) (not (string=? text (car kills)))))
+              (push-kill! text)))))))
+
+  ;; The ring, newest first, after taking in what another app copied.
+  (define (kill-ring)
+    (when (= yank-index 0) (paste-from-pasteboard!))
+    kills)
+
+  (define (kill-new text)
+    (push-kill! text)
+    (cut-to-pasteboard! text))
+
   ;; Consecutive kills append to the last kill, as in Emacs.
   (define (kill-append text before?)
     (if (and (memq (last-command) '(kill-region kill-line)) (pair? kills))
-        (set-car! kills (if before? (string-append text (car kills)) (string-append (car kills) text)))
+        (begin
+          (set-car! kills (if before? (string-append text (car kills)) (string-append (car kills) text)))
+          (cut-to-pasteboard! (car kills)))
         (kill-new text)))
 
   (define (current-kill)
+    (when (= yank-index 0) (paste-from-pasteboard!))
     (when (null? kills) (error 'yank "kill ring is empty"))
     (list-ref kills (mod yank-index (length kills))))
 

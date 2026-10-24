@@ -39,6 +39,7 @@ add_executable(profane MACOSX_BUNDLE
   PFFont.m
   PFGlyphAtlas.m
   PFKeys.m
+  PFMacOS.m
   PFMetalRenderer.m
   PFNativeViews.m
   PFReplServer.m

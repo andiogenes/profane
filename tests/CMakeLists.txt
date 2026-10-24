@@ -97,9 +97,12 @@ add_test(NAME macos.signing
 add_test(NAME macos.repl
   COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/macos/repl.sh" "$<TARGET_BUNDLE_DIR:profane>"
     "$<TARGET_FILE:profane-client>")
+add_test(NAME macos.macos
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/macos/macos.sh" "$<TARGET_BUNDLE_DIR:profane>"
+    "$<TARGET_FILE:profane-client>")
 add_test(NAME macos.snapshot
   COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/macos/snapshot.sh" "$<TARGET_BUNDLE_DIR:profane>")
-set_tests_properties(macos.signing macos.repl macos.snapshot PROPERTIES LABELS macos TIMEOUT 60)
+set_tests_properties(macos.signing macos.repl macos.macos macos.snapshot PROPERTIES LABELS macos TIMEOUT 60)
 
 # On-screen checks (label: screen), opt-in via PROFANE_SCREEN_TESTS=1: need Screen Recording.
 add_executable(png_ink macos/png_ink.m)

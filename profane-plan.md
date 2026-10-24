@@ -364,7 +364,7 @@ the renderer tags the frame answering each event and records when it was submitt
   mode; global) and a map falls back to its parent, so a mode can extend `C-x` without hiding global `C-x` keys.
 - Everything is keyed by symbol; keys bind command names. Registering libraries must be invoked explicitly
   (`invoke-library`), since Chez only runs a library body when one of its variables is first used.
-- The kill ring is profane-internal for now; the macOS pasteboard joins with `(profane macos)` (M3).
+- The kill ring shares the macOS pasteboard through `(profane macos)` (M3, §8k item 3).
 
 ## 8g. Faces and text properties (M2)
 
@@ -633,7 +633,7 @@ waits for. Keep this list current: remove an entry when it is done, add one when
 - Undo restores text but not its text properties (fine once highlighting re-runs); undo history is unbounded.
 - Text properties use arrays (O(runs) per edit); switch to a tree when tree-sitter makes runs dense (M5).
 - show-paren counts brackets without syntax (strings and comments count) until M5.
-- The kill ring is profane-internal; the macOS pasteboard joins with `(profane macos)` (M3).
+- The kill ring shares the macOS pasteboard through `(profane macos)` (M3, §8k item 3).
 - Lines are truncated, not wrapped; windows scroll sideways to keep point visible. Soft wrap is M4. At most 4096
   characters per line are shaped.
 - No CI. `tests/macos/latency.sh` is the CI latency benchmark the plan asks for, once there is macOS CI.
@@ -698,6 +698,29 @@ languages.
   SIGTERM, grandchild pipe, pty size/echo; also clean under ASan and TSan), `process-test.ss` (34 checks, incl. a 5 MB flood
   delivered whole and `await` parking a command), and the running app (a `run-process` result through the wake hook). Not
   verified: many simultaneous processes, interactive programs on the pty beyond `stty`/`read`.
+
+**Item 3: `(profane macos)` and the pasteboard** (`platform/macos/PFMacOS.*`, `scheme/profane/macos.sls`). Decisions:
+
+- **Kill ring and pasteboard** behave as Emacs with `select-enable-clipboard` (a variable, default on): a kill (and each
+  appended kill) is written to the pasteboard; a yank, and reading `kill-ring`, first take in what another app copied since,
+  once, decided by the pasteboard's change count (our own writes are recorded so they are not read back; an empty or
+  identical string is ignored). The pasteboard sits behind a swappable backend (`set-pasteboard-backend!`), so the Scheme
+  suite tests the logic with a fake and without the shell. `$PROFANE_PASTEBOARD` names a private pasteboard: the app test
+  never touches the owner's clipboard. Only plain strings are exchanged (no rich text, images or file lists yet).
+- **Text-returning foreign calls keep their result** (a "stash") that Scheme copies out with `pf_app_stash_copy`, so it can
+  size its buffer without running a script twice. All of these are main-thread only.
+- `open-url` / `open-file` use `NSWorkspace openURL:configuration:`; `activate?` #f keeps the app in the background.
+- `run-applescript` runs `NSAppleScript` in process and **blocks the editor** until it ends (scripts to busy apps can hang
+  it: use `with timeout`); errors raise with the script's message. Needs the `com.apple.security.automation.apple-events`
+  entitlement and `NSAppleEventsUsageDescription` (both added; the first script to control another app asks the user, which
+  was not exercised: the tests only run scripts that touch no app).
+- `app-window-bounds` (by app name or pid) reads `CGWindowListCopyWindowInfo`: needs no permission, gives no titles
+  (those need Screen Recording). Setting another app's windows is not offered (the Twitch layout moves to a web buffer, §2).
+- **Verified**: `macos-test.ss` (23 checks, fake pasteboard: write, outside copy once, duplicates, empty, appends,
+  switch off, `C-y`), `macos.sh` (real pasteboard on a private board with non-ASCII text, kill ring round trip, AppleScript
+  result and error, bounds), and by hand: bounds for Finder and Safari by name and Finder by pid. **Not verified**:
+  actually opening a URL or file (it would launch an app and take focus; only the refusal of non-URLs is tested) and the
+  automation permission prompt.
 
 ## 9. Milestones
 
