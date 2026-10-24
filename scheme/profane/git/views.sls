@@ -51,7 +51,7 @@
   (define (hunk-section f h index)
     (new-section 'hunk (list 'hunk 'diff (git-diff-file-path f) index)
                  (list (cons (git-diff-hunk-header h) 'git-diff-hunk-heading))
-                 (map git-diff-line-segments (git-diff-hunk-lines h))
+                 (git-hunk-body-lines h)
                  '() #f
                  (make-git-item 'hunk 'diff (git-diff-file-path f) #f f h #f)))
 

@@ -111,6 +111,30 @@
 (let* ([f (car (git-diff dir #f))] [h (car (git-diff-file-hunks f))])
   (test-assert "\"\\ No newline\" lines are kept" (member "\\ No newline at end of file" (git-diff-hunk-lines h))))
 
+;; ---- word-level refinement ----
+(let-values ([(o n) (git-word-diff "let x = foo(a, b);" "let x = bar(a, b, c);")])
+  (test-equal "word diff: the changed word on the old side" '((8 . 11)) o)
+  (test-equal "and the changed word and the insertion on the new side" '((8 . 11) (16 . 19)) n))
+(let-values ([(o n) (git-word-diff "abc" "xyz")])
+  (test-equal "texts with nothing in common are not refined" '(() ()) (list o n)))
+(let-values ([(o n) (git-word-diff "same line" "same line")])
+  (test-equal "equal texts have no changes" '(() ()) (list o n)))
+(test-equal "refining a hunk: one removed line against one added"
+            '(() ((5 . 8)) ((5 . 6)) ())
+            (git-refine-lines '(" ctx" "-one two three" "+one 2 three" " end")))
+(test-equal "blocks of equal size are compared line by line"
+            '(((3 . 4)) ((3 . 4)) ((3 . 4)) ((3 . 4)))
+            (git-refine-lines '("-a b" "-c d" "+a B" "+c D")))
+(test-equal "blocks of different sizes are compared as a whole"
+            '(() ((6 . 8)))
+            (git-refine-lines '("-a b c" "+a b c d")))
+(test-equal "added or removed lines alone have nothing to compare" '(() ())
+            (git-refine-lines '("+only added" "+two")))
+(let ([r (git-refine-lines '("-foo bar" "-baz qux" "+foo BAR baz qux"))])
+  (test-equal "a whole-block comparison clips ranges to their lines: bar, not the next line" '((5 . 8)) (car r))
+  (test-equal "and leaves unchanged lines alone" '() (cadr r))
+  (test-assert "the added line has the changed word" (and (find (lambda (rg) (and (<= (car rg) 5) (>= (cdr rg) 8))) (caddr r)) #t)))
+
 ;; ---- patches: stage and unstage hunks and lines ----
 (sh "cd ~a && git reset -q --hard && printf 'a\\nb\\nc\\nd\\ne\\nf\\ng\\nh\\ni\\nj\\nk\\nl\\n' > p.txt && git add p.txt && git -c user.email=t@t -c user.name=t commit -q -m p && sed -i '' 's/^b$/B/; s/^c$/C/; s/^l$/L/' p.txt" dir)
 (define (staged-diff) (cadr (await (run-git dir '("diff" "--cached" "-U0")))))

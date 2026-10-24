@@ -22,6 +22,7 @@
           git-diff-hunk? git-diff-hunk-header git-diff-hunk-old-start git-diff-hunk-old-len
           git-diff-hunk-new-start git-diff-hunk-new-len git-diff-hunk-lines
           git-status git-diff git-diff-with git-log define-git-backend! git-backend-names
+          git-word-diff git-refine-lines
           git-hunk-patch git-hunk-region-patch git-apply-patch git-write-temp-file
           git-commit? git-commit-hash git-commit-short git-commit-subject git-commit-author
           git-commit-date git-commit-refs
@@ -266,6 +267,117 @@
           (loop (cdr ls) files dl header (close-hunk) (car ls) '())]
          [hh (loop (cdr ls) files dl header hunks hh (cons (car ls) hl))]
          [else (loop (cdr ls) files dl (cons (car ls) header) hunks hh hl)]))))
+
+  ;; ---- word-level refinement ----
+  ;; Which words changed inside a changed line, as Magit's hunk refinement shows them.
+
+  (define (word-char? c) (or (char-alphabetic? c) (char-numeric? c) (char=? c #\_)))
+
+  ;; The tokens of S as a vector of (start . end): runs of word characters, runs of whitespace,
+  ;; and single other characters.
+  (define (tokenize s)
+    (let ([n (string-length s)])
+      (let loop ([i 0] [out '()])
+        (if (>= i n)
+            (list->vector (reverse out))
+            (let* ([c (string-ref s i)]
+                   [same? (cond [(word-char? c) word-char?]
+                                [(char-whitespace? c) char-whitespace?]
+                                [else #f])]
+                   [j (if same?
+                          (let run ([j (+ i 1)]) (if (and (< j n) (same? (string-ref s j))) (run (+ j 1)) j))
+                          (+ i 1))])
+              (loop j (cons (cons i j) out)))))))
+
+  (define (token-string s t) (substring s (car t) (cdr t)))
+
+  ;; The character ranges of OLD and NEW that differ, as two lists of (start . end): the tokens
+  ;; outside a longest common subsequence of the two token lists. Two empty lists when the texts
+  ;; share nothing, or are too long to compare quickly.
+  (define (git-word-diff old new)
+    (let* ([ot (tokenize old)] [nt (tokenize new)]
+           [n (vector-length ot)] [m (vector-length nt)]
+           [same? (lambda (i j) (string=? (token-string old (vector-ref ot i)) (token-string new (vector-ref nt j))))]
+           [p (let loop ([k 0]) (if (and (< k n) (< k m) (same? k k)) (loop (+ k 1)) k))]
+           [q (let loop ([k 0]) (if (and (< k (- n p)) (< k (- m p)) (same? (- n 1 k) (- m 1 k))) (loop (+ k 1)) k))]
+           [a (- n p q)] [b (- m p q)])
+      (cond
+       [(> (* a b) 40000) (values '() '())]
+       [else
+        (let ([table (make-vector (+ a 1) #f)]
+              [omatch (make-vector n #f)] [nmatch (make-vector m #f)])
+          (do ([i 0 (+ i 1)]) ((> i a)) (vector-set! table i (make-vector (+ b 1) 0)))
+          ;; table[i][j]: LCS length of the last a-i old tokens and b-j new tokens
+          (do ([i (- a 1) (- i 1)]) ((< i 0))
+            (do ([j (- b 1) (- j 1)]) ((< j 0))
+              (vector-set! (vector-ref table i) j
+                           (if (same? (+ p i) (+ p j))
+                               (+ 1 (vector-ref (vector-ref table (+ i 1)) (+ j 1)))
+                               (max (vector-ref (vector-ref table (+ i 1)) j)
+                                    (vector-ref (vector-ref table i) (+ j 1)))))))
+          (do ([k 0 (+ k 1)]) ((= k p)) (vector-set! omatch k #t) (vector-set! nmatch k #t))
+          (do ([k 0 (+ k 1)]) ((= k q)) (vector-set! omatch (- n 1 k) #t) (vector-set! nmatch (- m 1 k) #t))
+          (let walk ([i 0] [j 0])
+            (when (and (< i a) (< j b))
+              (cond [(same? (+ p i) (+ p j))
+                     (vector-set! omatch (+ p i) #t) (vector-set! nmatch (+ p j) #t)
+                     (walk (+ i 1) (+ j 1))]
+                    [(>= (vector-ref (vector-ref table (+ i 1)) j) (vector-ref (vector-ref table i) (+ j 1)))
+                     (walk (+ i 1) j)]
+                    [else (walk i (+ j 1))])))
+          (let ([common (+ p q (vector-ref (vector-ref table 0) 0))])
+            (if (zero? common)
+                (values '() '())
+                (values (unmatched-ranges ot omatch) (unmatched-ranges nt nmatch)))))])))
+
+  ;; The runs of tokens not matched, as character ranges.
+  (define (unmatched-ranges tokens matched)
+    (let loop ([i 0] [cur #f] [out '()])
+      (cond
+       [(= i (vector-length tokens)) (reverse (if cur (cons cur out) out))]
+       [(vector-ref matched i) (loop (+ i 1) #f (if cur (cons cur out) out))]
+       [else (let ([t (vector-ref tokens i)])
+               (loop (+ i 1) (if cur (cons (car cur) (cdr t)) t) out))])))
+
+  ;; For the lines of a hunk (with their " ", "+", "-" prefixes): a list parallel to it of the
+  ;; character ranges, in line coordinates, to emphasize. A block of removed lines followed by
+  ;; added lines is compared line by line when the two have as many lines, else as a whole.
+  (define (git-refine-lines lines)
+    (let* ([v (list->vector lines)] [n (vector-length v)] [out (make-vector n '())])
+      (define (prefix? i ch) (and (< i n) (> (string-length (vector-ref v i)) 0) (char=? (string-ref (vector-ref v i) 0) ch)))
+      (define (text i) (let ([l (vector-ref v i)]) (substring l 1 (string-length l))))
+      (define (shift ranges delta lo hi) ; ranges clipped to [lo, hi), moved by delta
+        (filter (lambda (r) (< (car r) (cdr r)))
+                (map (lambda (r) (cons (+ delta (max lo (car r))) (+ delta (min hi (cdr r))))) ranges)))
+      (define (block! r0 r1 a0 a1)
+        (if (= (- r1 r0) (- a1 a0))
+            (do ([k 0 (+ k 1)]) ((= k (- r1 r0)))
+              (let-values ([(or nr) (git-word-diff (text (+ r0 k)) (text (+ a0 k)))])
+                (vector-set! out (+ r0 k) (shift or 1 0 (string-length (text (+ r0 k)))))
+                (vector-set! out (+ a0 k) (shift nr 1 0 (string-length (text (+ a0 k)))))))
+            (let* ([join (lambda (a b) (let loop ([i a] [acc ""]) (if (= i b) acc (loop (+ i 1) (if (string=? acc "") (text i) (string-append acc "\n" (text i)))))))]
+                   [old (join r0 r1)] [new (join a0 a1)])
+              (let-values ([(or nr) (git-word-diff old new)])
+                (let spread ([i r0] [off 0] [ranges or])
+                  (when (< i r1)
+                    (let ([len (string-length (text i))])
+                      (vector-set! out i (shift ranges (- 1 off) off (+ off len)))
+                      (spread (+ i 1) (+ off len 1) ranges))))
+                (let spread ([i a0] [off 0] [ranges nr])
+                  (when (< i a1)
+                    (let ([len (string-length (text i))])
+                      (vector-set! out i (shift ranges (- 1 off) off (+ off len)))
+                      (spread (+ i 1) (+ off len 1) ranges)))))))) 
+      (when (<= n 800)
+        (let loop ([i 0])
+          (when (< i n)
+            (if (prefix? i #\-)
+                (let* ([r1 (let run ([k i]) (if (prefix? k #\-) (run (+ k 1)) k))]
+                       [a1 (let run ([k r1]) (if (prefix? k #\+) (run (+ k 1)) k))])
+                  (when (> a1 r1) (block! i r1 r1 a1))
+                  (loop (max a1 (+ i 1))))
+                (loop (+ i 1))))))
+      (vector->list out)))
 
   ;; ---- patches ----
   ;; What staging, unstaging and discarding hunks and lines feed to `git apply`.

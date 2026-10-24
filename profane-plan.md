@@ -1108,6 +1108,16 @@ Steps, one commit each, tested against throwaway repos with the real `git`:
   fifth backend procedure (any `git diff`/`git show` parsed into files and hunks). The items of a diff have area
   `diff`, so `s u k` refuse them. The log has no graph (v2).
 - **4g** word-level diff refinement (first to cut).
+  *Done.* `git-word-diff` (tokens: word runs, whitespace runs, single other characters; a longest common
+  subsequence after trimming the common ends, skipped above 40,000 token pairs and when nothing is shared) and
+  `git-refine-lines` (a run of removed lines followed by added lines: line by line when the counts are equal, else
+  as one block; skipped for hunks over 800 lines) give the changed character ranges. Status and diff buffers draw
+  them in `git-diff-added-refined` / `git-diff-removed-refined` (a background per theme, `bg-added-refined`,
+  `bg-removed-refined`, plus bold); `git-diff-refine` (default on) turns it off. All hunks are refined, not only
+  the one at point, which costs time on very large diffs (the limits above bound it); a per-hunk lazy refinement
+  is the seam. Magit's refinement uses `git diff --word-diff`; this one is computed in Scheme so it works on any
+  backend's hunks.
+Step 4 (Git v1) is complete except ediff (item 5); credentials/askpass are a seam (§8m 4e).
 Refresh is manual (`g`) and after every git command profane runs; FSEvents (§8k) would make it automatic.
 
 ## 9. Milestones

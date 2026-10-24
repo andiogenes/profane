@@ -11,7 +11,7 @@
 (library (profane git status)
   (export git-item? git-item-kind git-item-area git-item-path git-item-change git-item-file
           git-item-hunk git-item-commit git-status-buffer-refresh! git-refresh-status-buffers!
-          make-git-item git-diff-line-segments)
+          make-git-item git-diff-line-segments git-hunk-body-lines)
   (import (chezscheme) (profane buffer) (profane window) (profane command) (profane command-loop)
           (profane keymap) (profane mode) (profane var) (profane face) (profane display)
           (profane files) (profane minibuffer) (profane async) (profane git) (profane section)
@@ -21,6 +21,9 @@
   (defvar git-status-recent-commits 10 "How many recent commits the status buffer lists.")
   (defvar git-status-diff-line-limit 3000
     "When the changes have more diff lines than this, their files start folded.")
+
+  (defvar git-diff-refine #t
+    "Emphasize the words that changed inside changed lines of a diff.")
 
   (define git-faces
     (begin
@@ -33,6 +36,8 @@
                   (git-diff-hunk-heading () "Hunk headings in diffs.")
                   (git-diff-added () "Added lines in diffs.")
                   (git-diff-removed () "Removed lines in diffs.")
+                  (git-diff-added-refined () "The words that changed in an added line.")
+                  (git-diff-removed-refined () "The words that changed in a removed line.")
                   (git-diff-meta () "Notes in diffs, like No newline at end of file.")))
       #t))
 
@@ -62,10 +67,31 @@
         [(#\\) (list (cons line 'git-diff-meta))]
         [else (list line)])))
 
+  ;; LINE split at RANGES (character ranges, prefix included): the pieces in the line's face, and
+  ;; the ranges in its refined face.
+  (define (refined-segments line ranges)
+    (let* ([plain (if (char=? (string-ref line 0) #\+) 'git-diff-added 'git-diff-removed)]
+           [strong (if (char=? (string-ref line 0) #\+) 'git-diff-added-refined 'git-diff-removed-refined)])
+      (let loop ([rs ranges] [at 0] [out '()])
+        (cond
+         [(null? rs) (reverse (if (< at (string-length line))
+                                  (cons (cons (substring line at (string-length line)) plain) out)
+                                  out))]
+         [else (let ([s (car (car rs))] [e (cdr (car rs))])
+                 (loop (cdr rs) e
+                       (cons (cons (substring line s e) strong)
+                             (if (> s at) (cons (cons (substring line at s) plain) out) out))))]))))
+
+  ;; The body lines of HUNK for a section: colored by prefix, with changed words emphasized.
+  (define (git-hunk-body-lines h)
+    (let* ([lines (git-diff-hunk-lines h)]
+           [ranges (if (var-ref 'git-diff-refine) (git-refine-lines lines) (map (lambda (l) '()) lines))])
+      (map (lambda (l r) (if (null? r) (diff-line-segments l) (refined-segments l r))) lines ranges)))
+
   (define (hunk-section area change file h index folded?)
     (new-section 'hunk (list 'hunk area (git-change-path change) index)
                  (list (cons (git-diff-hunk-header h) 'git-diff-hunk-heading))
-                 (map diff-line-segments (git-diff-hunk-lines h))
+                 (git-hunk-body-lines h)
                  '() folded?
                  (make-git-item 'hunk area (git-change-path change) change file h #f)))
 

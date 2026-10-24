@@ -35,7 +35,7 @@
                          (apply string-append (map (lambda (a) (format "'~a' " a)) args))))
 (sh "git init -q --bare ~a" remote)
 (sh "cd ~a && git init -q -b main && git remote add origin ~a" dir remote)
-(sh "cd ~a && printf 'one\\ntwo\\nthree\\nfour\\nfive\\nsix\\nseven\\neight\\nnine\\nten\\n' > a.txt && printf 'x\\n' > b.txt" dir)
+(sh "cd ~a && printf 'one\\ntwo\\nthree\\nfour\\nfive\\nsix\\nseven\\neight\\nnine\\nten\\n' > a.txt && printf 'x\\n' > b.txt && printf 'the quick brown fox\\n' > words.txt" dir)
 (git "add" "-A")
 (git "commit" "-m" "first")
 (git "push" "-u" "origin" "main")
@@ -133,6 +133,23 @@
 (set! b (current-buffer))
 (test-assert "when the diff is big, files start folded" (and (contains? (text) "modified   a.txt") (not (contains? (text) "-one"))))
 (var-set! 'git-status-diff-line-limit 3000)
+
+;; ---- word-level refinement ----
+(sh "cd ~a && sed -i '' 's/brown/red/' words.txt" dir)
+(keys "g")
+(define (face-of-text s)
+  (let loop ([i 0])
+    (cond [(> (+ i (string-length s)) (buffer-size)) #f]
+          [(string=? (buffer-substring i (+ i (string-length s))) s) (get-text-property i 'face)]
+          [else (loop (+ i 1))])))
+(test-eq "an unchanged word of an added line keeps the line's face" 'git-diff-added (face-of-text "+the quick"))
+(test-eq "the changed word is emphasized" 'git-diff-added-refined (face-of-text "red"))
+(test-eq "and so is the removed one" 'git-diff-removed-refined (face-of-text "brown"))
+(var-set! 'git-diff-refine #f)
+(keys "g")
+(test-eq "with git-diff-refine off, no emphasis" 'git-diff-added (face-of-text "red"))
+(var-set! 'git-diff-refine #t)
+(keys "g")
 
 ;; reusing the buffer
 (switch-to-buffer scratch)
