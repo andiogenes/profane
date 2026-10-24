@@ -10,7 +10,8 @@
 
 (library (profane command-loop)
   (export handle-key handle-text last-input-text pending-keys self-insert-amalgamation
-          set-transient-map set-input-buffer-function!)
+          set-transient-map exit-transient-map! clear-transient-map! transient-map-active?
+          set-input-buffer-function!)
   (import (chezscheme) (profane native) (profane buffer) (profane window) (profane keymap)
           (profane mode) (profane command) (profane hook) (profane var))
 
@@ -52,7 +53,7 @@
 
   (define pending '())          ; keys of an unfinished sequence
   (define (pending-keys) pending)
-  (define transient #f)         ; (keymap . on-exit) for the next key sequence, or #f
+  (define transient #f)         ; (keymap on-exit persistent?) for the next key sequence, or #f
 
   ;; The shell sends plain keys as keys (not text) while a sequence is under way, so C-x o is
   ;; other-window under any keyboard layout.
@@ -61,18 +62,36 @@
     (%input-set-prefix-pending (or (pair? pending) (and transient #t))))
 
   ;; Emacs set-transient-map: MAP is looked up first for the next key sequence, then dropped
-  ;; and ON-EXIT called, whichever command (or none) the sequence ran.
+  ;; and ON-EXIT called, whichever command (or none) the sequence ran. With PERSISTENT it stays
+  ;; until exit-transient-map! (a menu, see (profane transient)): its commands run without
+  ;; leaving it, an unbound key only complains, and C-g in the middle of a sequence cancels
+  ;; just the sequence.
   (define set-transient-map
     (case-lambda
-      [(map) (set-transient-map map void)]
-      [(map on-exit) (set! transient (cons map on-exit)) (set-pending! pending)]))
+      [(map) (set-transient-map map void #f)]
+      [(map on-exit) (set-transient-map map on-exit #f)]
+      [(map on-exit persistent?)
+       (set! transient (list map on-exit persistent?))
+       (set-pending! pending)]))
+
+  (define (transient-map-active?) (and transient #t))
+  (define (transient-persistent?) (and transient (caddr transient)))
 
   (define (exit-transient!)
     (when transient
-      (let ([on-exit (cdr transient)])
+      (let ([on-exit (cadr transient)])
         (set! transient #f)
         (set-pending! pending)
         (on-exit))))
+
+  (define (exit-transient-map!) (exit-transient!))
+
+  ;; Drops the transient map without calling its ON-EXIT (to hand the keys to something else
+  ;; for a while, such as the minibuffer, and set the map again afterwards).
+  (define (clear-transient-map!)
+    (set! transient #f)
+    (set-pending! pending))
+
   (define input-text "")
   (define (last-input-text) input-text)
   (define insert-run 0)
@@ -177,19 +196,24 @@
       [(and (pair? pending) (equal? key "C-g"))
        (set-pending! '())
        (set! arg-pending #f)
-       (exit-transient!)
+       (unless (transient-persistent?) (exit-transient!))
        (message "Quit")]
       [else
        (let* ([keys (append pending (list key))]
               [b (key-binding keys)])
          (cond
-           [(keymap? b) (set-pending! keys) (%echo (format "~a-" (key-description keys)))]
-           [(symbol? b) (set-pending! '()) (exit-transient!) (run-command b)]
+           [(keymap? b)
+            (set-pending! keys)
+            (unless (transient-persistent?) (%echo (format "~a-" (key-description keys))))]
+           [(symbol? b)
+            (set-pending! '())
+            (unless (transient-persistent?) (exit-transient!))
+            (run-command b)]
            [else
             (set-pending! '())
             (set! arg-pending #f)
             (set! arg-digits? #f)
-            (exit-transient!)
+            (unless (transient-persistent?) (exit-transient!))
             (%set-last-command! #f)
             (beep)
             (message "~a is undefined" (key-description keys))]))]))

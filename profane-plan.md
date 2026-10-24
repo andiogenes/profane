@@ -422,6 +422,17 @@ the renderer tags the frame answering each event and records when it was submitt
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
   `max-mini-window-height`) and the next input clears it; keystroke echo (`C-x-`) is shown but not logged. The
   minibuffer reads input in this window (below).
+- **Transients** (`(profane transient)`, M2). `define-transient` registers a menu command from groups of items: `action` (runs a
+  command, symbol or procedure, then closes unless `stay`), `switch` (toggle, flag green when on) and `option` (reads a
+  string in the minibuffer; empty clears). Keys are `kbd` sequences (`"- a"` is two keys). Opening shows a panel (a pop-up
+  canvas with the theme's popup surface, columns per group) above the echo area and installs a **persistent** transient
+  keymap: `set-transient-map` gained a third argument, `exit-transient-map!` and `clear-transient-map!`; in a persistent
+  map commands run without leaving it, unbound keys only complain, `C-g` mid-sequence cancels just the sequence, and `C-g`
+  or `ESC` closes it. While an option is read the map is cleared so the minibuffer gets the keys, then restored. Commands
+  see the values in `(transient-args)` (an alist; unset options are left out). Values start from the defaults on each
+  opening. `(popup-margin)` in `(profane canvas)` gives the shadow margin a pop-up surface needs. *Not yet:* sub-menus and
+  infix arguments with choices, saved values, a `which-key`-style listing of a plain prefix map, keys shown in the panel
+  as the key description (they are the spec with spaces removed), re-layout when the frame resizes while open.
 - **Active region** (fix after M2 item 8: marked regions were not highlighted). Emacs's transient-mark-mode: the buffer-local
   `mark-active` (defined in `(profane command-loop)`) is turned on by `C-SPC` and `C-x C-x`, off by `C-g`, copying
   (`M-w`) and by any change to the buffer in a command (a per-buffer edit count in `(profane buffer)`, compared around each
@@ -532,8 +543,7 @@ the renderer tags the frame answering each event and records when it was submitt
 State at the end of the M2 work so far (everything in §8i is on `main`). Deliberately deferred work, each with what it
 waits for. Keep this list current: remove an entry when it is done, add one when something is left as a seam.
 
-**M2 items still open** (§9, M2 row): transients (generic menus on the canvas, with `set-transient-map` for the
-keys); avy (`avy-goto-word-1`, jump labels on the canvas; the owner's `C-x C-j` waits on it); file-name reading with
+**M2 items still open** (§9, M2 row): avy (`avy-goto-word-1`, jump labels on the canvas; the owner's `C-x C-j` waits on it); file-name reading with
 vertico's directory keys (`RET`, `DEL`, `M-DEL` on paths) and `find-file`; mouse routing into `ProfaneView`, which
 also unblocks clickable canvases, cursor shapes, mouse selection and window resizing; window extras (`C-v`/`M-v`/
 recenter, per-window buffer history, header lines); electric-pair. The owner's port (`scheme/init.ss`) still lacks

@@ -28,7 +28,7 @@
           clear-canvas! define-canvas redraw! invalidate! on-click!
           fill-rect! fill-rounded-rect! stroke-rounded-rect! draw-shadow! draw-line! draw-text!
           add-hit-region! text-extent
-          show-popup! hide-popup! popup-shown? draw-popup-background!
+          show-popup! hide-popup! popup-shown? draw-popup-background! popup-margin
           set-window-canvas! window-canvas
           canvas-click! canvas-at)
   (import (chezscheme) (profane native) (profane window) (profane theme) (profane display)
@@ -238,6 +238,15 @@
   ;; The surface of a pop-up: the theme's background with its border, corner radius and, when
   ;; ui-popup-shadow is on, the elevation shadow (token LEVEL, 1 to 3). The shadow is drawn
   ;; inside the canvas, so leave its blur as margin (the returned value) around the box.
+  ;; Room a pop-up's surface leaves around its box for the shadow: the elevation blur when
+  ;; ui-popup-shadow is on, else 0. Size a canvas as the box plus twice this.
+  (define popup-margin
+    (case-lambda
+      [() (popup-margin 2)]
+      [(level)
+       (let ([e (theme-token 'elevation level)])
+         (if (and e (var-ref 'ui-popup-shadow)) (inexact->exact (ceiling (cdr (assq 'blur e)))) 0))]))
+
   (define draw-popup-background!
     (case-lambda
       [(c w h) (draw-popup-background! c w h 2)]
@@ -245,7 +254,7 @@
        (let* ([r (or (theme-token 'radius 'm) 6)]
               [e (theme-token 'elevation level)]
               [blur (if (and e (var-ref 'ui-popup-shadow)) (cdr (assq 'blur e)) 0)]
-              [m (inexact->exact (ceiling blur))])
+              [m (popup-margin level)])
          (when (> m 0)
            (draw-shadow! c m (+ m (cdr (assq 'y e))) (- w (* 2 m)) (- h (* 2 m)) r blur
                          (inexact->exact (round (* 255 (cdr (assq 'alpha e)))))))
