@@ -67,6 +67,8 @@
 (test-eqv "C-- moves backward" 2 (point))
 (type "x")
 (test-eqv "argument used up" 36 (buffer-size))
+(keys "C-M-- C-f")
+(test-eqv "C-M-- is C--" 2 (point))
 
 ;; ---- typing runs and undo ----
 ;; Regression: the run of the previous buffer ("x" above) used to continue here, so the first

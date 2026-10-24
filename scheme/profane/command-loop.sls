@@ -301,7 +301,7 @@
                                     [else d]))
             (set! arg-digits? #t)
             #t)]
-      [(and (or (member key '("C--" "M--")) (and arg-digits? (equal? key "-")))
+      [(and (or (member key '("C--" "M--" "C-M--")) (and arg-digits? (equal? key "-")))
             (not (integer? arg-pending)))
        (set! arg-pending '-)
        (set! arg-digits? #t)
