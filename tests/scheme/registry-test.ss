@@ -55,6 +55,7 @@
 (test-equal "remove-hook!" '((proc 3)) log)
 
 ;; ---- keymaps ----
+(test-equal "C-m, C-i and C-[ are RET, TAB and ESC" '("RET" "TAB" "ESC" "M-RET") (kbd "C-m C-i C-[ C-M-m"))
 (test-equal "kbd canonicalizes" '("C-M-x" "a" "C--") (kbd "M-C-x a C--"))
 (define parent (make-keymap))
 (define child (make-keymap parent))

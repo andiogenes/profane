@@ -266,7 +266,7 @@
                 ("C-e" . move-end-of-line) ("<end>" . move-end-of-line)
                 ("M-<" . beginning-of-buffer) ("M->" . end-of-buffer)
                 ("DEL" . delete-backward-char) ("C-d" . delete-char) ("<deletechar>" . delete-char)
-                ("RET" . newline) ("C-o" . open-line) ("TAB" . insert-tab)
+                ("RET" . newline) ("C-j" . newline) ("C-o" . open-line) ("TAB" . insert-tab)
                 ("C-SPC" . set-mark-command) ("C-x C-x" . exchange-point-and-mark)
                 ("C-w" . kill-region) ("M-w" . kill-ring-save) ("C-k" . kill-line) ("C-y" . yank)
                 ("C-/" . undo) ("C-_" . undo) ("C-x u" . undo)

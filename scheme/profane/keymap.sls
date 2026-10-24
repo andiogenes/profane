@@ -28,6 +28,9 @@
 
   (define modifier-order '(#\C #\M #\S #\s))
 
+  ;; Control characters that are also named keys, as in Emacs: C-m is RET, C-i is TAB, C-[ is ESC.
+  (define control-aliases '(("m" . "RET") ("i" . "TAB") ("[" . "ESC")))
+
   ;; "M-C-x" -> "C-M-x"; leaves the key name alone. A modifier prefix "X-" is consumed only if
   ;; something follows it, so "C--" is Control-minus and "-" is minus.
   (define (canonical-key key)
@@ -36,7 +39,10 @@
                (memv (string-ref key i) modifier-order)
                (char=? (string-ref key (+ i 1)) #\-))
           (loop (+ i 2) (cons (string-ref key i) mods))
-          (let ([name (substring key i (string-length key))])
+          (let* ([raw (substring key i (string-length key))]
+                 [alias (and (memv #\C mods) (assoc raw control-aliases))]
+                 [name (if alias (cdr alias) raw)]
+                 [mods (if alias (remv #\C mods) mods)])
             (apply string-append
                    (append (map (lambda (m) (string m #\-))
                                 (filter (lambda (m) (memv m mods)) modifier-order))
