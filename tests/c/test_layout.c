@@ -403,6 +403,24 @@ static void test_faces(void) {
     PF_CHECK_EQ_SIZE(count_color(d, PF_DISPLAY_GLYPH, 0x00AA00FF), 4);
     pf_display_release(d);
 
+    /* Regression: the current isearch match is on point's line, and the hl-line band covered
+     * its background. A highlight's background goes above the band; a face's stays below. */
+    pf_window_set_option(w, PF_WINDOW_HL_LINE, 1);
+    pf_props_put(pf_text_props(pf_handle_get(buf, PF_HANDLE_TEXT)), PF_PROP_HIGHLIGHT, 0, 5, 20);
+    d = frame_at(w, buf, point, 0);
+    const pf_display_item *band = find_rect(d, 0xEEEEEEFF, 0);
+    const pf_display_item *y0 = find_rect(d, 0xFFFF00FF, 0), *y1 = find_rect(d, 0xFFFF00FF, 1);
+    PF_CHECK(band && y0 && y1);
+    if (band && y0 && y1) {
+        const pf_display_item *face = NEAR(y0->x, 5 + 60) ? y0 : y1; /* "BOLD" */
+        const pf_display_item *hl = face == y0 ? y1 : y0;           /* "plain" */
+        PF_CHECK(NEAR(hl->x, 5) && NEAR(hl->u.rect.w, 50));
+        PF_CHECK(face < band && band < hl); /* display list order is drawing order */
+    }
+    pf_display_release(d);
+    pf_props_put(pf_text_props(pf_handle_get(buf, PF_HANDLE_TEXT)), PF_PROP_HIGHLIGHT, 0, 5, 0);
+    pf_window_set_option(w, PF_WINDOW_HL_LINE, 0);
+
     /* Regression: the default face's background drew a full-width rect on every line. */
     d = frame_at(w, buf, point, 0);
     PF_CHECK(find_rect(d, 0xFFFFFFFF, 0) == NULL);

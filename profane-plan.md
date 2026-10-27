@@ -392,7 +392,9 @@ the renderer tags the frame answering each event and records when it was submitt
 - **`highlight`** (property 2, `PF_PROP_HIGHLIGHT`, dogfooding with isearch): a face drawn over the `face` property
   where set, so transient highlights (search matches) come and go without saving or restoring the faces underneath.
   It replaces the face id for those characters (no merging of attributes, as Emacs overlays would). Properties belong
-  to the buffer, so every window showing it shows them.
+  to the buffer, so every window showing it shows them. Its backgrounds are drawn above the hl-line band, the region
+  and bracket highlights (isearch's overlay priority in Emacs); a face's stay below them. Found in dogfooding: the
+  current match is on point's line, and the hl-line band hid its yellow.
 - **Faces in C** (`core/display/pf_face`): id → fg/bg/underline/font; display roles (default, cursor, line numbers,
   hl-line, show-paren) map to face ids. `(profane display)` resolves every face (inheritance → `default`) and pushes
   them all on any change, so a theme change restyles everything; fonts for bold/italic/family/height are opened via
@@ -648,13 +650,13 @@ waits for. Keep this list current: remove an entry when it is done, add one when
 - Evaluating: `eval-defun`/`C-M-x` (defun motion, M5), `C-u C-x C-e`
   inserting the value, a REPL buffer with history and completion (M10).
 - Region: `delete-selection-mode`, `shift-select-mode`, a mark ring, `C-SPC C-SPC`, showing it in non-selected windows.
-- Press-and-hold: held keys repeat; `press-and-hold-keys` re-enables the accent picker per key. The per-key switch
-  assumes macOS re-reads the default on each key down, which is unverified.
 - isearch: regexp search (`C-M-s`, `C-u C-s`; there is no regex engine yet), `M-e` editing the string, `M-c` case
   toggle, `M-n`/`M-p` through the search ring, `query-replace`, the failing part shown in `isearch-fail` in the echo
   area (the face exists), lazy-count, isearch in the minibuffer (refused), stopping on a mouse click (it stops at the
   next key), "Overwrapped". Highlights replace faces instead of merging with them, and show in every window on the
   buffer (no overlays yet).
+- Press-and-hold: held keys repeat; `press-and-hold-keys` re-enables the accent picker per key. The per-key switch
+  assumes macOS re-reads the default on each key down, which is unverified.
 - Canvas: paths and bezier curves, images, clip and transform (ops are not clipped to a canvas window), inline
   canvases (they need display-engine support for reserved space in a line), key and focus events.
 - Native views: only the stub kind; web (M11) and PDF kinds, key/mouse routing into views, focus handoff.

@@ -44,6 +44,8 @@ struct pf_window {
     size_t scan_cap;
     uint32_t *fids; /* face id of each character of the line being drawn */
     size_t fids_cap;
+    uint8_t *hls; /* 1 where that face comes from PF_PROP_HIGHLIGHT */
+    size_t hls_cap;
     pf_font_run *runs;
     size_t runs_cap;
     pf_prop_run *props_buf;
@@ -114,6 +116,7 @@ void pf_window_free(pf_window *w) {
         free(w->preedit);
         free(w->scan);
         free(w->fids);
+        free(w->hls);
         free(w->runs);
         free(w->props_buf);
         free(w->brk);
@@ -462,18 +465,19 @@ static void emit_glyphs(pf_display *d, const pf_line_layout *lay, float x0, floa
     }
 }
 
-/* Background and underline rects for runs of characters [FROM, TO) whose face sets them. */
+/* Background and underline rects for runs of characters [FROM, TO) whose face sets them: those
+ * whose face is a highlight (HLS) if HIGHLIGHTED, else the others. */
 static void emit_face_decorations(pf_display *d, const pf_line_layout *lay, const uint32_t *fids,
-                                  float x0, float left, float right, float top, float baseline,
-                                  const pf_window_style *st, float scale, uint32_t default_fg,
-                                  size_t from, size_t to) {
+                                  const uint8_t *hls, int highlighted, float x0, float left,
+                                  float right, float top, float baseline, const pf_window_style *st,
+                                  float scale, uint32_t default_fg, size_t from, size_t to) {
     uint32_t def = pf_face_role_id(PF_ROLE_DEFAULT);
     for (size_t i = from; i < to;) {
         size_t j = i + 1;
-        while (j < to && fids[j] == fids[i]) {
+        while (j < to && fids[j] == fids[i] && hls[j] == hls[i]) {
             j++;
         }
-        if (fids[i] == def) {
+        if (fids[i] == def || hls[i] != highlighted) {
             i = j; /* the default background is the clear color: nothing to draw */
             continue;
         }
@@ -505,9 +509,11 @@ static void *grow(void *p, size_t *cap, size_t need, size_t elem) {
  * input-method composition. */
 static void load_faces(pf_window *w, pf_text *text, size_t start, size_t n, size_t k, size_t pre) {
     w->fids = grow(w->fids, &w->fids_cap, n + pre + 1, sizeof *w->fids);
+    w->hls = grow(w->hls, &w->hls_cap, n + pre + 1, sizeof *w->hls);
     uint32_t def = pf_face_role_id(PF_ROLE_DEFAULT);
     for (size_t i = 0; i < n + pre; i++) {
         w->fids[i] = def;
+        w->hls[i] = 0;
     }
     static const uint32_t layers[] = {PF_PROP_FACE, PF_PROP_HIGHLIGHT};
     for (size_t l = 0; l < sizeof layers / sizeof *layers; l++) {
@@ -517,7 +523,9 @@ static void load_faces(pf_window *w, pf_text *text, size_t start, size_t n, size
         for (size_t r = 0; r < total; r++) {
             for (size_t p = w->props_buf[r].start; p < w->props_buf[r].end; p++) {
                 size_t idx = p - start;
-                w->fids[pre && idx >= k ? idx + pre : idx] = w->props_buf[r].value;
+                size_t at = pre && idx >= k ? idx + pre : idx;
+                w->fids[at] = w->props_buf[r].value;
+                w->hls[at] = layers[l] == PF_PROP_HIGHLIGHT;
             }
         }
     }
@@ -972,10 +980,10 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
         float top = top_inset(w) + off + (float)srow * st->line_height;
         float baseline = top + st->ascent;
 
-        /* Backgrounds first: faces, the hl-line band (an overlay in Emacs, so above them), then
-         * bracket highlights. */
-        emit_face_decorations(d, lay, w->fids, xs, left, right, top, baseline, st, w->scale, fg, a,
-                              b);
+        /* Backgrounds first: faces, the hl-line band (an overlay in Emacs, so above them), the
+         * region, bracket highlights, then highlights (isearch's overlays are above all those). */
+        emit_face_decorations(d, lay, w->fids, w->hls, 0, xs, left, right, top, baseline, st,
+                              w->scale, fg, a, b);
         if (w->hl_line && line == point_line) {
             pf_display_rect(d, left, top, right - left, st->line_height,
                             role_color(PF_ROLE_HL_LINE, PF_FACE_HAS_BG, 0));
@@ -1022,6 +1030,8 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
                 }
             }
         }
+        emit_face_decorations(d, lay, w->fids, w->hls, 1, xs, left, right, top, baseline, st,
+                              w->scale, fg, a, b);
         if (w->line_numbers && seg == 0) {
             char num[24];
             int len = snprintf(num, sizeof num, "%zu", line + 1);
