@@ -371,6 +371,22 @@ void pf_frame_set_tab_bar(pf_frame *f, const uint32_t *cps, size_t n, const pf_s
     }
 }
 
+void pf_frame_set_tab_bar_dividers(pf_frame *f, const uint32_t *positions, size_t n,
+                                   uint32_t color) {
+    if (pf_strip_set_dividers(&f->tab_bar, positions, n, color)) {
+        f->dirty = 1;
+    }
+}
+
+long pf_frame_tab_bar_char_at(pf_frame *f, float x, float y) {
+    if (!f->tab_bar.face || y < 0 ||
+        y >= pf_frame_strip_height(f, f->tab_bar.face, f->tab_bar.box)) {
+        return -1;
+    }
+    const pf_face *def = pf_face_get(pf_face_role_id(PF_ROLE_DEFAULT));
+    return pf_strip_char_at(&f->tab_bar, f->cache, def->font ? def->font : f->base_font, x);
+}
+
 static int popups_moving(const pf_frame *f) {
     for (size_t i = 0; i < f->npopups; i++) {
         if (!pf_spring_settled(&f->popups[i].a, 0.01f)) {

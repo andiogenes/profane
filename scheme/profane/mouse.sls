@@ -8,17 +8,18 @@
 ;;;                              above or below the window it scrolls
 ;;;   double / triple click      selects the word / the line
 ;;;   click on a canvas region   runs the region's handler (see (profane canvas))
+;;;   click on a tab             selects it; on its × closes it (see (profane tab-bar))
 ;;;   drag a mode line / the     resizes the window above / to the left of it
 ;;;     divider between windows
 ;;;   scroll wheel or trackpad   scrolls the window under the pointer (point follows when it would
 ;;;                              leave the screen); sideways scrolls horizontally
 ;;;
-;;; Not yet: dragging text, middle-click paste, the tab bar, right-click menus.
+;;; Not yet: dragging text, middle-click paste, dragging tabs, right-click menus.
 
 (library (profane mouse)
   (export handle-mouse handle-scroll window-at)
   (import (chezscheme) (profane native) (profane buffer) (profane var) (profane window)
-          (profane canvas) (profane command))
+          (profane canvas) (profane command) (profane tab-bar))
 
   ;; ---- finding things ----
 
@@ -101,6 +102,7 @@
     (set! drag #f)
     (cond
       [(canvas-click! x y) (set! drag '(canvas))]
+      [(tab-bar-click! x y) (void)]
       [(window-at x y)
        => (lambda (w)
             (let* ([e (window-edges w)] [lx (- x (car e))] [ly (- y (cadr e))]

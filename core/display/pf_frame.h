@@ -50,6 +50,11 @@ pf_window *pf_frame_selected(const pf_frame *f);
 /* The tab bar across the top (pf_strip); FACE 0 hides it. Its height is pf_frame_strip_height. */
 void pf_frame_set_tab_bar(pf_frame *f, const uint32_t *cps, size_t n, const pf_strip_run *runs,
                           size_t nruns, uint32_t face, uint32_t box);
+/* The tab bar's dividers (pf_strip_set_dividers). */
+void pf_frame_set_tab_bar_dividers(pf_frame *f, const uint32_t *positions, size_t n,
+                                   uint32_t color);
+/* The tab bar character at frame point X, Y, or -1 (outside the bar or its text). */
+long pf_frame_tab_bar_char_at(pf_frame *f, float x, float y);
 
 /* Metrics Scheme lays windows out with: the window style at text scale FACTOR, and the height
  * of a strip (mode line, tab bar) with base face FACE. */

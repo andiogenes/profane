@@ -5,13 +5,14 @@
 ;;; (the windows of hidden tabs live on, with their points and scroll positions). The tab bar
 ;;; is a strip across the top of the frame, shown per tab-bar-show (by default only with more
 ;;; than one tab: quiet by default). A tab is named after its selected window's buffer unless
-;;; renamed.
+;;; renamed. Tabs are separated by 1-pixel lines in the mode-line border color (the window
+;;; divider's where the theme has none); clicking a tab selects it, clicking its × closes it.
 
 (library (profane tab-bar)
-  (export tab-list current-tab-index tab-name tab-new tab-close tab-close-other tab-select
-          tab-next tab-rename)
+  (export tab-list current-tab-index tab-name tab-new tab-close tab-close-at tab-close-other
+          tab-select tab-next tab-rename tab-bar-click!)
   (import (chezscheme) (profane native) (profane buffer) (profane window) (profane var)
-          (profane hook) (profane command) (profane keymap) (profane display))
+          (profane hook) (profane command) (profane keymap) (profane display) (profane theme) (profane face))
 
   (define-record-type tab
     (fields (mutable label) (mutable root) (mutable selected)) ; label: a name given by tab-rename
@@ -19,6 +20,7 @@
 
   (defvar tab-bar-show 1
     "Show the tab bar: #t always, 1 when there is more than one tab, #f never.")
+  (defvar tab-bar-close-button-show #t "Show a × on each tab that closes it when clicked.")
 
   (define states (make-eq-hashtable)) ; frame -> (tabs . current index)
 
@@ -73,15 +75,23 @@
 
   ;; Emacs tab-close: deletes the current tab's windows and shows the next tab (the previous
   ;; one if it was the last).
-  (define (tab-close)
-    (let* ([f (frame)] [i (current-tab-index f)] [n (length (tab-list f))])
+  (define (tab-close) (tab-close-at (current-tab-index (frame))))
+
+  ;; Closes tab I (0-based); closing another tab than the current one stays where it is.
+  (define (tab-close-at i)
+    (let* ([f (frame)] [cur (current-tab-index f)] [n (length (tab-list f))])
       (when (= n 1) (error 'tab-close "attempt to delete the sole tab"))
+      (unless (and (>= i 0) (< i n)) (error 'tab-close "no such tab" i))
       (save! f)
-      (let ([doomed (tab-root (list-ref (tab-list f) i))]
-            [next (if (< (+ i 1) n) (+ i 1) (- i 1))])
-        (show! f next)
-        (remove-tab! f i)
-        (set-cdr! (state f) (if (> next i) i next))
+      (let ([doomed (tab-root (list-ref (tab-list f) i))])
+        (if (= i cur)
+            (let ([next (if (< (+ i 1) n) (+ i 1) (- i 1))])
+              (show! f next)
+              (remove-tab! f i)
+              (set-cdr! (state f) (if (> next i) i next)))
+            (begin
+              (remove-tab! f i)
+              (set-cdr! (state f) (if (< i cur) (- cur 1) cur))))
         (%delete-tree! doomed))))
 
   (define (tab-close-other)
@@ -111,45 +121,88 @@
   ;; ---- the tab bar ----
 
   (define shown-bars (make-eq-hashtable)) ; frame -> what was last pushed
+  (define tab-spans (make-eq-hashtable))  ; frame -> list of (start close-start end), per tab
 
   (define (bar-visible? f)
     (let ([show (var-ref 'tab-bar-show)])
       (cond [(eqv? show 1) (> (length (tab-list f)) 1)]
             [else (and show #t)])))
 
+  ;; The dividers' color: the mode line's border, else the line between windows.
+  (define (divider-color)
+    (let ([c (or (guard (e [else #f]) (let ([c (theme-color 'mode-line-border)]) (and (string? c) c)))
+                 (face-attribute 'vertical-border 'foreground))])
+      (if (string? c) (color->rgba c) #x808080FF)))
+
+  (define (u32-bytevector xs)
+    (let ([bv (make-bytevector (* 4 (length xs)))])
+      (let loop ([xs xs] [k 0])
+        (unless (null? xs)
+          (bytevector-u32-native-set! bv k (car xs))
+          (loop (cdr xs) (+ k 4))))
+      bv))
+
+  ;; Each tab is " name × " (or " name " without close buttons), side by side, with a divider
+  ;; at the left edge of every tab and at the right edge of the last.
   (define (update-tab-bar! f)
     (save! f)
     (let* ([visible (bar-visible? f)]
            [names (map tab-name (tab-list f))]
-           [key (and visible (cons (current-tab-index f) names))])
+           [close (var-ref 'tab-bar-close-button-show)]
+           [color (and visible (divider-color))]
+           [key (and visible (list (current-tab-index f) names close color))])
       (unless (equal? key (hashtable-ref shown-bars f 'none))
         (hashtable-set! shown-bars f key)
         (if (not visible)
             (begin (%frm-set-tab-bar (%frame-handle f) #vu8() 0 #vu8() 0 0 0)
+                   (%frm-set-tab-bar-dividers (%frame-handle f) #vu8() 0 0)
+                   (hashtable-set! tab-spans f '())
                    (%set-frame-top-margin! f 0))
-            (let loop ([ns names] [i 0] [text ""] [runs '()])
+            (let loop ([ns names] [i 0] [text ""] [runs '()] [spans '()])
               (if (null? ns)
                   (let ([bv (string->utf8 text)]
-                        [rv (make-bytevector (* 12 (length runs)))])
-                    (let fill ([rs (reverse runs)] [k 0])
-                      (unless (null? rs)
-                        (for-each (lambda (v j) (bytevector-u32-native-set! rv (+ k (* 4 j)) v))
-                                  (car rs) '(0 1 2))
-                        (fill (cdr rs) (+ k 12))))
+                        [spans (reverse spans)]
+                        [rv (u32-bytevector (apply append (reverse runs)))]
+                        [dv (u32-bytevector (append (map car spans)
+                                                    (if (null? spans) '() (list (string-length text)))))])
+                    (hashtable-set! tab-spans f spans)
                     (%frm-set-tab-bar (%frame-handle f) bv (bytevector-length bv) rv (length runs)
                                       (face-id 'tab-bar) 0)
+                    (%frm-set-tab-bar-dividers (%frame-handle f) dv (div (bytevector-length dv) 4)
+                                               color)
                     (%set-frame-top-margin!
                      f (%frm-strip-height (%frame-handle f) (face-id 'tab-bar) 0)))
-                  (let* ([label (format " ~a " (car ns))]
-                         [start (string-length text)]
+                  (let* ([start (string-length text)]
+                         [name (format " ~a " (car ns))]
+                         [close-start (+ start (string-length name))]
+                         [label (if close (string-append name "\xD7; ") name)]
+                         [end (+ start (string-length label))]
                          [face (if (= i (current-tab-index f)) 'tab-bar-tab 'tab-bar-tab-inactive)])
-                    (loop (cdr ns) (+ i 1) (string-append text label " ")
-                          (cons (list start (+ start (string-length label)) (face-id face))
-                                runs)))))))))
+                    (loop (cdr ns) (+ i 1) (string-append text label)
+                          (cons (list start end (face-id face)) runs)
+                          (cons (list start (if close close-start end) end) spans)))))))))
+
+  ;; A click at frame point X, Y: on a tab selects it, on its × closes it. Returns whether the
+  ;; point was on the tab bar (the click is used up even between tabs).
+  (define (tab-bar-click! x y)
+    (let ([f (selected-frame)])
+      (and f (bar-visible? f)
+           (< y (%frm-strip-height (%frame-handle f) (face-id 'tab-bar) 0))
+           (let ([c (%frm-tab-bar-char-at (%frame-handle f) (inexact x) (inexact y))])
+             (let loop ([spans (hashtable-ref tab-spans f '())] [i 0])
+               (cond
+                 [(or (< c 0) (null? spans)) #t]
+                 [(< c (caddr (car spans)))
+                  (if (>= c (cadr (car spans))) (tab-close-at i) (tab-select i))
+                  #t]
+                 [else (loop (cdr spans) (+ i 1))]))))))
 
   ;; ---- commands ----
 
   (define-command (tab-new) "Open a new tab showing the current buffer." (tab-new))
+  (define-command (tab-new-buffer) "Open a new tab showing a new empty buffer."
+    (tab-new)
+    (switch-to-buffer (generate-new-buffer "untitled")))
   (define-command (tab-close) "Close the current tab." (tab-close))
   (define-command (tab-close-other) "Close every tab but the current one." (tab-close-other))
   (define-command (tab-next) "Switch to the ARGth next tab." (tab-next (prefix-numeric-value)))
@@ -161,5 +214,6 @@
       (add-hook! 'pre-redisplay-hook update-tab-bar!)
       (for-each (lambda (b) (define-key! (global-map) (car b) (cdr b)))
                 '(("C-x t 2" . tab-new) ("C-x t 0" . tab-close) ("C-x t 1" . tab-close-other)
-                  ("C-x t o" . tab-next) ("C-x t O" . tab-previous)))
+                  ("C-x t o" . tab-next) ("C-x t O" . tab-previous) ("C-x t n" . tab-new-buffer)
+                  ("C-TAB" . tab-next) ("C-S-<backtab>" . tab-previous)))
       #t)))

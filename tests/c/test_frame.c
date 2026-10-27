@@ -399,6 +399,34 @@ int main(void) {
     PF_CHECK(t && t->y < 24);
     pf_display_release(d);
 
+    /* Dividers: 1-pixel lines the bar's height at the left edge of characters (the text's end
+     * for the last), and the character at a point for clicks. */
+    uint32_t divs[] = {0, 2, 4};
+    pf_frame_set_tab_bar_dividers(f, divs, 3, 0x123456FF);
+    d = pf_frame_redisplay(f);
+    const pf_display_item *dv[3] = {NULL};
+    size_t ndv = 0;
+    for (size_t i = 0; i < pf_display_count(d); i++) {
+        const pf_display_item *it = &pf_display_items(d)[i];
+        if (it->kind == PF_DISPLAY_RECT && it->color == 0x123456FF && ndv < 3) {
+            dv[ndv++] = it;
+        }
+    }
+    PF_CHECK_EQ_SIZE(ndv, 3);
+    if (ndv == 3) {
+        float cell = (dv[1]->x - dv[0]->x) / 2;
+        PF_CHECK(cell > 0 && NEAR(dv[2]->x - dv[0]->x, 4 * cell));
+        PF_CHECK(NEAR(dv[0]->y, 0) && NEAR(dv[0]->u.rect.w, 0.5f) && /* one pixel at scale 2 */
+                 NEAR(dv[0]->u.rect.h, pf_frame_strip_height(f, 11, 0)));
+        PF_CHECK(pf_frame_tab_bar_char_at(f, dv[0]->x + 1.5f * cell, 5) == 1);
+        PF_CHECK(pf_frame_tab_bar_char_at(f, dv[0]->x + 3.5f * cell, 5) == 3);
+        PF_CHECK(pf_frame_tab_bar_char_at(f, dv[0]->x - 1, 5) == -1); /* the inset */
+        PF_CHECK(pf_frame_tab_bar_char_at(f, dv[2]->x + 1, 5) == -1); /* past the text */
+        PF_CHECK(pf_frame_tab_bar_char_at(f, dv[0]->x + 1.5f * cell, 100) == -1); /* below */
+    }
+    pf_display_release(d);
+    pf_frame_set_tab_bar_dividers(f, NULL, 0, 0);
+
     /* Horizontal scrolling. Regression: with point past the right edge of a long line the
      * window did not scroll, and the cursor was drawn outside the window, over its neighbor. */
     pf_frame_set_text_scale(f, w1, 1);

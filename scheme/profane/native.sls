@@ -12,6 +12,7 @@
           %buf-undo-boundary %buf-set-undo %buf-undo %buf-redo %buf-modified %buf-mark-saved
           %frm-selected %frm-set-selected %frm-new-headless %frm-free-headless %frm-width
           %frm-height %frm-line-height %frm-cell-width %frm-strip-height %frm-set-tab-bar
+          %frm-set-tab-bar-dividers %frm-tab-bar-char-at
           %frm-redisplay %frm-window-new %frm-window-delete %frm-place-window
           %frm-select-window %frm-set-text-scale
           %frm-set-window-native %frm-native-count %frm-native-field
@@ -129,6 +130,9 @@
   (define-native %frm-strip-height "pf_frm_strip_height" (unsigned-32 unsigned-32 unsigned-32) double)
   (define-native %frm-set-tab-bar "pf_frm_set_tab_bar"
     (unsigned-32 u8* size_t u8* size_t unsigned-32 unsigned-32) int)
+  (define-native %frm-set-tab-bar-dividers "pf_frm_set_tab_bar_dividers"
+    (unsigned-32 u8* size_t unsigned-32) int)
+  (define-native %frm-tab-bar-char-at "pf_frm_tab_bar_char_at" (unsigned-32 float float) integer-64)
   (define-native %frm-redisplay "pf_frm_redisplay" (unsigned-32) integer-64)
   (define-native %frm-window-new "pf_frm_window_new" (unsigned-32) unsigned-32)
   (define-native %frm-window-delete "pf_frm_window_delete" (unsigned-32 unsigned-32) int)

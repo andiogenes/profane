@@ -612,6 +612,16 @@ the renderer tags the frame answering each event and records when it was submitt
 - **Tabs** (`(profane tab-bar)`): each tab keeps a window tree and selected window; hidden tabs' windows stay alive
   (points, scroll) and are just not placed. The tab bar strip shows with more than one tab (`tab-bar-show` 1, so
   the minimal preset shows none by default). `C-x t 2/0/1/o/O`; renaming by name waits for the minibuffer.
+  Dogfooding: tabs sit side by side as ` name × ` with 1-pixel dividers between them (the strip's dividers, drawn by
+  `pf_strip` in the theme's `mode-line-border`, else `vertical-border`'s color), replacing the gaps; clicking a tab
+  selects it, clicking its × closes it (`tab-close-at`; another tab than the current one closes in place;
+  `tab-bar-close-button-show`). The click finds the character under the pointer with the strip's own layout
+  (`pf_frame_tab_bar_char_at`). `C-x t n` opens a tab on a new empty buffer (`untitled`, `tab-new-buffer`; the owner's
+  key, where Emacs has `tab-duplicate`), `C-TAB` / `C-S-<backtab>` (Control-Shift-Tab) are `tab-next` / `tab-previous`.
+  AppKit takes Control-Tab for moving focus between views before any view sees it, so `ProfaneView` takes it first
+  with a local event monitor. *Verified:* `test_frame.c` (divider rects, the character at a point), `window-test.ss`
+  (keys, `C-x t n`, clicks through `handle-mouse`: select, close the current and another tab), the keys in the app
+  with `post_keys`, and an offscreen `--snapshot` of three tabs. Mouse clicks in the real app were not posted.
 - **ace-window**: digit labels in the mode lines and a one-shot transient map (`set-transient-map`, new in the
   command loop); `C-u` swaps buffers, `C-u C-u` deletes. Labels drawn over the windows come with the canvas (item 6).
   Unbound by default: the owner's binding comes with the keymap port (item 8). **transpose-frame**: transpose,
@@ -662,7 +672,7 @@ waits for. Keep this list current: remove an entry when it is done, add one when
 - Canvas: paths and bezier curves, images, clip and transform (ops are not clipped to a canvas window), inline
   canvases (they need display-engine support for reserved space in a line), key and focus events.
 - Native views: only the stub kind; web (M11) and PDF kinds, key/mouse routing into views, focus handoff.
-- Mouse: the tab bar, dragging text, middle-click, right-click menus, momentum scrolling (see the Mouse entry in §8i).
+- Mouse: dragging tabs, dragging text, middle-click, right-click menus, momentum scrolling (see the Mouse entry in §8i).
 - Windows: `scroll-other-window`, `C-M-l`, window-start/point saved per history entry; electric-pair rules need a
   syntax table (M5); RET between a pair does not open an extra line (needs indentation).
 - Completion: `completion-preselect 'nearest` (the `preselect` option is the seam), corfu (popup completion).

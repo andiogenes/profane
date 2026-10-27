@@ -143,6 +143,7 @@ static const pf_font_source font_source = {NULL, font_metrics, font_scaled};
     NSString *_marked; /* input-method composition, nil when none */
     NSRange _markedSelection;
     NSEvent *_interpreting; /* the key event inside -interpretKeyEvents: */
+    id _controlTabMonitor;
     PFMetalLayerView *_base;
     PFMetalLayerView *_overlay;
     PFMetalRenderer *_metal;
@@ -187,11 +188,32 @@ static const pf_font_source font_source = {NULL, font_metrics, font_scaled};
                                            selector:@selector(systemColorsChanged:)
                                                name:NSSystemColorsDidChangeNotification
                                              object:nil];
+    /* AppKit takes Control-Tab and Control-Shift-Tab for moving focus between views before any
+     * view sees them; profane binds them (tab-next, tab-previous), so they are taken first. */
+    __weak ProfaneView *weakSelf = self;
+    _controlTabMonitor = [NSEvent
+        addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+                                     handler:^NSEvent *(NSEvent *event) {
+                                         ProfaneView *view = weakSelf;
+                                         NSString *chars = event.charactersIgnoringModifiers;
+                                         unichar c = chars.length ? [chars characterAtIndex:0] : 0;
+                                         if (view && event.window == view.window &&
+                                             view.window.firstResponder == view &&
+                                             (event.modifierFlags & NSEventModifierFlagControl) &&
+                                             (c == '\t' || c == 0x19)) {
+                                             [view keyDown:event];
+                                             return nil;
+                                         }
+                                         return event;
+                                     }];
     return self;
 }
 
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self];
+    if (_controlTabMonitor) {
+        [NSEvent removeMonitor:_controlTabMonitor];
+    }
     [_metal stop];
     pf_frm_unregister(_frameHandle);
     pf_frame_free(_frame);

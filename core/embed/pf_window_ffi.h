@@ -34,6 +34,11 @@ double pf_frm_strip_height(pf_handle frame, uint32_t face, uint32_t box);
 /* UTF8 is the text, RUNS NRUNS triples (start, end, face) in characters. */
 int pf_frm_set_tab_bar(pf_handle frame, const char *utf8, size_t len, const uint32_t *runs,
                        size_t nruns, uint32_t face, uint32_t box);
+/* POSITIONS: N character positions of 1-pixel lines in COLOR (pf_strip_set_dividers). */
+int pf_frm_set_tab_bar_dividers(pf_handle frame, const uint32_t *positions, size_t n,
+                                uint32_t color);
+/* The tab bar character at frame point X, Y; -1 if none, -2 for a bad handle. */
+int64_t pf_frm_tab_bar_char_at(pf_handle frame, float x, float y);
 /* Renders the frame as the shell would; returns the number of display items, -1 if nothing
  * changed. For tests. */
 int64_t pf_frm_redisplay(pf_handle frame);

@@ -67,7 +67,22 @@ int pf_strip_set(pf_strip *s, const uint32_t *cps, size_t n, const pf_strip_run 
 void pf_strip_free(pf_strip *s) {
     free(s->cps);
     free(s->runs);
+    free(s->dividers);
     memset(s, 0, sizeof *s);
+}
+
+int pf_strip_set_dividers(pf_strip *s, const uint32_t *positions, size_t n, uint32_t color) {
+    if (s->ndividers == n && s->divider_color == color &&
+        (n == 0 || memcmp(s->dividers, positions, n * sizeof *positions) == 0)) {
+        return 0;
+    }
+    s->dividers = xrealloc(s->dividers, n * sizeof *positions);
+    if (n) {
+        memcpy(s->dividers, positions, n * sizeof *positions);
+    }
+    s->ndividers = n;
+    s->divider_color = color;
+    return 1;
 }
 
 static uint32_t face_font(uint32_t face, uint32_t fallback) {
@@ -104,27 +119,10 @@ static void draw_edges(const pf_strip *s, const pf_face *base, pf_display *d, fl
     }
 }
 
-void pf_strip_render(const pf_strip *s, pf_display *d, pf_layout_cache *cache,
-                     const pf_font_source *src, uint32_t default_font, float x, float y, float w,
-                     float h, float scale) {
-    if (!s->face || w <= 0 || h <= 0) {
-        return;
-    }
-    const pf_face *base = pf_face_get(s->face);
-    uint32_t base_font = face_font(s->face, default_font);
-    const pf_face *def = pf_face_get(pf_face_role_id(PF_ROLE_DEFAULT));
-    uint32_t base_fg = base->flags & PF_FACE_HAS_FG ? base->fg
-                       : def->flags & PF_FACE_HAS_FG ? def->fg
-                                                     : 0x000000FF;
-    if (base->flags & PF_FACE_HAS_BG) {
-        pf_display_rect(d, x, y, w, h, base->bg);
-    }
-    if (s->n == 0) {
-        draw_edges(s, base, d, x, y, w, h, scale);
-        return;
-    }
-
-    /* Face and font of every character, then one font run per change. */
+/* Face of every character of S (malloc'ed into *FIDS) and the line laid out in those faces'
+ * fonts. S must have text. */
+static const pf_line_layout *strip_layout(const pf_strip *s, pf_layout_cache *cache,
+                                          uint32_t base_font, uint32_t **fids_out) {
     uint32_t *fids = xrealloc(NULL, s->n * sizeof *fids);
     for (size_t i = 0; i < s->n; i++) {
         fids[i] = s->face;
@@ -145,6 +143,49 @@ void pf_strip_render(const pf_strip *s, pf_display *d, pf_layout_cache *cache,
         }
     }
     const pf_line_layout *lay = pf_layout_line_runs(cache, runs, nruns, s->cps, s->n);
+    free(runs);
+    *fids_out = fids;
+    return lay;
+}
+
+long pf_strip_char_at(const pf_strip *s, pf_layout_cache *cache, uint32_t default_font, float x) {
+    if (!s->face || s->n == 0) {
+        return -1;
+    }
+    uint32_t *fids;
+    const pf_line_layout *lay = strip_layout(s, cache, face_font(s->face, default_font), &fids);
+    free(fids);
+    float lx = x - PAD_X;
+    for (size_t i = 0; i < lay->nchars; i++) {
+        if (lx >= lay->caret_x[i] && lx < lay->caret_x[i + 1]) {
+            return (long)i;
+        }
+    }
+    return -1;
+}
+
+void pf_strip_render(const pf_strip *s, pf_display *d, pf_layout_cache *cache,
+                     const pf_font_source *src, uint32_t default_font, float x, float y, float w,
+                     float h, float scale) {
+    if (!s->face || w <= 0 || h <= 0) {
+        return;
+    }
+    const pf_face *base = pf_face_get(s->face);
+    uint32_t base_font = face_font(s->face, default_font);
+    const pf_face *def = pf_face_get(pf_face_role_id(PF_ROLE_DEFAULT));
+    uint32_t base_fg = base->flags & PF_FACE_HAS_FG ? base->fg
+                       : def->flags & PF_FACE_HAS_FG ? def->fg
+                                                     : 0x000000FF;
+    if (base->flags & PF_FACE_HAS_BG) {
+        pf_display_rect(d, x, y, w, h, base->bg);
+    }
+    if (s->n == 0) {
+        draw_edges(s, base, d, x, y, w, h, scale);
+        return;
+    }
+
+    uint32_t *fids;
+    const pf_line_layout *lay = strip_layout(s, cache, base_font, &fids);
     pf_font_metrics m = pf_font_source_metrics(src, base_font);
     float x0 = x + PAD_X, right = x + w;
     float baseline = y + (s->box ? 1 : 0) + PAD_Y + roundf(m.ascent);
@@ -162,6 +203,13 @@ void pf_strip_render(const pf_strip *s, pf_display *d, pf_layout_cache *cache,
         i = j;
     }
     draw_edges(s, base, d, x, y, w, h, scale); /* over the run backgrounds */
+    for (size_t k = 0; k < s->ndividers; k++) {
+        size_t p = s->dividers[k] < lay->nchars ? s->dividers[k] : lay->nchars;
+        float dx = x0 + lay->caret_x[p];
+        if (dx < right) {
+            pf_display_rect(d, dx, y, 1.0f / scale, h, s->divider_color);
+        }
+    }
     for (size_t g = 0; g < lay->nglyphs; g++) {
         const pf_shaped_glyph *sg = &lay->glyphs[g];
         size_t c = sg->cluster < lay->nchars ? sg->cluster : lay->nchars - 1;
@@ -172,6 +220,5 @@ void pf_strip_render(const pf_strip *s, pf_display *d, pf_layout_cache *cache,
         uint32_t color = f->flags & PF_FACE_HAS_FG ? f->fg : base_fg;
         pf_display_glyph(d, sg->font, sg->glyph, x0 + sg->x, baseline, color);
     }
-    free(runs);
     free(fids);
 }

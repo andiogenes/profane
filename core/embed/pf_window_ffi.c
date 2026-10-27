@@ -173,6 +173,21 @@ int pf_frm_set_tab_bar(pf_handle frame, const char *utf8, size_t len, const uint
     return f ? set_strip(f, set_tab_bar, utf8, len, runs, nruns, face, box) : INVALID;
 }
 
+int pf_frm_set_tab_bar_dividers(pf_handle frame, const uint32_t *positions, size_t n,
+                                uint32_t color) {
+    pf_frame *f = frame_of(frame);
+    if (!f) {
+        return INVALID;
+    }
+    pf_frame_set_tab_bar_dividers(f, positions, n, color);
+    return 0;
+}
+
+int64_t pf_frm_tab_bar_char_at(pf_handle frame, float x, float y) {
+    pf_frame *f = frame_of(frame);
+    return f ? pf_frame_tab_bar_char_at(f, x, y) : -2;
+}
+
 int64_t pf_frm_redisplay(pf_handle frame) {
     pf_frame *f = frame_of(frame);
     if (!f) {
