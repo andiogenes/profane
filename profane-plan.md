@@ -421,8 +421,8 @@ the renderer tags the frame answering each event and records when it was submitt
   `border` (2.7:1 on white) and vivendi-tinted's paren-match background (4.3:1 under white); the test relaxes
   those two. Line numbers carry the modus backgrounds too (`bg-dim` / `bg-active` behind the gutter, drawn by the window renderer
   for any theme whose line-number faces set a background). Left out: the headings and prose roles (no faces yet).
-- **Typography**: code in `default-font-family` (JetBrains Mono), UI chrome and `variable-pitch` in `system-ui`
-  (SF Pro); per-face OpenType `features` (e.g. ligatures off); `line-spacing`; text scale (`C-x C-=`/`C--`/`C-0`,
+- **Typography**: code in `default-font-family` (JetBrains Mono), `variable-pitch` in `system-ui` (SF Pro);
+  the mode line and tab bar use the code font (owner's choice, dogfooding); per-face OpenType `features` (e.g. ligatures off); `line-spacing`; text scale (`C-x C-=`/`C--`/`C-0`,
   trackpad pinch) — per buffer since M2 windows (§8i).
 - **`ui-style`** presets `minimal` (default) and `rich` set chrome variables (`ui-fringe-width`, `ui-scroll-bars`,
   `ui-popup-shadow`, `ui-motion`, `ui-mode-line-style`) that the chrome reads as it lands.
@@ -446,7 +446,7 @@ the renderer tags the frame answering each event and records when it was submitt
 - **Mode lines**: `mode-line-format` (buffer-local) is a list of strings, segments (procedures of the window,
   `define-mode-line-segment`), variables, `(:face FACE ...)` and nested lists; Scheme formats them before each
   redisplay and pushes text + face runs only when they changed. Drawn by the C strip renderer
-  (`core/display/pf_strip`) in `mode-line` / `mode-line-inactive` (SF Pro), flat or raised per
+  (`core/display/pf_strip`) in `mode-line` / `mode-line-inactive` (code font), flat or raised per
   `ui-mode-line-style`; not text-scaled. Default: label, modified, buffer name, All/Top/Bot/NN%, (line,col), modes.
 - **Echo area**: the minibuffer window under the tree shows an undo-disabled echo buffer (`buffer-disable-undo`,
   which drops the history: it would no longer match the text). It grows to fit multi-line messages (up to
