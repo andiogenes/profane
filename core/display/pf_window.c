@@ -212,7 +212,7 @@ void pf_window_set_edges(pf_window *w, float fringe_left, float fringe_right, fl
 }
 
 void pf_window_set_mode_line(pf_window *w, const uint32_t *cps, size_t n,
-                             const pf_strip_run *runs, size_t nruns, uint32_t face, int box) {
+                             const pf_strip_run *runs, size_t nruns, uint32_t face, uint32_t box) {
     if (pf_strip_set(&w->mode_line, cps, n, runs, nruns, face, box)) {
         update_mode_line_height(w);
         w->dirty = 1;
@@ -224,7 +224,7 @@ float pf_window_mode_line_height(const pf_window *w) {
 }
 
 void pf_window_set_header_line(pf_window *w, const uint32_t *cps, size_t n,
-                               const pf_strip_run *runs, size_t nruns, uint32_t face, int box) {
+                               const pf_strip_run *runs, size_t nruns, uint32_t face, uint32_t box) {
     if (pf_strip_set(&w->header, cps, n, runs, nruns, face, box)) {
         update_mode_line_height(w);
         w->dirty = 1;

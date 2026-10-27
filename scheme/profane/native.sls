@@ -126,9 +126,9 @@
   (define-native %frm-height "pf_frm_height" (unsigned-32) double)
   (define-native %frm-line-height "pf_frm_line_height" (unsigned-32 float) double)
   (define-native %frm-cell-width "pf_frm_cell_width" (unsigned-32 float) double)
-  (define-native %frm-strip-height "pf_frm_strip_height" (unsigned-32 unsigned-32 boolean) double)
+  (define-native %frm-strip-height "pf_frm_strip_height" (unsigned-32 unsigned-32 unsigned-32) double)
   (define-native %frm-set-tab-bar "pf_frm_set_tab_bar"
-    (unsigned-32 u8* size_t u8* size_t unsigned-32 boolean) int)
+    (unsigned-32 u8* size_t u8* size_t unsigned-32 unsigned-32) int)
   (define-native %frm-redisplay "pf_frm_redisplay" (unsigned-32) integer-64)
   (define-native %frm-window-new "pf_frm_window_new" (unsigned-32) unsigned-32)
   (define-native %frm-window-delete "pf_frm_window_delete" (unsigned-32 unsigned-32) int)
@@ -148,7 +148,7 @@
   (define-native %win-option "pf_win_option" (unsigned-32 int) int)
   (define-native %win-set-edges "pf_win_set_edges" (unsigned-32 float float float) int)
   (define-native %win-set-mode-line "pf_win_set_mode_line"
-    (unsigned-32 u8* size_t u8* size_t unsigned-32 boolean) int)
+    (unsigned-32 u8* size_t u8* size_t unsigned-32 unsigned-32) int)
   (define-native %win-mode-line-height "pf_win_mode_line_height" (unsigned-32) double)
   (define-native %win-pos-at "pf_win_pos_at" (unsigned-32 float float) integer-64)
   (define-native %motion-set-feature "pf_motion_set_feature_ffi" (int int) int)
@@ -165,7 +165,7 @@
   (define-native %win-pos-rect "pf_win_pos_rect" (unsigned-32 size_t u8*) int)
   (define-native %win-set-region "pf_win_set_region" (unsigned-32 size_t size_t) int)
   (define-native %win-set-header-line "pf_win_set_header_line"
-    (unsigned-32 u8* size_t u8* size_t unsigned-32 boolean) int)
+    (unsigned-32 u8* size_t u8* size_t unsigned-32 unsigned-32) int)
   (define-native %win-header-line-height "pf_win_header_line_height" (unsigned-32) double)
   (define-native %win-hscroll "pf_win_hscroll" (unsigned-32) double)
   (define-native %win-set-min-hscroll "pf_win_set_min_hscroll" (unsigned-32 float) int)

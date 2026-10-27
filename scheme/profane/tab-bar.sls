@@ -125,7 +125,7 @@
       (unless (equal? key (hashtable-ref shown-bars f 'none))
         (hashtable-set! shown-bars f key)
         (if (not visible)
-            (begin (%frm-set-tab-bar (%frame-handle f) #vu8() 0 #vu8() 0 0 #f)
+            (begin (%frm-set-tab-bar (%frame-handle f) #vu8() 0 #vu8() 0 0 0)
                    (%set-frame-top-margin! f 0))
             (let loop ([ns names] [i 0] [text ""] [runs '()])
               (if (null? ns)
@@ -137,9 +137,9 @@
                                   (car rs) '(0 1 2))
                         (fill (cdr rs) (+ k 12))))
                     (%frm-set-tab-bar (%frame-handle f) bv (bytevector-length bv) rv (length runs)
-                                      (face-id 'tab-bar) #f)
+                                      (face-id 'tab-bar) 0)
                     (%set-frame-top-margin!
-                     f (%frm-strip-height (%frame-handle f) (face-id 'tab-bar) #f)))
+                     f (%frm-strip-height (%frame-handle f) (face-id 'tab-bar) 0)))
                   (let* ([label (format " ~a " (car ns))]
                          [start (string-length text)]
                          [face (if (= i (current-tab-index f)) 'tab-bar-tab 'tab-bar-tab-inactive)])

@@ -386,14 +386,22 @@
 
   (define (line-height f) (%frm-line-height (frame-handle f) 1.0))
   (define (cell-width f) (%frm-cell-width (frame-handle f) 1.0))
-  (define (mode-line-box?) (eq? (var-ref 'ui-mode-line-style) 'raised))
+;; The strip's box argument: 0 flat, 1 raised, else the RGBA color of a 1-pixel top and bottom
+  ;; border. A theme that defines the palette role mode-line-border (mode-line-border-inactive
+  ;; for other windows) gets the border; otherwise ui-mode-line-style decides.
+  (define (mode-line-box . inactive)
+    (let* ([role (if (and (pair? inactive) (car inactive)) 'mode-line-border-inactive 'mode-line-border)]
+           [color (guard (e [else #f]) (let ([c (theme-color role)]) (and (string? c) c)))])
+      (cond [color (color->rgba color)]
+            [(eq? (var-ref 'ui-mode-line-style) 'raised) 1]
+            [else 0])))
   (define (mode-line-height f)
     (+ (if (var-ref 'mode-line-format)
-           (%frm-strip-height (frame-handle f) (face-id 'mode-line) (mode-line-box?))
+           (%frm-strip-height (frame-handle f) (face-id 'mode-line) (mode-line-box))
            0)
        ;; a window with a header line needs room for it too
        (if (var-ref 'header-line-format)
-           (%frm-strip-height (frame-handle f) (face-id 'header-line) (mode-line-box?))
+           (%frm-strip-height (frame-handle f) (face-id 'header-line) (mode-line-box))
            0)))
 
   ;; The smallest window: window-min-height lines plus its mode line, window-min-width cells
@@ -1030,7 +1038,8 @@ screen rows."
           [else "--"]))
 
   (define-mode-line-segment (mode-line-buffer-identification w)
-    `(:face mode-line-buffer-id ,(buffer-name (window-buffer w))))
+    `(:face ,(if (selected? w) 'mode-line-buffer-id 'mode-line-buffer-id-inactive)
+            ,(buffer-name (window-buffer w))))
 
   ;; All / Top / Bot / NN% of the buffer above the window, then (line,column) of its point.
   (define-mode-line-segment (mode-line-position w)
@@ -1071,7 +1080,7 @@ screen rows."
     (let ([fmt (with-current-buffer (window-buffer w) (var-ref 'mode-line-format))])
       (let-values ([(text runs) (if fmt (format-mode-line w) (values "" '()))])
         (let* ([face (and fmt (if (selected? w) 'mode-line 'mode-line-inactive))]
-               [box (and fmt (mode-line-box?))]
+               [box (if fmt (mode-line-box (not (selected? w))) 0)]
                [key (list text runs face box)])
           (unless (equal? key (window-mode-line w))
             (window-mode-line-set! w key)
@@ -1088,7 +1097,7 @@ screen rows."
     (let ([fmt (with-current-buffer (window-buffer w) (var-ref 'header-line-format))])
       (let-values ([(text runs) (if fmt (format-line w 'header-line-format) (values "" '()))])
         (let* ([face (and fmt 'header-line)]
-               [box (and fmt (mode-line-box?))]
+               [box (if fmt (mode-line-box) 0)]
                [key (list text runs face box)])
           (unless (equal? key (hashtable-ref header-keys w #f))
             (hashtable-set! header-keys w key)

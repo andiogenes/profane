@@ -39,7 +39,7 @@ uint32_t pf_font_source_scaled(const pf_font_source *src, uint32_t font, float f
 }
 
 int pf_strip_set(pf_strip *s, const uint32_t *cps, size_t n, const pf_strip_run *runs,
-                 size_t nruns, uint32_t face, int box) {
+                 size_t nruns, uint32_t face, uint32_t box) {
     if (!face) {
         n = nruns = 0;
         box = 0;
@@ -75,7 +75,7 @@ static uint32_t face_font(uint32_t face, uint32_t fallback) {
     return f ? f : fallback;
 }
 
-float pf_strip_height(const pf_font_source *src, uint32_t face, uint32_t default_font, int box) {
+float pf_strip_height(const pf_font_source *src, uint32_t face, uint32_t default_font, uint32_t box) {
     pf_font_metrics m = pf_font_source_metrics(src, face_font(face, default_font));
     return ceilf(m.ascent + m.descent + m.leading) + 2 * PAD_Y + (box ? 2 : 0);
 }
@@ -89,6 +89,19 @@ static uint32_t shade(uint32_t c, float amount) {
         out |= (uint32_t)lroundf(v) << shift;
     }
     return out;
+}
+
+/* The box: a border color's top and bottom lines, or a raised strip's light and dark edges. */
+static void draw_edges(const pf_strip *s, const pf_face *base, pf_display *d, float x, float y,
+                       float w, float h, float scale) {
+    float px = 1.0f / scale;
+    if (s->box > 1) {
+        pf_display_rect(d, x, y, w, px, s->box);
+        pf_display_rect(d, x, y + h - px, w, px, s->box);
+    } else if (s->box && (base->flags & PF_FACE_HAS_BG)) {
+        pf_display_rect(d, x, y, w, px, shade(base->bg, 0.5f));
+        pf_display_rect(d, x, y + h - px, w, px, shade(base->bg, -0.25f));
+    }
 }
 
 void pf_strip_render(const pf_strip *s, pf_display *d, pf_layout_cache *cache,
@@ -106,12 +119,8 @@ void pf_strip_render(const pf_strip *s, pf_display *d, pf_layout_cache *cache,
     if (base->flags & PF_FACE_HAS_BG) {
         pf_display_rect(d, x, y, w, h, base->bg);
     }
-    if (s->box && (base->flags & PF_FACE_HAS_BG)) {
-        float px = 1.0f / scale;
-        pf_display_rect(d, x, y, w, px, shade(base->bg, 0.5f));
-        pf_display_rect(d, x, y + h - px, w, px, shade(base->bg, -0.25f));
-    }
     if (s->n == 0) {
+        draw_edges(s, base, d, x, y, w, h, scale);
         return;
     }
 
@@ -152,6 +161,7 @@ void pf_strip_render(const pf_strip *s, pf_display *d, pf_layout_cache *cache,
         }
         i = j;
     }
+    draw_edges(s, base, d, x, y, w, h, scale); /* over the run backgrounds */
     for (size_t g = 0; g < lay->nglyphs; g++) {
         const pf_shaped_glyph *sg = &lay->glyphs[g];
         size_t c = sg->cluster < lay->nchars ? sg->cluster : lay->nchars - 1;

@@ -35,17 +35,18 @@ typedef struct pf_strip {
     pf_strip_run *runs;
     size_t nruns;
     uint32_t face; /* 0: no strip */
-    int box;       /* 0 flat, 1 raised (a 1-pixel light top and dark bottom edge) */
+    uint32_t box;  /* 0 flat, 1 raised (a 1-pixel light top and dark bottom edge), else a border:
+                    * 1-pixel top and bottom lines in this RGBA color (its alpha is never 0) */
 } pf_strip;
 
 /* Copies the contents into S; returns 1 if they differ from what S had. FACE 0 empties it. */
 int pf_strip_set(pf_strip *s, const uint32_t *cps, size_t n, const pf_strip_run *runs,
-                 size_t nruns, uint32_t face, int box);
+                 size_t nruns, uint32_t face, uint32_t box);
 void pf_strip_free(pf_strip *s);
 
 /* Height of a strip with base face FACE: one line of its font (DEFAULT_FONT when the face sets
  * none) plus padding, and the box. Points, whole. */
-float pf_strip_height(const pf_font_source *src, uint32_t face, uint32_t default_font, int box);
+float pf_strip_height(const pf_font_source *src, uint32_t face, uint32_t default_font, uint32_t box);
 
 /* Draws S into the rect X, Y, W, H; text is clipped at the right edge. Call within a layout
  * frame (pf_layout_begin_frame). */

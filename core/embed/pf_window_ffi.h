@@ -30,10 +30,10 @@ double pf_frm_height(pf_handle frame);
  * face (pf_frame_strip_height). */
 double pf_frm_line_height(pf_handle frame, float factor);
 double pf_frm_cell_width(pf_handle frame, float factor);
-double pf_frm_strip_height(pf_handle frame, uint32_t face, int box);
+double pf_frm_strip_height(pf_handle frame, uint32_t face, uint32_t box);
 /* UTF8 is the text, RUNS NRUNS triples (start, end, face) in characters. */
 int pf_frm_set_tab_bar(pf_handle frame, const char *utf8, size_t len, const uint32_t *runs,
-                       size_t nruns, uint32_t face, int box);
+                       size_t nruns, uint32_t face, uint32_t box);
 /* Renders the frame as the shell would; returns the number of display items, -1 if nothing
  * changed. For tests. */
 int64_t pf_frm_redisplay(pf_handle frame);
@@ -90,11 +90,11 @@ int pf_win_option(pf_handle win, int option);
 int pf_win_set_edges(pf_handle win, float fringe_left, float fringe_right, float divider);
 /* Arguments as for pf_frm_set_tab_bar; FACE 0 removes the mode line. */
 int pf_win_set_mode_line(pf_handle win, const char *utf8, size_t len, const uint32_t *runs,
-                         size_t nruns, uint32_t face, int box);
+                         size_t nruns, uint32_t face, uint32_t box);
 double pf_win_mode_line_height(pf_handle win);
 /* The header line at the top of WIN (args as for pf_win_set_mode_line); FACE 0 removes it. */
 int pf_win_set_header_line(pf_handle win, const char *utf8, size_t len, const uint32_t *runs,
-                           size_t nruns, uint32_t face, int box);
+                           size_t nruns, uint32_t face, uint32_t box);
 double pf_win_header_line_height(pf_handle win);
 double pf_win_hscroll(pf_handle win); /* points */
 int pf_win_set_min_hscroll(pf_handle win, float points);

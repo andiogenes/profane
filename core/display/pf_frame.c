@@ -133,7 +133,7 @@ pf_window_style pf_frame_text_style(const pf_frame *f, float factor) {
     };
 }
 
-float pf_frame_strip_height(const pf_frame *f, uint32_t face, int box) {
+float pf_frame_strip_height(const pf_frame *f, uint32_t face, uint32_t box) {
     uint32_t font = pf_face_get(pf_face_role_id(PF_ROLE_DEFAULT))->font;
     return pf_strip_height(fonts_of(f), face, font ? font : f->base_font, box);
 }
@@ -365,7 +365,7 @@ pf_window *pf_frame_selected(const pf_frame *f) {
 }
 
 void pf_frame_set_tab_bar(pf_frame *f, const uint32_t *cps, size_t n, const pf_strip_run *runs,
-                          size_t nruns, uint32_t face, int box) {
+                          size_t nruns, uint32_t face, uint32_t box) {
     if (pf_strip_set(&f->tab_bar, cps, n, runs, nruns, face, box)) {
         f->dirty = 1;
     }

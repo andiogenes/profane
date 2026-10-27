@@ -331,6 +331,31 @@ int main(void) {
     PF_CHECK(m && m->y > 140 - ml && m->y < 140 && m->color == FG);
     pf_display_release(d);
 
+    /* A border color as BOX draws 1-pixel lines of it at the top and bottom of the strip. */
+    pf_window_set_mode_line(w1, cps, n, NULL, 0, 10, 0x336699FF);
+    PF_CHECK(NEAR(pf_window_mode_line_height(w1), 20 + 4 + 2));
+    d = pf_frame_redisplay(f);
+    PF_CHECK_EQ_SIZE(d ? count_rects(d, 0x336699FF) : 0, 2);
+    pf_display_release(d);
+    /* A run with a background of its own is drawn under the border lines, not over them. */
+    set_face(12, PF_FACE_HAS_BG, 0, REGION_BG);
+    pf_strip_run mrun = {0, 1, 12};
+    pf_window_set_mode_line(w1, cps, n, &mrun, 1, 10, 0x336699FF);
+    d = pf_frame_redisplay(f);
+    size_t run_at = 0, last_border = 0;
+    for (size_t i = 0; d && i < pf_display_count(d); i++) {
+        const pf_display_item *it = &pf_display_items(d)[i];
+        if (it->kind == PF_DISPLAY_RECT && it->color == REGION_BG && NEAR(it->u.rect.h, 24 + 2)) {
+            run_at = i + 1;
+        }
+        if (it->kind == PF_DISPLAY_RECT && it->color == 0x336699FF) {
+            last_border = i + 1;
+        }
+    }
+    PF_CHECK(run_at && last_border > run_at);
+    pf_display_release(d);
+    pf_window_set_mode_line(w1, cps, n, NULL, 0, 10, 0);
+
     /* A divider on the right edge; long lines are clipped before it, never crossing it. */
     pf_window_set_edges(w1, 1, 1, 1);
     pf_buf_insert(a, 3, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 59);

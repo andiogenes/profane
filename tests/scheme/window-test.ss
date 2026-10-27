@@ -1,6 +1,6 @@
 (import (chezscheme) (srfi :64) (profane native) (profane buffer) (profane var) (profane keymap)
         (profane command) (profane command-loop) (profane mode) (profane window)
-        (profane display) (profane theme) (profane themes) (profane tab-bar)
+        (profane display) (profane face) (profane theme) (profane themes) (profane tab-bar)
         (profane transpose-frame) (profane ace-window) (profane mouse) (profane simple))
 
 (for-each invoke-library '((profane simple) (profane window) (profane display) (profane themes)
@@ -27,6 +27,26 @@
 (test-equal "starts on *scratch*" "*scratch*" (buffer-name (window-buffer w1)))
 (test-assert "minibuffer window below" (window-minibuffer? (minibuffer-window)))
 (test-equal "the window fills the frame above the echo area" '(0.0 0.0 800.0 576.0) (edges w1))
+
+
+;; ---- mode line border ----
+;; A theme with the palette role mode-line-border gives the mode line a 1-pixel top and bottom
+;; border (2 points taller); a theme without it keeps it flat.
+(define (ml-height) (begin (redisplay-prepare!) (%win-mode-line-height (%window-handle w1))))
+(let ([flat (ml-height)])
+  (load-theme 'modus-operandi)
+  (test-equal "bordered mode line is 2 taller" (+ flat 2.0) (ml-height))
+  (load-theme 'modus-vivendi-tinted)
+  (test-equal "also in the dark theme" (+ flat 2.0) (ml-height))
+  (load-theme 'profane-light)
+  (test-equal "flat again without the role" flat (ml-height)))
+(load-theme 'modus-operandi)
+(test-equal "buffer name: the mode line's background" (face-attribute 'mode-line 'background)
+            (face-attribute 'mode-line-buffer-id 'background))
+(test-equal "buffer name in other windows: their background"
+            (face-attribute 'mode-line-inactive 'background)
+            (face-attribute 'mode-line-buffer-id-inactive 'background))
+(load-theme 'profane-light)
 
 (define b (get-buffer-create "text"))
 (with-current-buffer b

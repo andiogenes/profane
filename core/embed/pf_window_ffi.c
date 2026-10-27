@@ -107,7 +107,7 @@ double pf_frm_cell_width(pf_handle frame, float factor) {
     return f ? pf_frame_text_style(f, factor).cell_width : INVALID;
 }
 
-double pf_frm_strip_height(pf_handle frame, uint32_t face, int box) {
+double pf_frm_strip_height(pf_handle frame, uint32_t face, uint32_t box) {
     pf_frame *f = frame_of(frame);
     return f ? pf_frame_strip_height(f, face, box) : INVALID;
 }
@@ -136,10 +136,10 @@ static uint32_t *decode(const char *utf8, size_t len, size_t *n) {
 }
 
 typedef void (*strip_setter)(void *target, const uint32_t *cps, size_t n,
-                             const pf_strip_run *runs, size_t nruns, uint32_t face, int box);
+                             const pf_strip_run *runs, size_t nruns, uint32_t face, uint32_t box);
 
 static int set_strip(void *target, strip_setter set, const char *utf8, size_t len,
-                     const uint32_t *runs, size_t nruns, uint32_t face, int box) {
+                     const uint32_t *runs, size_t nruns, uint32_t face, uint32_t box) {
     size_t n;
     uint32_t *cps = decode(utf8, len, &n);
     pf_strip_run *r = malloc((nruns ? nruns : 1) * sizeof *r);
@@ -158,17 +158,17 @@ static int set_strip(void *target, strip_setter set, const char *utf8, size_t le
 }
 
 static void set_tab_bar(void *f, const uint32_t *cps, size_t n, const pf_strip_run *runs,
-                        size_t nruns, uint32_t face, int box) {
+                        size_t nruns, uint32_t face, uint32_t box) {
     pf_frame_set_tab_bar(f, cps, n, runs, nruns, face, box);
 }
 
 static void set_mode_line(void *w, const uint32_t *cps, size_t n, const pf_strip_run *runs,
-                          size_t nruns, uint32_t face, int box) {
+                          size_t nruns, uint32_t face, uint32_t box) {
     pf_window_set_mode_line(w, cps, n, runs, nruns, face, box);
 }
 
 int pf_frm_set_tab_bar(pf_handle frame, const char *utf8, size_t len, const uint32_t *runs,
-                       size_t nruns, uint32_t face, int box) {
+                       size_t nruns, uint32_t face, uint32_t box) {
     pf_frame *f = frame_of(frame);
     return f ? set_strip(f, set_tab_bar, utf8, len, runs, nruns, face, box) : INVALID;
 }
@@ -410,18 +410,18 @@ int pf_win_set_edges(pf_handle win, float fringe_left, float fringe_right, float
 }
 
 int pf_win_set_mode_line(pf_handle win, const char *utf8, size_t len, const uint32_t *runs,
-                         size_t nruns, uint32_t face, int box) {
+                         size_t nruns, uint32_t face, uint32_t box) {
     pf_window *w = window_of(win);
     return w ? set_strip(w, set_mode_line, utf8, len, runs, nruns, face, box) : INVALID;
 }
 
 static void set_header_line(void *w, const uint32_t *cps, size_t n, const pf_strip_run *runs,
-                            size_t nruns, uint32_t face, int box) {
+                            size_t nruns, uint32_t face, uint32_t box) {
     pf_window_set_header_line(w, cps, n, runs, nruns, face, box);
 }
 
 int pf_win_set_header_line(pf_handle win, const char *utf8, size_t len, const uint32_t *runs,
-                           size_t nruns, uint32_t face, int box) {
+                           size_t nruns, uint32_t face, uint32_t box) {
     pf_window *w = window_of(win);
     return w ? set_strip(w, set_header_line, utf8, len, runs, nruns, face, box) : INVALID;
 }

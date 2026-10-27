@@ -86,13 +86,13 @@ void pf_window_set_edges(pf_window *w, float fringe_left, float fringe_right, fl
 
 /* The mode line: one line at the bottom of the window (see pf_strip). FACE 0 removes it. */
 void pf_window_set_mode_line(pf_window *w, const uint32_t *cps, size_t n,
-                             const pf_strip_run *runs, size_t nruns, uint32_t face, int box);
+                             const pf_strip_run *runs, size_t nruns, uint32_t face, uint32_t box);
 float pf_window_mode_line_height(const pf_window *w);
 
 /* The header line: one line at the top of the window, above the text (see pf_strip). FACE 0
  * removes it. Text, fringes, the cursor and the body rect all start below it. */
 void pf_window_set_header_line(pf_window *w, const uint32_t *cps, size_t n,
-                               const pf_strip_run *runs, size_t nruns, uint32_t face, int box);
+                               const pf_strip_run *runs, size_t nruns, uint32_t face, uint32_t box);
 float pf_window_header_line_height(const pf_window *w);
 
 /* Horizontal scroll in points. Redisplay scrolls sideways to keep point visible (Emacs
