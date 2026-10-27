@@ -25,8 +25,9 @@ typedef struct pf_window_style {
     float pad_left, pad_top;
 } pf_window_style;
 
-/* The text property whose value is a face id (pf_face.h). */
-enum { PF_PROP_FACE = 1 };
+/* The text property whose value is a face id (pf_face.h), and one drawn over it where set
+ * (isearch matches): highlights come and go without disturbing the faces underneath. */
+enum { PF_PROP_FACE = 1, PF_PROP_HIGHLIGHT = 2 };
 
 /* Per-window display features (Emacs's display-line-numbers, hl-line, show-paren) and the
  * cursor: PF_CURSOR_* values (a box by default; hollow in non-selected windows, as in Emacs). */

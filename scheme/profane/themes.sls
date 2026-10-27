@@ -36,6 +36,9 @@
       (diff-hl-delete (foreground . red))
       (show-paren-match (background . bg-paren-match))
       (show-paren-mismatch (background . bg-paren-mismatch))
+      (isearch (foreground . fg) (background . bg-search-current))
+      (lazy-highlight (foreground . fg) (background . bg-search-lazy))
+      (isearch-fail (foreground . fg) (background . bg-paren-mismatch))
       (vertical-border (foreground . border))
       (fringe (foreground . fg-dim))
       (mode-line (foreground . fg) (background . bg-mode-line))
@@ -103,6 +106,7 @@
                  (bg-added-strong . "#8fd18f") (bg-removed-strong . "#e69a9a")
                  (bg-mode-line . "#c9d3e2") (bg-mode-line-inactive . "#eceff4")
                  (bg-tab-bar . "#e1e5ec") (border . "#7d8899")
+                 (bg-search-current . "#ffd84d") (bg-search-lazy . "#b5e3f5")
                  ;; the 16 ANSI colors of terminals
                  (term-black . "#000000") (term-red . red) (term-green . green) (term-yellow . yellow)
                  (term-blue . blue) (term-magenta . magenta) (term-cyan . cyan) (term-white . "#a0a0a0")
@@ -121,6 +125,7 @@
                  (bg-added-strong . "#2f8a3f") (bg-removed-strong . "#9a3a46")
                  (bg-mode-line . "#2b3654") (bg-mode-line-inactive . "#171c2c")
                  (bg-tab-bar . "#141929") (border . "#5c6888")
+                 (bg-search-current . "#7a6100") (bg-search-lazy . "#22507e")
                  (term-black . "#555d7a") (term-red . red) (term-green . green) (term-yellow . yellow)
                  (term-blue . blue) (term-magenta . magenta) (term-cyan . cyan) (term-white . "#c8ccd8")
                  (term-bright-black . "#6b7390") (term-bright-red . "#ffb3b6") (term-bright-green . "#a0eaa0")
@@ -189,6 +194,7 @@
       (bg-added-strong . bg-green-intense) (bg-removed-strong . bg-red-intense)
       (bg-paren-mismatch . bg-prominent-err)
       (bg-mode-line . bg-mode-line-active) (accent . system-accent)
+      (bg-search-current . bg-yellow-intense) (bg-search-lazy . bg-cyan-intense)
       (term-red . red) (term-green . green) (term-yellow . yellow) (term-blue . blue)
       (term-magenta . magenta) (term-cyan . cyan)
       (term-bright-red . red-warmer) (term-bright-green . green-cooler)
@@ -226,7 +232,8 @@
       (variable . "#005e8b") (accent-0 . "#0031a9")
       (fg-link . "#3548cf") (fg-link-symbolic . "#005e8b") (fg-prompt . "#005f5f")
       (bg-mark-delete . "#ffcfbf") (fg-mark-delete . "#a60000")
-      (bg-mark-select . "#bfefff") (fg-mark-select . "#005e8b")))
+      (bg-mark-select . "#bfefff") (fg-mark-select . "#005e8b")
+      (bg-yellow-intense . "#f3d000") (bg-cyan-intense . "#a4d5f9")))
 
   (define modus-vivendi-tinted-palette
     '((fg-dim . "#989898") (fg-alt . "#c6daff") (bg-dim . "#1d2235") (bg-active . "#4a4f69")
@@ -257,7 +264,8 @@
       (variable . "#4ae2f0") (accent-0 . "#b6a0ff")
       (fg-link . "#79a8ff") (fg-link-symbolic . "#00d3d0") (fg-prompt . "#4ae2f0")
       (bg-mark-delete . "#620f2a") (fg-mark-delete . "#ff7f86")
-      (bg-mark-select . "#004065") (fg-mark-select . "#00d3d0")))
+      (bg-mark-select . "#004065") (fg-mark-select . "#00d3d0")
+      (bg-yellow-intense . "#7a6100") (bg-cyan-intense . "#2266ae")))
 
   (define (modus-theme appearance palette)
     (list (cons 'appearance appearance) (cons 'palette (append palette modus-roles))

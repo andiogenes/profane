@@ -500,21 +500,25 @@ static void *grow(void *p, size_t *cap, size_t need, size_t elem) {
     return p;
 }
 
-/* Face id of every character of the line [START, START+N) (text property PF_PROP_FACE), with
- * PRE default-face characters spliced in at K for an input-method composition. */
+/* Face id of every character of the line [START, START+N) (text property PF_PROP_FACE, then
+ * PF_PROP_HIGHLIGHT over it), with PRE default-face characters spliced in at K for an
+ * input-method composition. */
 static void load_faces(pf_window *w, pf_text *text, size_t start, size_t n, size_t k, size_t pre) {
     w->fids = grow(w->fids, &w->fids_cap, n + pre + 1, sizeof *w->fids);
     uint32_t def = pf_face_role_id(PF_ROLE_DEFAULT);
     for (size_t i = 0; i < n + pre; i++) {
         w->fids[i] = def;
     }
-    size_t total = pf_props_runs(pf_text_props(text), PF_PROP_FACE, start, start + n, NULL, 0);
-    w->props_buf = grow(w->props_buf, &w->props_cap, total + 1, sizeof *w->props_buf);
-    pf_props_runs(pf_text_props(text), PF_PROP_FACE, start, start + n, w->props_buf, total);
-    for (size_t r = 0; r < total; r++) {
-        for (size_t p = w->props_buf[r].start; p < w->props_buf[r].end; p++) {
-            size_t idx = p - start;
-            w->fids[pre && idx >= k ? idx + pre : idx] = w->props_buf[r].value;
+    static const uint32_t layers[] = {PF_PROP_FACE, PF_PROP_HIGHLIGHT};
+    for (size_t l = 0; l < sizeof layers / sizeof *layers; l++) {
+        size_t total = pf_props_runs(pf_text_props(text), layers[l], start, start + n, NULL, 0);
+        w->props_buf = grow(w->props_buf, &w->props_cap, total + 1, sizeof *w->props_buf);
+        pf_props_runs(pf_text_props(text), layers[l], start, start + n, w->props_buf, total);
+        for (size_t r = 0; r < total; r++) {
+            for (size_t p = w->props_buf[r].start; p < w->props_buf[r].end; p++) {
+                size_t idx = p - start;
+                w->fids[pre && idx >= k ? idx + pre : idx] = w->props_buf[r].value;
+            }
         }
     }
 }

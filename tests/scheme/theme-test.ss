@@ -36,7 +36,8 @@
      (lambda (f)
        (test-assert (format "~a: text on ~a >= ~a:1" name f (min-for f 4.5))
                     (>= (contrast fg (face-attribute f 'background)) (min-for f 4.5))))
-     '(hl-line highlight region show-paren-match show-paren-mismatch))
+     '(hl-line highlight region show-paren-match show-paren-mismatch isearch lazy-highlight
+       isearch-fail))
     (test-assert (format "~a: cursor stands out >= 7:1" name)
                  (>= (contrast (face-attribute 'cursor 'background) bg) 7))
     ;; Chrome: mode lines and tabs (active text >= 7:1, inactive >= 4.5:1), and the window

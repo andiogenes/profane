@@ -392,6 +392,17 @@ static void test_faces(void) {
     PF_CHECK(d != NULL);
     pf_display_release(d);
 
+    /* A highlight is drawn over the face property where set, and taking it away shows the
+     * face again. */
+    pf_props_put(pf_text_props(pf_handle_get(buf, PF_HANDLE_TEXT)), PF_PROP_HIGHLIGHT, 0, 5, 20);
+    d = frame_at(w, buf, point, 0);
+    PF_CHECK_EQ_SIZE(count_color(d, PF_DISPLAY_GLYPH, 0x00AA00FF), 4 + 5); /* BOLD + plain */
+    pf_display_release(d);
+    pf_props_put(pf_text_props(pf_handle_get(buf, PF_HANDLE_TEXT)), PF_PROP_HIGHLIGHT, 0, 5, 0);
+    d = frame_at(w, buf, point, 0);
+    PF_CHECK_EQ_SIZE(count_color(d, PF_DISPLAY_GLYPH, 0x00AA00FF), 4);
+    pf_display_release(d);
+
     /* Regression: the default face's background drew a full-width rect on every line. */
     d = frame_at(w, buf, point, 0);
     PF_CHECK(find_rect(d, 0xFFFFFFFF, 0) == NULL);

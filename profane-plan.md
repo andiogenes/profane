@@ -333,6 +333,22 @@ Layers: libgit2 reader (workers, ftype structs) → git CLI runner (`GIT_EDITOR`
 - **display-line-numbers / hl-line / show-paren** (on by default, per the owner's config) are per-window options of
   the portable window renderer, switched from Scheme; show-paren matches immediately (no delay), bounded to 100k
   characters, plain bracket counting until tree-sitter syntax (M5).
+- **isearch** (dogfooding, `(profane isearch)`): `C-s` / `C-r` as Emacs's incremental search. While searching,
+  `isearch-mode-map` has `C-s C-r` (next/previous; on an empty string the last string again from `search-ring`; after a
+  failure, wrap), `DEL` (undo the last step: a character, a repeat, a yank), `RET` (stop; the mark goes where the search
+  started unless the region was active), `C-g` (take back the failing part, else go back and stop), `C-w` (rest of the
+  word at point), `C-y` (last kill). Any other key stops the search and then runs. Case folds unless the string has
+  capitals (`case-fold-search`). The search reads the keyboard through a new command-loop seam,
+  `set-input-override!` (a procedure from `'key`/`'text` and the input to a command, or #f for the keymaps): unlike a
+  key reader it leaves typed text to the input method, so Russian text is searched as typed, and a mode's plain-key
+  bindings (dired's `n`) do not take typed characters. Matching is naive over a copy of the buffer text, kept while the
+  buffer's edit count holds. Highlights use the `highlight` text property (§8g): the match in `isearch`, other matches
+  in `lazy-highlight`, at most `lazy-highlight-max` (1000), as far as a window's height either side of the match. If
+  point moves while searching (a mouse click), the next key stops the search quietly and runs as usual.
+  *Verified:* `isearch-test.ss` (59 checks: growing in place both ways, repeats, DEL, failing and wrapping, C-g,
+  C-s C-s, other keys, C-w, a mode binding `n`, point moved outside, faces kept under highlights); `test_layout.c`
+  (highlight drawn over faces and removed); in the app over the REPL with keys posted to it (`C-s`, typed `bet` and
+  `дел` as text, `C-s`, `RET` leaving the mark, `C-e` stopping and moving). *Not looked at on screen* (the colors).
 
 ## 8e. Latency (M1)
 
@@ -373,6 +389,10 @@ the renderer tags the frame answering each event and records when it was submitt
   when equal and adjacent, moved by edits and undo/redo like Emacs text properties (plain insert inherits nothing).
   Arrays for now (O(runs) per edit); a tree can replace them behind the API once highlighting is dense (M5). Undo
   restores text but not its properties; re-highlighting covers that.
+- **`highlight`** (property 2, `PF_PROP_HIGHLIGHT`, dogfooding with isearch): a face drawn over the `face` property
+  where set, so transient highlights (search matches) come and go without saving or restoring the faces underneath.
+  It replaces the face id for those characters (no merging of attributes, as Emacs overlays would). Properties belong
+  to the buffer, so every window showing it shows them.
 - **Faces in C** (`core/display/pf_face`): id → fg/bg/underline/font; display roles (default, cursor, line numbers,
   hl-line, show-paren) map to face ids. `(profane display)` resolves every face (inheritance → `default`) and pushes
   them all on any change, so a theme change restyles everything; fonts for bold/italic/family/height are opened via
@@ -630,6 +650,11 @@ waits for. Keep this list current: remove an entry when it is done, add one when
 - Region: `delete-selection-mode`, `shift-select-mode`, a mark ring, `C-SPC C-SPC`, showing it in non-selected windows.
 - Press-and-hold: held keys repeat; `press-and-hold-keys` re-enables the accent picker per key. The per-key switch
   assumes macOS re-reads the default on each key down, which is unverified.
+- isearch: regexp search (`C-M-s`, `C-u C-s`; there is no regex engine yet), `M-e` editing the string, `M-c` case
+  toggle, `M-n`/`M-p` through the search ring, `query-replace`, the failing part shown in `isearch-fail` in the echo
+  area (the face exists), lazy-count, isearch in the minibuffer (refused), stopping on a mouse click (it stops at the
+  next key), "Overwrapped". Highlights replace faces instead of merging with them, and show in every window on the
+  buffer (no overlays yet).
 - Canvas: paths and bezier curves, images, clip and transform (ops are not clipped to a canvas window), inline
   canvases (they need display-engine support for reserved space in a line), key and focus events.
 - Native views: only the stub kind; web (M11) and PDF kinds, key/mouse routing into views, focus handoff.

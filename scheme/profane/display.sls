@@ -120,6 +120,9 @@
          (diff-hl-delete () "Fringe mark where lines were removed.")
          (show-paren-match () "A bracket and its partner.")
          (show-paren-mismatch () "A bracket without a proper partner.")
+         (isearch () "The current isearch match.")
+         (lazy-highlight () "Other isearch matches.")
+         (isearch-fail () "The part of the isearch string that does not match.")
          (link () "Links.")
          (error () "Errors.")
          (warning () "Warnings.")
@@ -180,26 +183,32 @@
 
   ;; ---- text properties ----
 
-  (define prop-ids (make-eq-hashtable))   ; property name -> id (face is 1: PF_PROP_FACE)
-  (define next-prop 2)
+  ;; face is 1 (PF_PROP_FACE); highlight is 2 (PF_PROP_HIGHLIGHT), a face drawn over face where
+  ;; set (isearch's matches), so it comes and goes without touching the faces underneath.
+  (define prop-ids (make-eq-hashtable))   ; property name -> id
+  (define next-prop 3)
   (define values-by-id (make-eqv-hashtable)) ; non-face values, interned
   (define ids-by-value (make-hashtable equal-hash equal?))
   (define next-value 1)
 
   (define (prop-id name)
-    (if (eq? name 'face)
-        1
-        (or (hashtable-ref prop-ids name #f)
-            (begin
-              (when (>= next-prop 32) (error 'put-text-property "too many text properties" name))
-              (hashtable-set! prop-ids name next-prop)
-              (set! next-prop (+ next-prop 1))
-              (hashtable-ref prop-ids name #f)))))
+    (case name
+      [(face) 1]
+      [(highlight) 2]
+      [else
+       (or (hashtable-ref prop-ids name #f)
+           (begin
+             (when (>= next-prop 32) (error 'put-text-property "too many text properties" name))
+             (hashtable-set! prop-ids name next-prop)
+             (set! next-prop (+ next-prop 1))
+             (hashtable-ref prop-ids name #f)))]))
+
+  (define (face-prop? name) (memq name '(face highlight)))
 
   (define (encode name value)
     (cond
       [(not value) 0]
-      [(eq? name 'face)
+      [(face-prop? name)
        (unless (face-defined? value) (error 'put-text-property "undefined face" value))
        (face-id value)]
       [(hashtable-ref ids-by-value value #f)]
@@ -212,7 +221,7 @@
   (define (decode name id)
     (cond
       [(zero? id) #f]
-      [(eq? name 'face)
+      [(face-prop? name)
        (let loop ([fs (face-names)]) (cond [(null? fs) #f]
                                            [(= (face-id (car fs)) id) (car fs)]
                                            [else (loop (cdr fs))]))]

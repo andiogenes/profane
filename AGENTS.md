@@ -254,6 +254,7 @@ clang-format -i <files>                                 # format C / ObjC (brew 
 | Async queue (events posted from other threads, timers) | `core/async/pf_async.*`, `(profane async)` (§8k) |
 | macOS services: pasteboard, open URL/file, AppleScript, other apps' window bounds | `platform/macos/PFMacOS.*`, `(profane macos)` (§8k) |
 | Project search (consult-ripgrep, consult-find) | `scheme/profane/search.sls` (§8k) |
+| Incremental search (`C-s`/`C-r`), the `highlight` text property | `scheme/profane/isearch.sls` (§8d, §8g) |
 | Keychain secrets | `PFMacOS.m`, `(profane secrets)` (§8k) |
 | File system calls, dired | `core/fs/pf_fs.*`, `(profane fs)`, `(profane dired)` (§8k) |
 | Sidebar file tree, buffer menu | `(profane sidebar)`, `(profane buffer-menu)` (§8k) |

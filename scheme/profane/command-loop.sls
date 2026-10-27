@@ -6,12 +6,12 @@
 ;;; runs in the selected window's buffer with an undo boundary before it, except inside a run
 ;;; of up to self-insert-amalgamation typed characters. Errors beep and go to *Messages*. New
 ;;; input clears the echo area. A transient map (set-transient-map) takes precedence for the
-;;; next key sequence only.
+;;; next key sequence only. An input override (isearch) sees each key and typed text first.
 
 (library (profane command-loop)
   (export handle-key handle-text last-input-text last-input-key pending-keys self-insert-amalgamation
           set-transient-map exit-transient-map! clear-transient-map! transient-map-active?
-          set-input-buffer-function! set-key-reader!
+          set-input-buffer-function! set-key-reader! set-input-override!
           command-busy? resume-busy! abort-busy! command-wait! command-wake!)
   (import (chezscheme) (profane native) (profane buffer) (profane window) (profane keymap)
           (profane mode) (profane command) (profane hook) (profane var))
@@ -78,6 +78,13 @@
   (define (set-key-reader! proc)
     (set! key-reader proc)
     (set-pending! pending))
+
+  ;; A mode that reads the keyboard until a key it does not know (isearch): PROC is called with
+  ;; 'key and each key that starts a sequence, or 'text and typed text, and returns the command
+  ;; to run for it, or #f to hand it to the keymaps as usual. Unlike a key reader it leaves
+  ;; typed text alone: it keeps the keyboard layout and input method. #f removes it.
+  (define input-override #f)
+  (define (set-input-override! proc) (set! input-override proc))
 
   ;; Emacs set-transient-map: MAP is looked up first for the next key sequence, then dropped
   ;; and ON-EXIT called, whichever command (or none) the sequence ran. With PERSISTENT it stays
@@ -324,6 +331,11 @@
          (set-key-reader! #f)
          (guard (c [else (report 'key-reader c)])
            (reader key)))]
+      [(and (null? pending) (not transient) input-override (input-override 'key key))
+       => (lambda (command)
+            (set! arg-pending #f)
+            (set! arg-digits? #f)
+            (run-command command))]
       [(and (null? pending) (not transient) (var-ref 'key-filter) ((var-ref 'key-filter) key))
        => (lambda (command)
             (%set-prefix-arg! #f)
@@ -370,6 +382,11 @@
     (cond
       [(or (pair? pending) transient key-reader)
        (for-each (lambda (c) (handle-key (char-key c))) (string->list text))]
+      [(and (not arg-digits?) input-override (input-override 'text text))
+       => (lambda (command)
+            (when (current-message) (message #f))
+            (set! input-text text)
+            (run-command command))]
       [(and arg-digits? (prefix-arg-key text)) (when (current-message) (message #f))]
       [else
        (when (current-message) (message #f))
