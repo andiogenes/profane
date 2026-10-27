@@ -919,8 +919,9 @@
                                    (if (and (minor-mode-enabled? (car m))
                                             (or everywhere (selected? w))
                                             (or (not (eq? (car m) 'display-line-numbers-mode))
-                                                (with-current-buffer (window-buffer w)
-                                                  (var-ref 'display-line-numbers))))
+                                                (and (not (window-minibuffer? w))
+                                                     (with-current-buffer (window-buffer w)
+                                                       (var-ref 'display-line-numbers)))))
                                        1
                                        0))))
               display-modes)

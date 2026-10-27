@@ -414,6 +414,11 @@
 (test-eqv "unless it opts out (checked when the window gets the buffer)" 0 (%win-option (%window-handle (selected-window)) 1))
 (switch-to-buffer plain)
 (test-eqv "and back" 1 (%win-option (%window-handle (selected-window)) 1))
+(let ([echo (window-buffer (minibuffer-window))])
+  (set-window-buffer! (minibuffer-window) plain)
+  (test-eqv "the minibuffer window never has line numbers" 0
+            (%win-option (%window-handle (minibuffer-window)) 1))
+  (set-window-buffer! (minibuffer-window) echo))
 (set-minor-mode! 'display-line-numbers-mode #f)
 
 (define main (selected-window))
