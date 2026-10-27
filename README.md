@@ -2,8 +2,8 @@
 
 A GPU-accelerated, Emacs-like editor for macOS, scripted in Chez Scheme, with Magit-like Git porcelain.
 
-Status: M0 to M4 are built. M4 (soft wrap, git fringe marks, motion, the Git porcelain on `C-x g`, ediff) has not yet
-been looked at on screen or dogfooded. The next milestone is M5 (languages). See [`profane-plan.md`](profane-plan.md)
+Status: M0 to M4 are built. The project is being dogfooded now. M4 (soft wrap, git fringe marks, motion, the Git porcelain on `C-x g`, ediff)
+has not yet been looked at on screen. M5 (languages) follows. See [`profane-plan.md`](profane-plan.md)
 for decisions, measurements, known gaps (§8j) and milestones.
 
 | Milestone | Scope |

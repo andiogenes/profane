@@ -17,6 +17,14 @@ Layers (top to bottom):
 | Core: piece tree, markers, undo, layout, git, tree-sitter, search | C17 | `core/` |
 | Platform shell: AppKit, Metal, Core Text, WKWebView | Objective-C (no Swift) | `platform/macos/` |
 
+## Current focus: dogfooding
+
+The owner is dogfooding profane (M0 to M4, daily use) before starting M5. Do not start M5 unless asked. Work
+now is what dogfooding turns up: bugs, missing Emacs-familiar commands and keys, rough edges on screen, and
+small items such as `(profane help)`. Keep such fixes small, one commit each, each bug fix with a regression
+test. Record findings and what was measured in the plan's §8 sections; anything that needs M5 or later is a
+seam or a note in §8j, not an implementation.
+
 ## Current status
 
 M0 to M4 are on `main` locally, except what the last commits say; origin is `git@github.com:andiogenes/profane.git` and nothing after M3 has been pushed. Decisions and measurements
@@ -38,7 +46,7 @@ marks via libgit2 (2), the motion system with a clip primitive (3; every animati
 `animate-cursor`, `animate-scroll`, `animate-windows`, `animate-popups`, and `ui-motion`), Git v1 as a Magit-like
 porcelain on the CLI behind a read-backend registry (4: `C-x g`; plan §8m) and ediff (5; §8n). Everything after M3 is
 local: nothing has been pushed. Seams: libgit2 worker backend, askpass/passphrase prompts, fold/unfold animation,
-three-way ediff, FSEvents refresh. The next milestone is M5 (languages), unless the owner dogfoods M4 first.
+three-way ediff, FSEvents refresh. The owner is dogfooding M4 now (see "Current focus"); the next milestone, M5 (languages), waits for that.
 
 **Known gaps:** the full list, with what each waits for, is `profane-plan.md` §8j. Two things every agent must know:
 commands run in engines, so `C-g` interrupts a runaway command (see the Engines entry in §8i), but socket REPL
