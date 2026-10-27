@@ -18,7 +18,10 @@
   (let ([la (luminance a)] [lb (luminance b)])
     (/ (+ (max la lb) 0.05) (+ (min la lb) 0.05))))
 
-(define (check-theme name)
+;; RELAXED lists (key . minimum) for values a theme copies from elsewhere and that miss the bar:
+;; `divider` and the face names in the "text on" group.
+(define (check-theme name . relaxed)
+  (define (min-for key default) (let ([e (assq key relaxed)]) (if e (cdr e) default)))
   (load-theme name)
   (let ([bg (face-attribute 'default 'background)]
         [fg (face-attribute 'default 'foreground)])
@@ -31,8 +34,8 @@
        font-lock-string-face font-lock-keyword-face font-lock-type-face))
     (for-each
      (lambda (f)
-       (test-assert (format "~a: text on ~a >= 4.5:1" name f)
-                    (>= (contrast fg (face-attribute f 'background)) 4.5)))
+       (test-assert (format "~a: text on ~a >= ~a:1" name f (min-for f 4.5))
+                    (>= (contrast fg (face-attribute f 'background)) (min-for f 4.5))))
      '(hl-line highlight region show-paren-match show-paren-mismatch))
     (test-assert (format "~a: cursor stands out >= 7:1" name)
                  (>= (contrast (face-attribute 'cursor 'background) bg) 7))
@@ -45,11 +48,22 @@
                       (>= (contrast (face-attribute f 'foreground) (face-attribute f 'background))
                           (cdr f+min)))))
      '((mode-line . 7) (mode-line-inactive . 4.5) (tab-bar-tab . 7) (tab-bar-tab-inactive . 4.5)))
-    (test-assert (format "~a: divider >= 3:1" name)
-                 (>= (contrast (face-attribute 'vertical-border 'foreground) bg) 3))))
+    (test-assert (format "~a: divider >= ~a:1" name (min-for 'divider 3))
+                 (>= (contrast (face-attribute 'vertical-border 'foreground) bg) (min-for 'divider 3)))))
 
 (check-theme 'profane-light)
 (check-theme 'profane-dark)
+;; The modus palettes are copied as published: operandi's border is 2.7:1 on white, and
+;; vivendi-tinted's paren-match background is 4.3:1 under white text.
+(check-theme 'modus-operandi '(divider . 2.5))
+(check-theme 'modus-vivendi-tinted '(show-paren-match . 4.2))
+
+(load-theme 'modus-vivendi-tinted)
+(test-equal "vivendi-tinted: background" "#0d0e1c" (face-attribute 'default 'background))
+(test-equal "vivendi-tinted: cursor" "#ff66ff" (face-attribute 'cursor 'background))
+(load-theme 'modus-operandi)
+(test-equal "operandi: keyword" "#531ab6" (face-attribute 'font-lock-keyword-face 'foreground))
+(test-equal "operandi: mode line" "#c8c8c8" (face-attribute 'mode-line 'background))
 
 ;; ---- loading ----
 (load-theme 'profane-light)

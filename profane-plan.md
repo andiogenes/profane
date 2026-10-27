@@ -392,6 +392,12 @@ the renderer tags the frame answering each event and records when it was submitt
 - **Built-in themes** `profane-light` / `profane-dark`: own palettes in the spirit of modus-operandi / vivendi-tinted
   (not copied). A test checks WCAG contrast: body text ≥ 7:1, dimmed/comment/accent text ≥ 4.5:1, text on
   highlight backgrounds ≥ 4.5:1, cursor ≥ 7:1.
+- **`modus-operandi` / `modus-vivendi-tinted`** (`(profane themes)`): the published palettes of Protesilaos Stavrou's
+  modus-themes, copied under their names, with the modus face assignments (no bold or italic syntax; syntax colors
+  from the semantic mappings). Not the default: `(load-theme 'modus-operandi)`, or set `theme-for-appearance`. Not
+  looked at on screen. Two published values miss profane's contrast bar and are kept as published: operandi's
+  `border` (2.7:1 on white) and vivendi-tinted's paren-match background (4.3:1 under white); the test relaxes
+  those two. Left out: mode-line borders, line-number backgrounds, the headings and prose roles (no faces yet).
 - **Typography**: code in `default-font-family` (JetBrains Mono), UI chrome and `variable-pitch` in `system-ui`
   (SF Pro); per-face OpenType `features` (e.g. ligatures off); `line-spacing`; text scale (`C-x C-=`/`C--`/`C-0`,
   trackpad pinch) — per buffer since M2 windows (§8i).
