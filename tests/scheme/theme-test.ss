@@ -65,6 +65,11 @@
 (load-theme 'modus-operandi)
 (test-equal "operandi: keyword" "#531ab6" (face-attribute 'font-lock-keyword-face 'foreground))
 (test-equal "operandi: mode line" "#c8c8c8" (face-attribute 'mode-line 'background))
+(test-equal "operandi: line numbers" '("#595959" "#f2f2f2")
+            (list (face-attribute 'line-number 'foreground) (face-attribute 'line-number 'background)))
+(test-equal "operandi: current line number" '("#000000" "#c4c4c4")
+            (list (face-attribute 'line-number-current-line 'foreground)
+                  (face-attribute 'line-number-current-line 'background)))
 
 ;; ---- loading ----
 (load-theme 'profane-light)

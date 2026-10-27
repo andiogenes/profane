@@ -419,7 +419,8 @@ the renderer tags the frame answering each event and records when it was submitt
   from the semantic mappings). Not the default: `(load-theme 'modus-operandi)`, or set `theme-for-appearance`. Not
   looked at on screen. Two published values miss profane's contrast bar and are kept as published: operandi's
   `border` (2.7:1 on white) and vivendi-tinted's paren-match background (4.3:1 under white); the test relaxes
-  those two. Left out: mode-line borders, line-number backgrounds, the headings and prose roles (no faces yet).
+  those two. Line numbers carry the modus backgrounds too (`bg-dim` / `bg-active` behind the gutter, drawn by the window renderer
+  for any theme whose line-number faces set a background). Left out: the headings and prose roles (no faces yet).
 - **Typography**: code in `default-font-family` (JetBrains Mono), UI chrome and `variable-pitch` in `system-ui`
   (SF Pro); per-face OpenType `features` (e.g. ligatures off); `line-spacing`; text scale (`C-x C-=`/`C--`/`C-0`,
   trackpad pinch) — per buffer since M2 windows (§8i).

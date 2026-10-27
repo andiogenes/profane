@@ -957,6 +957,13 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
     /* Smooth scrolling: rows are drawn off points lower (higher, if negative) than their place,
      * clipped to the body, with the row just above the window shown when they are lower. */
     float off = w->scroll.value;
+    if (w->line_numbers) {
+        /* The gutter's background runs the whole body, past the last line to the mode line. */
+        uint32_t nbg = role_color(PF_ROLE_LINE_NUMBER, PF_FACE_HAS_BG, 0);
+        if (nbg & 0xFF) {
+            pf_display_rect(d, left - gutter, top_inset(w), gutter, body_h, nbg);
+        }
+    }
     long srow = 0, limit = (long)visible + (off < 0 ? 1 : 0); /* screen rows drawn; rows to draw */
     if (off != 0) {
         pf_display_clip(d, 0, w->header_h, w->width - w->divider,
@@ -1043,6 +1050,10 @@ static void draw_text(pf_window *w, pf_display *d, pf_text *text, const pf_text_
             float nx = left - st->cell_width - nl->width; /* right-aligned */
             pf_face_role role = line == point_line ? PF_ROLE_LINE_NUMBER_CURRENT
                                                    : PF_ROLE_LINE_NUMBER;
+            uint32_t nbg = role_color(PF_ROLE_LINE_NUMBER_CURRENT, PF_FACE_HAS_BG, 0);
+            if (line == point_line && (nbg & 0xFF)) {
+                pf_display_rect(d, left - gutter, top, gutter, st->line_height, nbg);
+            }
             emit_glyphs(d, nl, nx, baseline, 0, right, role_color(role, PF_FACE_HAS_FG, fg), NULL,
                         0, (size_t)-1);
         }

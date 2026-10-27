@@ -141,8 +141,9 @@
 
   (define modus-faces
     (let ([overrides
-           '((line-number (foreground . fg-line-number-inactive))
-             (line-number-current-line (foreground . fg-line-number-active) (weight . bold))
+           '((line-number (foreground . fg-line-number-inactive) (background . bg-line-number-inactive))
+             (line-number-current-line (foreground . fg-line-number-active) (background . bg-line-number-active)
+                                       (weight . bold))
              (fringe (foreground . fg-dim) (background . fringe))
              (diff-hl-insert (foreground . bg-added-fringe))
              (diff-hl-change (foreground . bg-changed-fringe))
@@ -221,6 +222,7 @@
       (mode-line-border . "#5a5a5a") (mode-line-border-inactive . "#a3a3a3")
       (bg-tab-bar . "#dfdfdf") (bg-tab-current . "#ffffff") (bg-tab-other . "#c2c2c2")
       (fringe . "#f2f2f2") (fg-line-number-inactive . "#595959") (fg-line-number-active . "#000000")
+      (bg-line-number-inactive . "#f2f2f2") (bg-line-number-active . "#c4c4c4")
       (bg-added . "#c1f2d1") (bg-added-refine . "#aee5be") (bg-added-fringe . "#6cc06c")
       (fg-added . "#005000") (fg-added-intense . "#006700")
       (bg-changed-fringe . "#d7c20a")
@@ -253,6 +255,7 @@
       (mode-line-border . "#979797") (mode-line-border-inactive . "#606270")
       (bg-tab-bar . "#2c3045") (bg-tab-current . "#0d0e1c") (bg-tab-other . "#4a4f6a")
       (fringe . "#1d2235") (fg-line-number-inactive . "#989898") (fg-line-number-active . "#ffffff")
+      (bg-line-number-inactive . "#1d2235") (bg-line-number-active . "#4a4f69")
       (bg-added . "#003a2f") (bg-added-refine . "#035542") (bg-added-fringe . "#23884f")
       (fg-added . "#a0e0a0") (fg-added-intense . "#80e080")
       (bg-changed-fringe . "#8f7a30")

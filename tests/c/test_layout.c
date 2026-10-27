@@ -105,8 +105,8 @@ static void set_role(pf_face_role role, uint32_t id, uint32_t flags, uint32_t fg
 static pf_window_style style(void) {
     set_role(PF_ROLE_DEFAULT, 1, PF_FACE_HAS_FG | PF_FACE_HAS_BG, 0x000000FF, 0xFFFFFFFF);
     set_role(PF_ROLE_CURSOR, 2, PF_FACE_HAS_BG, 0, 0xFF0000FF);
-    set_role(PF_ROLE_LINE_NUMBER, 3, PF_FACE_HAS_FG, 0x888888FF, 0);
-    set_role(PF_ROLE_LINE_NUMBER_CURRENT, 4, PF_FACE_HAS_FG, 0x111111FF, 0);
+    set_role(PF_ROLE_LINE_NUMBER, 3, PF_FACE_HAS_FG | PF_FACE_HAS_BG, 0x888888FF, 0xDDDDDDFF);
+    set_role(PF_ROLE_LINE_NUMBER_CURRENT, 4, PF_FACE_HAS_FG | PF_FACE_HAS_BG, 0x111111FF, 0xCCCCCCFF);
     set_role(PF_ROLE_HL_LINE, 5, PF_FACE_HAS_BG, 0, 0xEEEEEEFF);
     set_role(PF_ROLE_PAREN_MATCH, 6, PF_FACE_HAS_BG, 0, 0x00FF00FF);
     set_role(PF_ROLE_PAREN_MISMATCH, 7, PF_FACE_HAS_BG, 0, 0xFF00FFFF);
@@ -292,6 +292,14 @@ static void test_editing_modes(void) {
      * below the window would land in the window under it). Dimmed numbers are lines 2-9 (8
      * digits) and 10 (2 digits). */
     PF_CHECK(count_color(d, PF_DISPLAY_GLYPH, 0x888888FF) == 8 + 2);
+    /* The numbers sit on the line-number faces' backgrounds: one gutter-wide rect down the whole
+     * body, even where there is no line, and the current line's row in its own color. */
+    const pf_display_item *nbg = find_rect(d, 0xCCCCCCFF, 0);
+    PF_CHECK(nbg && NEAR(nbg->x, 5) && NEAR(nbg->u.rect.w, 40) && NEAR(nbg->u.rect.h, 20));
+    PF_CHECK(find_rect(d, 0xCCCCCCFF, 1) == NULL);
+    const pf_display_item *gut = find_rect(d, 0xDDDDDDFF, 0);
+    PF_CHECK(gut && NEAR(gut->x, 5) && NEAR(gut->y, 0) && NEAR(gut->u.rect.w, 40) &&
+             NEAR(gut->u.rect.h, 200) && find_rect(d, 0xDDDDDDFF, 1) == NULL);
     for (i = 0; i < pf_display_count(d); i++) {
         if (it[i].kind == PF_DISPLAY_GLYPH && it[i].u.glyph.glyph == '(' && it[i].color == 0x000000FF) {
             PF_CHECK(NEAR(it[i].x, 45)); /* text starts after the gutter */
@@ -299,6 +307,16 @@ static void test_editing_modes(void) {
         }
     }
     pf_display_release(d);
+
+    /* A short buffer: the gutter's background still reaches the bottom of the window. */
+    pf_handle two = pf_buf_new("a\nb", 3);
+    uint32_t two_pt = pf_buf_marker_new(two, 0, 0);
+    pf_window_set_buffer(w, two, two_pt);
+    d = frame_at(w, two, two_pt, 0);
+    gut = find_rect(d, 0xDDDDDDFF, 0);
+    PF_CHECK(gut && NEAR(gut->y, 0) && NEAR(gut->u.rect.h, 200));
+    pf_display_release(d);
+    pf_window_set_buffer(w, buf, point);
 
     /* hl-line: one band on point's line, from the text start to the right edge. */
     pf_window_set_option(w, PF_WINDOW_LINE_NUMBERS, 0);
