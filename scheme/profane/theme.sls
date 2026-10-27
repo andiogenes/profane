@@ -96,7 +96,7 @@
 
   (defvar theme-follows-appearance #t
     "Switch themes with macOS light/dark mode, using theme-for-appearance.")
-  (defvar theme-for-appearance '((light . profane-light) (dark . profane-dark))
+  (defvar theme-for-appearance '((light . modus-operandi) (dark . modus-vivendi-tinted))
     "Theme to load for each macOS appearance.")
 
   (define appearance 'light)

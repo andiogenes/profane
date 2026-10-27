@@ -416,7 +416,8 @@ the renderer tags the frame answering each event and records when it was submitt
   highlight backgrounds ≥ 4.5:1, cursor ≥ 7:1.
 - **`modus-operandi` / `modus-vivendi-tinted`** (`(profane themes)`): the published palettes of Protesilaos Stavrou's
   modus-themes, copied under their names, with the modus face assignments (no bold or italic syntax; syntax colors
-  from the semantic mappings). Not the default: `(load-theme 'modus-operandi)`, or set `theme-for-appearance`. Not
+  from the semantic mappings). The defaults since dogfooding: `theme-for-appearance` is operandi (light) and vivendi-tinted (dark), and boot loads operandi
+  until the shell reports the appearance; `profane-light` / `profane-dark` stay available. Not
   looked at on screen. Two published values miss profane's contrast bar and are kept as published: operandi's
   `border` (2.7:1 on white) and vivendi-tinted's paren-match background (4.3:1 under white); the test relaxes
   those two. Line numbers carry the modus backgrounds too (`bg-dim` / `bg-active` behind the gutter, drawn by the window renderer

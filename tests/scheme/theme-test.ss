@@ -74,9 +74,9 @@
 ;; ---- loading ----
 (load-theme 'profane-light)
 ((command-procedure 'toggle-theme))
-(test-eq "toggle-theme: light to dark" 'profane-dark (current-theme))
+(test-eq "toggle-theme: light to dark" 'modus-vivendi-tinted (current-theme))
 ((command-procedure 'toggle-theme))
-(test-eq "toggle-theme: dark to light" 'profane-light (current-theme))
+(test-eq "toggle-theme: dark to light" 'modus-operandi (current-theme))
 
 (define loaded '())
 (add-hook! 'after-load-theme-hook (lambda (name) (set! loaded (cons name loaded))))
@@ -109,12 +109,12 @@
 
 ;; ---- following macOS ----
 (appearance-changed! 'dark)
-(test-eq "dark mode loads the dark theme" 'profane-dark (current-theme))
+(test-eq "dark mode loads the dark theme" 'modus-vivendi-tinted (current-theme))
 (appearance-changed! 'light)
-(test-eq "and back" 'profane-light (current-theme))
+(test-eq "and back" 'modus-operandi (current-theme))
 (var-set! 'theme-follows-appearance #f)
 (appearance-changed! 'dark)
-(test-eq "can be turned off" 'profane-light (current-theme))
+(test-eq "can be turned off" 'modus-operandi (current-theme))
 (var-set! 'theme-follows-appearance #t)
 
 ;; ---- typography and ui styles ----

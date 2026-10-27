@@ -17,7 +17,7 @@
                            (profane minibuffer) (profane complete) (profane canvas) (profane eval) (profane transient) (profane avy) (profane mouse) (profane files) (profane search) (profane dired) (profane sidebar) (profane buffer-menu) (profane vterm) (profane git) (profane section) (profane git status) (profane git commands) (profane git views) (profane ediff) (profane git marks) (profane help) (profane isearch)))
 
 ;;; Defaults until the shell reports the macOS appearance: the light theme, the minimal style.
-(load-theme 'profane-light)
+(load-theme 'modus-operandi)
 (ui-style 'minimal)
 
 ;;; FFI trampoline. An exception escaping into C would terminate the process, so every call

@@ -284,7 +284,7 @@
     "Switch between the light and the dark theme."
     (let* ([want (if (and (current-theme) (eq? (theme-appearance (current-theme)) 'dark)) 'light 'dark)]
            [e (assq want (var-ref 'theme-for-appearance))])
-      (load-theme (if e (cdr e) (if (eq? want 'dark) 'profane-dark 'profane-light)))
+      (load-theme (if e (cdr e) (if (eq? want 'dark) 'modus-vivendi-tinted 'modus-operandi)))
       (message "Theme: ~a" (current-theme))))
 
   ;; ---- UI style presets (plan §6): which chrome is on. minimal is the default. ----
