@@ -111,8 +111,8 @@
         (and map (or (lookup-own map keys) (loop (keymap-parent map)))))))
 
   ;; Direct bindings of MAP (not its parents), as (key . binding) pairs.
-  (define (keymap-bindings map)
-    (let-values ([(keys vals) (hashtable-entries (keymap-table map))])
+  (define (keymap-bindings keymap)
+    (let-values ([(keys vals) (hashtable-entries (keymap-table keymap))])
       (map cons (vector->list keys) (vector->list vals))))
 
   (define the-global-map (make-keymap #f 'global-map))

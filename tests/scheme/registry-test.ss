@@ -56,6 +56,9 @@
 
 ;; ---- keymaps ----
 (test-equal "C-m, C-i and C-[ are RET, TAB and ESC" '("RET" "TAB" "ESC" "M-RET") (kbd "C-m C-i C-[ C-M-m"))
+(let ([m (make-keymap)])
+  (define-key! m "a" 'foo)
+  (test-equal "keymap-bindings lists the direct bindings" '(("a" . foo)) (keymap-bindings m)))
 (test-equal "kbd canonicalizes" '("C-M-x" "a" "C--") (kbd "M-C-x a C--"))
 (define parent (make-keymap))
 (define child (make-keymap parent))
