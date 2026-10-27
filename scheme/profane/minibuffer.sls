@@ -393,7 +393,7 @@
   (define minibuffer-map
     (let ([m (mode-keymap 'minibuffer-mode)])
       (for-each (lambda (b) (define-key! m (car b) (cdr b)))
-                '(("RET" . exit-minibuffer) ("M-RET" . exit-minibuffer-with-input)
+                '(("RET" . exit-minibuffer) ("C-j" . exit-minibuffer) ("M-RET" . exit-minibuffer-with-input)
                   ("C-g" . minibuffer-keyboard-quit)
                   ("C-n" . minibuffer-next-line) ("<down>" . minibuffer-next-line)
                   ("C-p" . minibuffer-previous-line) ("<up>" . minibuffer-previous-line)

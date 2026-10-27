@@ -34,6 +34,14 @@
 (test-equal "echo area back" " *Echo Area*" (buffer-name (window-buffer (minibuffer-window))))
 (test-eq "keys go to the window again" scratch (current-buffer))
 
+;; ---- C-j ----
+(set! got #f)
+(read-from-minibuffer "Name: " (lambda (s) (set! got s)))
+(type "j")
+(keys "C-j")
+(test-equal "C-j finishes like RET" "j" got)
+(test-assert "C-j closed" (not (minibuffer-active?)))
+
 ;; ---- C-g ----
 (set! got #f)
 (define quit? #f)
